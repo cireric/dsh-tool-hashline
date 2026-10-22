@@ -21,6 +21,8 @@ import * as ToolFs from '@deepseek-ai/dsh-tool-fs'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import * as ToolEdit from '@hy-sde-org/dsh-tool-edit'
+import { getSessionSnapshotStore } from '@dsh-tool-hashline/hashline'
+import type { InMemorySnapshotStoreOptions } from '@dsh-tool-hashline/hashline'
 import * as ToolRead from '../../src/index.ts'
 
 /** Counts of the provider calls one harness observed, for cost assertions. */
@@ -39,10 +41,20 @@ export interface ReadHarness {
   agent: Agent
   session: object
   counts: FsCallCounts
+  /** `fs/observed` events this harness saw, in order. */
+  observations: { target: string; kind: string }[]
   callRead(args: { file_path: string; offset?: number; limit?: number }): Promise<ToolExecutionResult>
   callEdit(args: Record<string, unknown>): Promise<ToolExecutionResult>
-  callTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
+  callTool(name: string, args: Record<string, unknown>, options?: CallOptions): Promise<ToolExecutionResult>
   cleanup(): Promise<void>
+}
+
+/** Per-call overrides. */
+export interface CallOptions {
+  /** Omit `agent` to exercise the agentless path. */
+  agent?: Agent | null
+  /** Cancellation signal for this call. */
+  signal?: AbortSignal
 }
 
 /** Options for {@link createHarness}. */
@@ -55,6 +67,8 @@ export interface HarnessOptions {
   policy?: boolean
   /** Extra config for the upstream edit plugin. */
   edit?: Record<string, unknown>
+  /** Snapshot-store bounds, applied when the session's store is first created. */
+  snapshotStore?: InMemorySnapshotStoreOptions
 }
 
 const EMPTY_COUNTS: FsCallCounts = { stat: 0, readText: 0, resolve: 0 }
@@ -66,6 +80,11 @@ const EMPTY_COUNTS: FsCallCounts = { stat: 0, readText: 0, resolve: 0 }
  */
 export async function createHarness(options: HarnessOptions = {}): Promise<ReadHarness> {
   const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-tool-hashline-read-'))
+  // The fake session mimics what the read/edit tools read: `cwd` for the store key
+  // and `header.cwd` for the working-directory service.
+  const session = { cwd: dir, header: { cwd: dir } }
+  const agent = { session } as unknown as Agent
+  if (options.snapshotStore !== undefined) getSessionSnapshotStore(session, options.snapshotStore)
   const ctx = new Context()
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(LocalFileSystem, { cwd: dir })
@@ -89,16 +108,21 @@ export async function createHarness(options: HarnessOptions = {}): Promise<ReadH
 
   // The fake session mimics what the read/edit tools read: `cwd` for the store key
   // and `header.cwd` for the working-directory service.
-  const session = { cwd: dir, header: { cwd: dir } }
-  const agent = { session } as unknown as Agent
   const signal = new AbortController().signal
   let calls = 0
-  const callTool = (name: string, args: Record<string, unknown>) => runtime.execute({
-    callId: `call-${(calls += 1)}` as never,
-    name,
-    arguments: args,
-    signal,
-    agent,
+  const callTool = (name: string, args: Record<string, unknown>, options: CallOptions = {}) => {
+    const useAgent = options.agent === undefined ? agent : options.agent ?? undefined
+    return runtime.execute({
+      callId: `call-${(calls += 1)}` as never,
+      name,
+      arguments: args,
+      signal: options.signal ?? signal,
+      ...useAgent === undefined ? {} : { agent: useAgent },
+    })
+  }
+  const observations: { target: string; kind: string }[] = []
+  ctx.on('fs/observed', (target: { displayPath: string }, observation: { kind: string }) => {
+    observations.push({ target: target.displayPath, kind: observation.kind })
   })
   return {
     ctx,
@@ -107,6 +131,7 @@ export async function createHarness(options: HarnessOptions = {}): Promise<ReadH
     agent,
     session,
     counts,
+    observations,
     callRead: args => callTool('read', args),
     callEdit: args => callTool('edit', args),
     callTool,
