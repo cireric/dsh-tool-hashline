@@ -16,6 +16,7 @@ import { FsError } from '@deepseek-ai/dsh-fs'
 import { computeFileHash, formatHashlineHeader, getSessionSnapshotStore, normalizeToLF, stripBom } from '@dsh-tool-hashline/hashline'
 import { resolveConfig, type Config, type ResolvedConfig } from './config.ts'
 import { nextActionFor } from './next-action.ts'
+import { readLangHint } from './lang.ts'
 import { byteCappedFromValue, readBody, readMetaFromMeta, renderEnvelope } from './render.ts'
 import { snapshotKeys, toolCwd } from './session.ts'
 import { buildReadWindow, parseReadArgs } from './window.ts'
@@ -110,12 +111,16 @@ export function apply(ctx: Context, config: Config = {}): void {
       },
       // The raw canonical value is not on the wire, so the card's line window must
       // be persisted as metadata for live and replayed sessions alike.
-      presentationMeta: (_args, value) => ({
-        path: value.path,
-        offset: value.offset,
-        lines: value.lines.map(({ number, text }) => ({ number, text })),
-        totalLines: value.totalLines,
-      }),
+      presentationMeta: (_args, value) => {
+        const lang = readLangHint(value.path)
+        return {
+          path: value.path,
+          offset: value.offset,
+          lines: value.lines.map(({ number, text }) => ({ number, text })),
+          totalLines: value.totalLines,
+          ...lang === undefined ? {} : { lang },
+        }
+      },
     },
     // Reading races fail closed: a later guarded mutation re-checks the version.
     isConcurrencySafe: () => true,
@@ -192,7 +197,15 @@ export function apply(ctx: Context, config: Config = {}): void {
       if (text === undefined) return undefined
       const body = /^<path>[^\n]*<\/path>\n<type>file<\/type>\n<content>\n([\s\S]*)\n<\/content>$/u.exec(text)?.[1]
       if (body === undefined) return undefined
-      return { card: 'read', path: meta.path, offset: meta.offset, lines: meta.lines, totalLines: meta.totalLines, content: [{ type: 'text', text: body }] }
+      return {
+        card: 'read',
+        path: meta.path,
+        offset: meta.offset,
+        lines: meta.lines,
+        totalLines: meta.totalLines,
+        ...meta.lang === undefined ? {} : { lang: meta.lang },
+        content: [{ type: 'text', text: body }],
+      }
     },
     presentCall(args): GenericCallView {
       const offset = args.offset ?? 1

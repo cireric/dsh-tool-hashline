@@ -66,6 +66,9 @@ importers:
       '@deepseek-ai/dsh-tools':
         specifier: ^0.2.1-alpha.4
         version: 0.2.1-rc.2(53871834bb50b7f532ec7289e680bbda)
+      '@deepseek-ai/dsh-util-code-language':
+        specifier: 0.2.1-rc.2
+        version: 0.2.1-rc.2(@deepseek-ai/cordis@4.0.5)
       '@deepseek-ai/dsh-working-directory':
         specifier: 0.2.1-rc.2
         version: 0.2.1-rc.2(7c2b347e146d5b2c192a1c0c8da7c203)
