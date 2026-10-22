@@ -54,12 +54,6 @@ export function apply(ctx: Context, config: Config = {}): void {
   const caps: ResolvedConfig = resolveConfig(config)
   if (!caps.enabled) return
 
-  ctx.systemPrompt.section({
-    name: 'tool:read',
-    order: ctx.systemPrompt.getSectionOrder('TOOL_READ'),
-    text: ({ scope }) => ctx.tools.get('read', scope) === undefined ? '' : READ_PROMPT,
-  })
-
   ctx.tools.register(defineTool({
     name: 'read',
     description: 'Read a UTF-8 text file and return line-numbered content with a hashline tag.',
@@ -213,4 +207,12 @@ export function apply(ctx: Context, config: Config = {}): void {
       }
     },
   }))
+
+  // Registered after the tool so a second `read` provider fails on the duplicate
+  // tool name (the deployment-shape error) instead of on this prompt section.
+  ctx.systemPrompt.section({
+    name: 'tool:read',
+    order: ctx.systemPrompt.getSectionOrder('TOOL_READ'),
+    text: ({ scope }) => ctx.tools.get('read', scope) === undefined ? '' : READ_PROMPT,
+  })
 }
