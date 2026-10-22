@@ -4,7 +4,7 @@
 
 **Blocked by:** None (can start immediately).
 
-**Status:** ready-for-agent
+**Status:** done (2026-10-22)
 
 **Spec:** [权威规格入口](../spec.md)；FR-3/4/6/7/8、NFR-1/2/4/5；DSH 0.2.1-rc.2，hashline/tool-edit 精确锁定 0.2.1-alpha.4。
 
@@ -18,6 +18,14 @@
 - [ ] 使用真实 ToolRuntime 与上游 edit 验证 read→edit 首次成功，断言实际磁盘文本改变；测试不能用自制 edit 代替上游。
 - [ ] 有效文本读取仅一次 stat、一次 readText；跨进程同内容 tag 一致。自建 read 没有宿主包运行时 import 或空 catch，错误不得被吞掉。
 - [ ] 随此票建立可执行的 test:unit 与 test:integration 入口及必要夹具；类型检查与本票行为测试通过，历史 post-execute 实验不算新增功能覆盖。
+
+## Comments
+
+- 2026-10-22 实现完成。代码在 `packages/tool-read/src/`（`config.ts` 默认值与校验、`window.ts` 纯窗口、`next-action.ts` 降级指引、`render.ts` 信封/footer/meta 收窄、`session.ts` store key、`index.ts` 注册与投影）。
+- 证据（可重跑）：`pnpm -r check` 退出 0；`pnpm test:unit` 36 passed；`pnpm test:integration` 7 passed（真实 `ToolRuntime` + `LocalFileSystem` + 上游 `edit`）。
+- 断言覆盖：`value.tag` 等于引擎独立计算的 `computeFileHash(normalizeToLF(stripBom(raw).text))`；header 为 `<content>\n[<path>#TAG]` 首行；`store.head(path.resolve(cwd, value.path)).hash === tag`；read 后同 tag 的 `edit` 首次落盘；一次 `stat` + 一次 `readText`；跨进程 tag 一致；`fs/observed` 正/负对照（stock `write` 成功 vs `FS_NOT_OBSERVED`）；`tag`/`nextAction` 的 output schema 为 `oneOf[string,null]` 且 `additionalProperties:false`。
+- NFR-4 口径：运行时 `@deepseek-ai/*` 导入仅限 `dsh-tools` 的 `defineTool`（注册与 schema 编译所需）与 `dsh-fs` 的 `FsError`（`FS_NOT_FOUND` 等结构化错误码所需，`ToolRuntime` 只对 `HarnessError` 生成 `error.info.code`）；未导入任何宿主实现包（`tool-fs`、`fs-local`、host read 管线），也未读取宿主 read 配置。该解释留给 08 的追溯表定稿。
+- 历史 `tests/post-execute.spec.ts` 保留在磁盘作为已否决路线的证据，但通过 `packages/tool-read/vitest.config.ts` 排除在测试运行之外；不算本票覆盖。
 
 ## Scope boundary
 
