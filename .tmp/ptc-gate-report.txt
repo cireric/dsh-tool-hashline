@@ -1,0 +1,87 @@
+PTC-GATE PRESET — VERIFIED INVENTORY (read-only copy: .scratch/dsh-ptc-roles)
+
+PROVENANCE (question 7)
+- .git exists. HEAD = 3d8f36eb8def861c3f2aa7d5f7b4983d96c92341 ("fix(bundle): stop declaring the archived preset", 2026-10-02 16:39 +0800), shallow clone of https://github.com/cireric/dsh-ptc-roles.git; worktree clean.
+
+1. preset/ptc-gate/preset.patch.yml (380 lines) — COMPLETE STRUCTURE
+- Bundle header is package.json:7-11: "dsh": { "bundle": { "patch": "./preset/ptc-gate/preset.patch.yml" } } — ptc-gate is the ONLY declared patch.
+- yml:1-16 header: a preset row has NO directory of its own; relative name: and !!js baseUrl resolve against the PROFILE directory; assets are reached via '@cireric/dsh-ptc-roles/preset/ptc-gate/<file>.mjs' and createRequire(baseUrl).resolve('@cireric/dsh-ptc-roles/package.json').
+- Declaration row yml:17-27: "- insert:" then "- id: preset-ptc-gate / name: '@deepseek-ai/dsh-agent-preset'" with config.id ptc-gate, config.name "PTC Gate Mode", description "PTC main agent + intent-gate discipline; no predefined role subagents — delegation happens on demand.", order: 10, then config.plugins. No disabled: on the declaration (active).
+- Rows in file order:
+  59 persona @deepseek-ai/dsh-persona (suffix "Your working directory is {{cwd}}."; prefix = !!js reading preset/ptc-gate/personas/orchestrator.md)
+  68 agent-instructions @deepseek-ai/dsh-agent-instructions (maxBytes: 65536)
+  82 tool-bash @deepseek-ai/dsh-tool-bash (disabled: !!js process.platform === 'win32')
+  86 tool-pwsh @deepseek-ai/dsh-tool-pwsh (disabled: !!js process.platform !== 'win32')
+  101 tool-fs @deepseek-ai/dsh-tool-fs  <-- NO config
+  104 tool-fs-search @deepseek-ai/dsh-tool-fs-search (sampleOverCapGlobResults: false)
+  118 tool-jobs @deepseek-ai/dsh-tool-jobs (no config)
+  128 skill-filesystem @deepseek-ai/dsh-skill-filesystem
+  131 tool-skill @deepseek-ai/dsh-tool-skill
+  139 command-goal @deepseek-ai/dsh-command-goal
+  142 tool-goal @deepseek-ai/dsh-tool-goal
+  149 planning (cordis:group, group: true, isolate: { planMode: true })
+      155 plan-mode @deepseek-ai/dsh-plan-mode (config.section = long plan-mode prompt)
+  182 compaction (cordis:group, isolate: { compaction: true, toolResultPruner: true })
+      189 compaction-basic @deepseek-ai/dsh-compaction-basic
+      192 command-compact @deepseek-ai/dsh-command-compact
+      195 tool-result-pruner @deepseek-ai/dsh-compaction-tool-result-pruner (8192 / 4096 / 1024)
+  213 delegation (cordis:group, isolate: { workflowEngine: true })
+      219 tool-subagent-control @deepseek-ai/dsh-tool-subagent-control
+      222 tool-subagent-list-agents @deepseek-ai/dsh-tool-subagent-control/list-agents
+      233 tool-subagent @deepseek-ai/dsh-tool-subagent (provider spawn, toolName subagent, maxDepth: 1, modelSelectionSettings: true, backgroundMode: continuable)
+      246 tool-subagent-fork @deepseek-ai/dsh-tool-subagent (provider fork, toolName subagent_fork, backgroundMode: continuable)
+      257 tool-subagent-codex @deepseek-ai/dsh-tool-subagent (disabled: true; provider codex, maxDepth: provider-managed)
+      266 tool-subagent-claude-code @deepseek-ai/dsh-tool-subagent (disabled: true; provider claude-code)
+      275 workflow-ptc @deepseek-ai/dsh-workflow-ptc (provider: spawn)
+      280 tool-workflow @deepseek-ai/dsh-tool-workflow (disabled: true)
+      286 tool-ralph @deepseek-ai/dsh-tool-ralph (subagentProvider: spawn, maxRounds: 64)
+  294 tool-ask-user @deepseek-ai/dsh-tool-ask-user
+  297 tool-todo @deepseek-ai/dsh-tool-todo (allowParallelInProgress: true)
+  304 tool-web @deepseek-ai/dsh-tool-web (fetch: true, searchTimeoutMs: 60000)
+  315 tool-presentation @deepseek-ai/dsh-agent-tool-presentation (mode: ptc)
+  320 present @deepseek-ai/dsh-tool-present
+  361 intent-gate-watchdog @cireric/dsh-ptc-roles/preset/ptc-gate/intent-gate-watchdog.mjs (config: gate: enforce)
+- yml:323-341: everything above is "the shipped ptc preset copied verbatim, with the same single patch: tool-subagent gained maxDepth: 1"; ptc-gate adds ONLY persona.prefix + intent-gate-watchdog.mjs, and deliberately adds no role tools / no role-presentation.mjs.
+
+2. tool-fs / read / edit — NOT CONFIGURED, NOT REGISTERED
+- yml:101-102 is the entire row: "- id: tool-fs" / "name: '@deepseek-ai/dsh-tool-fs'" — no config key, no read:/edit: flags.
+- grep over preset/ for tool-read|tool-edit|read:|edit:|readOnly|readFlags => 0 matches. No tool-read / tool-edit row in either preset.
+- The host package does have such flags: deepseek-harness/packages/fs/tool-fs/src/index.ts:26-34 "read?: boolean", "readImage?: boolean", "write?: boolean", "edit?: boolean" (comments say defaults true). So a read/edit delta is a config edit on row 101, not a new row.
+
+3. config.gate + watchdog wiring
+- yml:377-378: "config:" then "gate: enforce". Comment yml:363-364: observe only records + injects a race diagnostic; enforce actually denies, at most once per turn; a missing/mistyped config falls back to recording (fail-safe).
+- The row is referenced by package subpath (yml:362), no separate file row, no realm/isolate.
+- Plugin: intent-gate-watchdog.mjs:302 "const gateEnforcing = config !== null && typeof config === 'object' && config.gate === 'enforce'".
+
+4. personas/orchestrator.md (76 lines) — Phase 0 + six buckets; NO read/edit mechanics
+- :6 "## Phase 0 — Intent Gate (classify EVERY user message; the line is owed only on behavior-changing **user-opened turns**)"
+- :7 "The printed line is owed **once per authorization**: a turn that a real user message opened and that will do something which changes state — delegate, refuse, ask the user, or write files. A turn continued by a machine message ... owes no new line."
+- :9 "The line must be the **first line of the message that carries the first behavior-changing call** — the message you are already writing when you reach for write, edit, a delegation or an escalation."
+- :11 shape: "Intent: <bucket> — <what the user wants, in outcome terms> (because: <the one thing you read it from>); I will <what you are about to do>."
+- :13 "Buckets, exactly six: research / implementation / investigation / evaluation / fix / open-ended."
+- :18-25 table rows: research | implementation | investigation | evaluation | fix | open-ended, with the deciding criterion per row.
+- :27 "To recon **without** owing a line, use the read-only tools (read / grep / glob / lsp) instead of the shell." — read appears only as gate-exempt reconnaissance.
+- :28 "One bash / write / edit anywhere in a program puts the obligation on the message that carries that program".
+- READ/EDIT MECHANICS: not found. grep for offset|limit|line number|patch|hash|old_string|new_string|anchor|window|diff|hunk|byte => 0 real hits (the 3 "patch" hits are the substring in "dispatch"). No read params, no line windows, no patch/apply syntax in the persona.
+
+5. intent-gate-watchdog.mjs (514 lines) — hooks, detection, violation, enforce
+- Hooks: session/event (351), tools/pre-execute (419, the only stop point), agent/pre-step (459, waterfall message injection); header :12-27 documents all three.
+- Detection: GATE_LINE_RE :130 "/^Intent:\s*(research|implementation|investigation|evaluation|fix|open-ended)\b/i", applied to the FIRST line only (:367-369: "const firstLine = text.split('\n')[0] ... if (rec.declSeq === undefined && GATE_LINE_RE.test(firstLine)) rec.declSeq = seq"). GATEISH_RE :137 "/^Intent:/i" yields the INVALID state (:373-374). Only the bucket word is validated (:96-102).
+- Eligibility: BEHAVIOR_TOOLS :143-148 = write, edit, bash, pwsh, explorer, librarian, oracle, implementer, designer, subagent, subagent_fork, subagent_codex, subagent_claude_code, ralph, ask_user_question. read is NOT in it (fixture scripts/fixtures/intent-gate-cases.json:224 "只有只读轮（read 不在 BEHAVIOR_TOOLS）").
+- Violation: :438 returns allow when "rec.declSeq !== undefined && rec.declSeq <= carrier"; otherwise :440-442 "gate.wouldDeny = true; if (!gateEnforcing || gate.denied) return decision; gate.denied = true" => AT MOST ONE deny per turn. Reason :447-452 = denyHeader(toolName, inner) + MISSING/INVALID/LATE (:166-183); denyHeader names the tool and flags PTC inner dispatch (:220-226). No retry / no auto re-dispatch — the reasons tell the model to put the line as the first line of the next message and re-issue the call (:169, :175, :181).
+- Reminder: :488-508 once per turn, only when the previous turn acted and was non-compliant; REMINDER :151-155 injected as a user-shaped notice (pluginMessage :260-267).
+- enforce vs observe: :441 observe never denies (wouldDeny only); observe race evidence RACE_REPORT :191-194 emitted :499-501; enforce-only mirror FALSE_DENY :205-207 emitted :502-504; per-session mode marker :236-240 injected :483-486.
+
+6. scripts/verify-*.cjs — assertions a copied+modified preset breaks
+- deploy-preset.cjs:49-58 EXPECTED_COMPOSITION is a hardcoded registry: 'ptc-gate': { active: true, roles: [], plugins: ['intent-gate-watchdog'] }, and ptc-roles archived with 5 role rows + ['role-presentation','intent-gate-watchdog']. :187-188 => "未登记的 preset（往 EXPECTED_COMPOSITION 加一行）", so a NEW preset dir fails --compose at once.
+- deploy-preset.cjs:142-148 patchRowIds matches ONLY exactly 10-space indentation ("^ {10}- id: ([A-Za-z0-9._-]+)$"); re-indenting a copied row list empties it, then :206-208 fire "缺角色行" / "多出角色行" / "缺插件行" (plugins checked by ROW ID).
+- deploy-preset.cjs:164-172 gateCopyFindings: sha256 of intent-gate-watchdog.mjs must be equal across every preset dir, else "门插件副本不一致 … ⇒ 以 ptc-roles 为准重新 cp".
+- verify-intent-gate-watchdog.cjs:876-880 "两份 intent-gate-watchdog.mjs 逐字一致（ptc-gate 是本机运行的那份）" — Buffer.equals of the two copies.
+- verify-ptc-roles.cjs:516-522 DECLARED_GATE_MODES built from the hardcoded id list ['ptc-roles','ptc-gate'] reading preset/<id>/preset.patch.yml with "/^\s*gate:\s*(enforce|observe)\s*$/m"; :2360-2363 mismatch => FAIL "闸门模式与仓库声明不符".
+- verify-ptc-roles.cjs:1578,1601-1621 WATCHDOG_PLUGIN hardcoded to preset/ptc-roles/... and :1618 "插件的 BEHAVIOR_TOOLS 与本脚本逐字一致（顺序也一致）" against :262-267.
+- verify-ptc-roles.cjs:248-251,1544-1556 PERSONA_FILES is exactly two paths (both orchestrator.md); each must literally contain "user-opened turns" (:237) else "persona 写死字面量 ..." FAIL.
+- verify-ptc-roles.cjs:2369-2376 ptc-gate identity asserted by "no predefined roles" in the mounted system prompt; :2381-2393 additionally requires PROGRAM_CONTRACT_MARK in the mounted persona.
+- verify-harness-contract.cjs:37 reads ONLY preset/ptc-roles/preset.patch.yml; :114-123 extracts every "name: '@deepseek-ai/...'" and :196-201 FAILs "缺包：…" when the target checkout lacks it => a copied preset that adds an uninstalled tool package breaks the contract gate.
+- Makefile:19-27 "make verify" runs all four verify scripts + "deploy-preset.cjs --compose".
+
+BOTTOM LINE (verified): ptc-gate = shipped ptc list + the maxDepth:1 patch + 2 deltas (persona prefix, watchdog row with gate: enforce). tool-fs is present with zero config; no tool-read/tool-edit exists anywhere. The persona carries no read/edit mechanics, so replacing those tools contradicts none of its text. What actually constrains a copied preset is the tooling: EXPECTED_COMPOSITION registration, exact 10-space row indentation, byte-identical watchdog copies, gate: enforce matching the data-plane marker, and BEHAVIOR_TOOLS naming write/edit explicitly.

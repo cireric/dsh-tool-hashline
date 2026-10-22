@@ -1,0 +1,23 @@
+# Agent preset for dsh-tool-hashline on stock DSH.
+#
+# Deliberately omits a per-session tool-fs row: read/write come from the
+# deployment host tool-fs, while the scoped tool-edit shadows stock edit.
+# Adding a tool-fs row here would register stock edit in the same scope and fail boot.
+- id: persona
+  name: '@deepseek-ai/dsh-persona'
+  config:
+    text: >-
+      You are a coding agent. Read before editing. Copy the [path#TAG] header from the
+      read output into the edit section header; never invent or reuse a tag.
+- id: agent-instructions
+  name: '@deepseek-ai/dsh-agent-instructions'
+  config:
+    maxBytes: 65536
+- id: tool-read-hashline
+  name: '@dsh-tool-hashline/tool-read'
+- id: tool-edit
+  name: '@dsh-tool-hashline/tool-edit'
+  config:
+    mode: auto
+    formatOnWrite: false
+    diagnosticsOnEdit: false

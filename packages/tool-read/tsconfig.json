@@ -1,0 +1,13 @@
+{
+  "extends": "../../tsconfig.base.json",
+  "compilerOptions": {
+    // `check` is the only gate this package has today: it type-checks src AND the
+    // tests/ specs from one program, so there is no single rootDir for an emit
+    // layout. Emit (and a split build/check config pair) arrives with M3.
+    "noEmit": true
+  },
+  "include": [
+    "src",
+    "tests"
+  ]
+}

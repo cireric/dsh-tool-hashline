@@ -1,0 +1,20 @@
+packages:
+  - "packages/*"
+
+# Windows without symlink privileges: pnpm's default isolated linker creates
+# directory junctions, and this Node build's ESM resolver does not follow them
+# (fs.realpathSync returns the logical path), so every transitive dependency of a
+# linked package becomes ERR_MODULE_NOT_FOUND. A hoisted tree uses real files, so
+# plain Node resolution works.
+nodeLinker: hoisted
+
+# esbuild (vitest's bundler) ships its platform binary through the optional
+# @esbuild/win32-x64 package; its postinstall only re-validates that binary.
+# Acknowledging the ignored script keeps `pnpm install` at exit 0 on Windows.
+ignoredBuiltDependencies:
+  - esbuild
+
+# pnpm 11 treats an unlisted dependency build script as a hard install error.
+# We acknowledge esbuild above; keep the install exit code clean instead of
+# failing the gate on a script we have already reviewed.
+strictDepBuilds: false

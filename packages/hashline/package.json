@@ -1,0 +1,16 @@
+{
+  "name": "@dsh-tool-hashline/hashline",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "main": "./src/index.ts",
+  "exports": {
+    ".": "./src/index.ts"
+  },
+  "dependencies": {
+    "@hy-sde-org/dsh-hashline": "0.2.1-alpha.4"
+  },
+  "scripts": {
+    "check": "tsc -p tsconfig.json --noEmit"
+  }
+}
