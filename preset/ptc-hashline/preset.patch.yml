@@ -3,7 +3,7 @@
 # Derived from the `cireric/dsh-ptc-roles` preset `ptc-gate` at commit
 # 3d8f36eb8def861c3f2aa7d5f7b4983d96c92341 (2026-10-02). The persona and the
 # intent-gate watchdog are copied verbatim; provenance and digests live in
-# `preset/baseline/SOURCES.md`. Allowed deltas from that baseline (enforced by
+# `preset/ptc-hashline/SOURCES.md`. Allowed deltas from that baseline (enforced by
 # `pnpm check:preset`):
 #   1. preset id / display metadata (ptc-hashline);
 #   2. three functional rows — stock `read`/`edit` off, plus
