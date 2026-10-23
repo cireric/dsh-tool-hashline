@@ -1,0 +1,279 @@
+# PTC Hashline 运维 Skills 开发实施计划
+
+日期：2026-10-23  
+版本：r5；状态：四轮需求决策 D1—D16 已确认，待最终确认评审结束，尚未进入实施。  
+范围：两个仓库内维护、仅对 `ptc-hashline` 生效的 skill；问题取证与三方升级检查/评估/经用户同意后执行。
+
+用户确认的决策及未决事项见[需求决策](../specs/2026-10-23-ptc-hashline-operations-skills.md)。本轮先完善文档，待用户确认需求评审结束后才进入开发。
+
+本文已从 `.scratch/ptc-hashline-operations-skills/implementation-plan.md` 迁入版本库，此处为唯一实施计划。
+
+## 1. 本轮确定的要求
+
+1. `ptc-hashline-incident` 与 `ptc-hashline-upgrade` 跟随本 bundle 维护和交付，只对 **PTC Hashline Mode / preset id `ptc-hashline`** 提供入口。普通 PTC、standard 等模式不发现、不加载、不自动运行这两份工作流。
+2. 升级 skill 可以检查与评估；形成推荐后必须向用户展示具体方案并询问。只有用户明确同意相应版本与范围，才能执行升级。
+3. 共用实际运行基线、确定性脚本与契约资料，不复制两套日志解析器、版本清单或测试流程。
+4. 不自动监控、不定时运行、不自动上传、不发布、不自动重启 DSH、不改现有 gate 判据。
+5. 本轮仅新建计划。实施时保护已有工作树与暂存区变更，不恢复、覆盖或纳入无关改动。
+6. 按 D13，两份 skill 仅由用户主动触发；agent 不依据错误、目录、任务匹配自行加载或运行，任务中异常仍由原 DSH 日志留痕。
+
+依据：[根 AGENTS](../../AGENTS.md)、[权威规格](../spec/2026-10-22-ptc-hashline-requirements-spec.md)、[GLOSSARY](../../GLOSSARY.md)、[ADR-0003](../adr/0003-effective-working-directory.md)/[0004](../adr/0004-mv-create-intent-and-snapshot-order.md)/[0005](../adr/0005-bom-preserving-hashline-read.md)。前一设计 `.scratch/ptc-hashline/2026-10-23-operational-observability-and-upgrade-policy.md` 为本地历史讨论，不是实施必需文件；其已确认要求已纳入正式需求与本计划。新约束以需求决策及用户指令为准。
+
+## 2. 设计再验证的结果
+
+### 2.1 已由源码确认的可用机制
+
+| 事实 | 代码证据 | 设计含义 |
+|---|---|---|
+| 现 preset 已有 scoped skill-filesystem / tool-skill | `presets/ptc-hashline/preset.patch.yml:139`—`:150` | 不需要新建 skill 注册服务或改 DSH |
+| provider 注册到调用 context 的层，dispose 时注销并失效缓存 | 宿主 `packages/skill/skill/src/index.ts:379`—`:425` | 专用 provider 只在本 preset 层挂载 |
+| filesystem provider 支持 providerName、includeDefaultRoots、customSkillDirs | 宿主 `packages/skill/skill-filesystem/src/index.ts:46`—`:87` | 能保留原通用 provider，另加唯一名称的专用 provider |
+| skill loader 以 `scope: exec.agent` 查询；显式用户加载也查 scope | 宿主 `packages/skill/tool-skill/src/index.ts:135`、`:188` | 模型目录与用户加载入口都应验证隔离 |
+| bundle 已通过 createRequire(baseUrl) 解析自有资源 | preset persona prefix | skill 路径可以相对安装 bundle 解析，避免个人绝对路径 |
+| 根包 files 已包含 presets，exports 有 ./presets/* | 根 package.json | assets 可随包交付，仍须实测 pack 与解析 |
+
+这是一轮**静态源码验证**。scope/cache/实际打包仍要通过下面的运行测试证明；不能把“API 支持”当成“新功能已验收”。执行前确认目标安装产物的 API 与这些源码一致。
+
+### 2.2 选定挂载方案
+
+两份 skill 存在 `presets/ptc-hashline/skills/`，不放入项目 `.agents/skills`、`.dsh/skills` 或用户全局扫描目录。
+
+保留现有 `skill-filesystem` 与 `tool-skill` 行；仅在本 preset 的 plugins 中新增第二个官方 filesystem provider：
+
+```yaml
+# 示意，customSkillDirs 的绝对路径由 bundle/package.json 所在目录解析。
+- id: ptc-hashline-operations-skills
+  name: '@deepseek-ai/dsh-skill-filesystem'
+  config:
+    providerName: ptc-hashline-operations
+    includeDefaultRoots: false
+    watch: false
+    customSkillDirs: [<installed-bundle>/presets/ptc-hashline/skills]
+```
+
+使用现有 `!!js` / baseUrl 资源解析惯例，具体 YAML 形态必须经过真实 loader 验证。唯一 providerName 避免与原 provider 同层重名。私有根只包含这两个目录；watch=false 使已交付版本在挂载期间稳定，修改后重新挂载。
+
+不挂在 profile 顶层、不写用户全局 skills、不创建第三个总控 skill、不引入新的常驻插件。保留原有技能目录与工具能力。
+
+两份 SKILL.md 均设置标准 frontmatter：`disable-model-invocation: true`、`user-invocable: true`。不把它们注入模型自动发现目录，不让模型通过 tools.skill 自行加载。目标 preset 内由真实用户首行 `/ptc-hashline-incident` 或 `/ptc-hashline-upgrade` 触发宿主用户入口；正文加载后执行仍遵守 PTC 的 run_code 约束。普通报错或自然语言任务相似度不构成自动启动条件。
+
+源码验证：宿主 skill-filesystem 的 parseInvocationPolicy 识别上述标准字段；tool-skill 的模型 execute 检查 isModelInvocable，用户 pre-step 入口只识别真实 user source 的显式手势。最终仍须对安装版本实测，不能只测 frontmatter 文本。
+
+### 2.3 “仅本模式生效”的边界
+
+这是 **DSH 入口可见性与工作流范围约束**，不是操作系统级文件执行隔离：本机用户仍能手工执行任何有权限读取的脚本。本计划不声称隐藏目录能提供安全边界。
+
+按已确认 D1：通过 shell 工具取得宿主管理的 DSH_SESSION_ID，定位当前会话并回放 preset 投影作为防误用检查；run_code 的 process.env 不作为读取入口。使用有效 header 初值加后续 selection 事件，明确解析为 ptc-hashline 才进入工作流。header 的 family 标记 ptc、目录名、用户手填 --preset 均不能单独证明本模式。合法投影不强制必须包含 selection 事件。
+
+- 非目标模式或上下文无法确认：停止工作流，返回 wrong-preset / context-unverified；不扫描日志目录、不写问题包、不联网检查、不安装或升级。
+- incident 的**调用会话**与**被分析历史会话**分别记录。允许本模式取证另一个历史 ptc-hashline 会话；不允许用历史目标会话的标记替代当前调用资格。
+- 按 D5/D13，主会话被用户明确启动后，可委派同 preset 子 agent 辅助取证与分析，但子 agent 不自行加载/启动两份 skill；升级方案汇总、用户同意与执行归主会话。scope 继承不等于执行授权；升级执行入口拒绝子 agent 发起，不委派升级副作用绕过约束。
+- 封装 CLI 接受明确的调用会话定位和目标范围；信任宿主 shell 管理变量，未知上下文不能靠默认 true 放行。测试使用显式隔离的上下文夹具。手工离线工具不属于运行时 skill 身份认证，不承诺阻止本机操作者指定其它日志。
+- 旧 `scripts/extract-runtime-evidence.mjs` 是已有离线工具，保持其原契约与测试；新增两份工作流的范围约束不伪装成“从此禁止其它模式读取这个旧工具”。
+- 手动运行底层脚本不具可信宿主授权身份；校验及审批记录用于工作流约束与追溯，不宣称能防御本机操作者伪造。
+
+## 3. 仓库布局与职责
+
+建议布局如下；只有实际需要时才拆更多文件：
+
+```text
+presets/ptc-hashline/
+  skills/
+    ptc-hashline-incident/SKILL.md
+    ptc-hashline-upgrade/SKILL.md
+  operations/
+    cli.mjs                     # context / baseline / incident / upgrade-assess 入口
+    baseline.mjs                # 实际加载组合采集
+    incidents.mjs               # 通用异常汇总与本地问题包
+    upgrade.mjs                 # 元数据评估与升级执行的范围校验
+    references/                 # 实际复用的 schema、规则、升级契约映射
+tests/integration/
+  operations-skills.spec.ts
+  operations-incidents.spec.ts
+  operations-upgrade.spec.ts
+tests/ptc/
+  operations-skills.spec.ts
+```
+
+以上名称可在保持边界前提下合并，不机械创建空文件。两份 SKILL.md 只放触发条件、操作顺序、判断和停止条件；大矩阵与模板按需引用。参考路径以各 skill 资源根解析，不假定会话 cwd 是本仓库。
+
+工具/API 参数、命令从实际 manifest 与 SDK 读取。通过 `run_code` 调用 skill/shell 等 tools；普通问题取证不调用 edit 改工作文件。依赖升级由包管理工具执行，不能用 hashline 手改 lockfile。
+
+公共代码复用现有解码/配对组件，避免把旧提取器强改成多职责单文件。若共享代码迁移，旧 CLI 参数、退出码与既有输出版本兼容需回归；打包后的 operations 不能依赖被 files 排除的根 scripts 或 `.scratch` 历史文件。
+
+## 4. 工作流一：ptc-hashline-incident
+
+触发：用户在本模式显式调用 `/ptc-hashline-incident`，并报告异常/成功结果错误或指定会话范围。仅工具报错、自然语言任务匹配、文件位于本仓库，都不触发。未显式调用时不启动本工作流，原 DSH 日志照常记录。
+
+步骤：
+
+1. 核验调用模式，解析安装资源根；按 D9，首次明确指定并保存唯一维护仓库与证据目录配置，后续复用。首版为本机有维护源码场景，从任意业务 cwd 调用均不能改变这两个配置。路径失效或不可写时停止对应写入、提示修正；可完成只读分析，不猜测写入日常工作项目，不回退到 cwd。
+2. 选择明确会话与 seq 范围；范围不明先以当前已可见会话缩小，不隐式全盘搜索其它会话。
+3. 采集实际运行基线：项目 commit/dirty、lock/patch/产物 hash、DSH 与 PTC/tools/FS/Cordis 版本、hashline/editor realpath、provider、preset 摘要。无法获得的字段记 unknown。
+4. 解码、完整性检查、start/settle 配对；导出通用 isError/代码/原因、未完成、部分成功/未知状态，覆盖 read/edit/run_code。保留 PTC 内层错误，即使程序 catch 后外层成功。
+5. 区分预期拒绝、模型参数错误、环境问题、疑似实现缺陷、证据不足。`complete` 与 `completed` 不当成功判据。
+6. 对“成功但结果不对”接受用户说明，关联成功事件与独立字节/Git diff/测试结果；不假称日志能自动发现静默损坏。
+7. 按 D6，用户调用后自动生成摘要；需要跟进的疑似异常无需先证实为代码 Bug，直接按既有规范创建 `.scratch/<feature>/issues/<NN>-<slug>.md`，`Status: needs-triage`，并明确证据与假说。预期冲突、取消等只记摘要，不单独建 issue。按 D14，同类问题关联已有 issue，每次保存独立发生记录和版本基线；重试成功仅标“本次已恢复”，不自动关闭 issue。历史证据不覆盖，不反复询问是否落盘。
+
+不现场修实现、不自动升级、不自动重放 MV/REM、不清理部分成功文件。写入证据属于该 skill 请求范围，未授权外发时保持本地。原始数据与脱敏导出分开，首行/路径也要检查泄密风险。
+
+输出：summary.md、incident.json、baseline.json、最小脱敏事件片段与源摘要；证据缺口显式记录。按 D8，不复制业务文件全文、不外发、不自动清理源日志/问题包；由用户管理归档。若必须保存敏感原文，先说明范围与理由并征求同意。`.scratch` 被 gitignore 忽略，重要证据的归档/备份位置需在说明中明确。
+
+## 5. 工作流二：ptc-hashline-upgrade
+
+### 5.1 检查和评估阶段：可以自动推进的工作
+
+仅在用户显式调用 `/ptc-hashline-upgrade` 后开始本阶段。incident 的异常不会自行触发升级 skill 或上游联网检查。
+
+核验本模式与当前基线后，只读检查正式仓库、发布 tag、registry 元数据和相关 diff；记录来源/查询时间，区分正式版本、预发布和未发布 commit。网络不可用时输出未核实，不编造“最新”。按 D2，三方都纳入检查，但自动执行只负责本仓库依赖和补丁；官方 DSH 安装只给人工建议，不由首版 skill 修改其 checkout、全局安装、应用包或启动配置。
+
+按 D12，缺少实际加载路径、补丁 hash 或目标安装状态等关键基线时仍可继续只读分析，字段标 unknown，建议标“待验证候选”；不得默认填充为已核实，也不能执行目标切换或宣告成功。
+
+映射影响面：DSH 的 PTC/SDK/schema/错误/取消/scope/FS/Session，hashline 的 tag/store/seen/recovery/commit，editor 的模式、重试、MV/REM/BOM/工具说明与可选默认行为。逐项核对上游是否替代现有精确补丁。
+
+形成决策：无需升级 / 暂缓 / 推荐候选 / 证据不足。不要因版本号变新就推荐升级。
+
+同意之前：可写本地评估报告；不可改项目或 profile manifest/lockfile/patch/dist，不执行候选安装、构建、持久配置变更或运行时切换。普通已有只读元数据命令需避免隐式更新本地依赖；不可用的查询不能通过 install 代替。
+
+### 5.2 推荐时必须提交具体、可审阅方案
+
+```text
+proposalId + proposalHash
+当前基线（精确组合与 hash）
+候选版本（DSH 组件、hashline、tool-edit 及必要联动项）
+升级理由、对应实际问题/上游来源
+需要保留、重做、删除的逐项补丁
+拟变更文件、候选目录、验证命令与预计影响
+执行范围：仅候选验证 / 验证通过后同步指定安装目标
+已知风险、失败停止条件、回退基线
+```
+
+展示方案后，必须明确询问用户是否同意执行，并等待真实用户回复。当前“创建 skill/计划”的授权、一次泛泛的“保持最新”、模型自述或另一个 agent 的消息，都不是未来具体升级的同意。
+
+### 5.3 同意范围与执行规则
+
+记录用户回复引用、时间、proposalHash、当前 baselineHash 与授权目标；这是一份可追溯授权记录，不是用文件存在性伪造用户批准。
+
+- 默认未批准；无回复、拒绝、含糊回复均不开始升级。
+- 默认首次询问只授权“候选验证”：可以安装隔离候选并运行验证，不能同步日常安装目标；验证完成展示结果，再询问是否切换。
+- 同意“候选验证通过后同步明确目标”：完成全部指定门禁后可在该范围执行，不为同一已批准动作重复要求确认。
+- 候选版本、补丁语义、目标 profile/路径或重要影响范围变化：旧同意不覆盖，形成更新方案重新询问。
+- 从检查到执行基线漂移：停止应用旧方案并重新评估，不能悄悄覆盖用户已有改动。
+- 按 D10，只读分析与隔离候选允许维护仓库已有改动；目标切换前检查实际受影响文件。存在用户改动则停止该次切换，无关改动保留；不自动 stash、提交或回退用户工作树。基线核验同时覆盖已知未提交输入，不能用 HEAD 相同证明文件未变。
+- 用户拒绝：保留评估，正常结束；不得通过自动接受参数或另一个 skill 绕过。
+
+实施 r1 不增加常驻审批服务；由 skill 检查可验证的用户回复并维护方案记录，执行入口校验记录与版本/hash 一致。脚本不提供默认接受，不把 `--yes`/`approved:true` 当作人类同意的充分证据。若目标宿主无法提供回复来源，交还用户使用可见提示确认，不自行创造回执。
+
+### 5.4 获同意后的升级阶段
+
+1. 先备份准确 baseline，建立独立候选目录与安装树，校验三方版本约束；绑定发布时联动升级，不强塞双引擎实例。候选验证使用用户已有或另行人工准备的 DSH 版本，不自行升级官方 DSH 安装。
+2. 使用包管理器更新精确依赖与 patch hash；上游已修补丁以语义回归决定删除/重做，不以 patch 能否应用代替判断。
+   按 D7，只执行用户已同意方案列出的适配；出现计划外实现变更、行为变化或测试契约变化时，保留候选失败与分析，停止并另提方案，不能削弱断言或反复改代码直至变绿。
+3. 定向验证后跑完整交付门禁与目标宿主短链路；真实 runtime/provider 的不足如实报告，不以跳过冒充通过。
+4. 根据用户已同意范围交付候选结果或同步指定目标，目标变更仅包含本仓库依赖、补丁及明确同意的本仓库构建、指定 profile 安装树更新。默认第二次明确同意后才切换；一次明确同意已覆盖两阶段时不重复询问。按 D11，活依赖先由用户安排停止窗口，不在运行中热改，不自动杀/重启 DSH，不改其它 profile。
+5. 候选失败不切换目标。按 D15，目标切换部分失败时，在方案已声明的回退范围内自动恢复本次变动的依赖、补丁与安装状态；执行前确认目标仍是本轮写入结果。检测外部改动、备份不完整或状态不明时停止，不覆盖，留证并交接。不得回退业务文件或无关改动。写明最终实际版本、恢复结果与保留问题。
+
+## 6. 实施阶段与完成标准
+
+### M0：冻结输入和登记设计增量
+
+- 记录实施时的 HEAD、暂存/未暂存/未跟踪变更摘要，保护当时实际存在的用户改动；不把计划编写期间的工作树快照当成永久状态。
+- 把本次新增 scoped provider 作为既有 preset delta 的明确扩展，更新规格/ADR 或相应契约说明与检查白名单；不默默放宽全部 preset 校验。
+- 不改 persona/watchdog 正文和摘要。新增 skill 资源摘要如需校验，使用独立清单，不重写 gate 基线。
+
+完成：变更范围明确，输入受保护，现有历史门禁未被改写。
+
+### M1：只实现 scoped 发现与交付
+
+创建两个简短 SKILL.md 和专用 provider 行，验证资源路径来自已安装 bundle；不增加新运行服务。
+
+完成：本模式用户入口可发现并显式加载；模型自动目录不含两份 skill，模型 tools.skill 加载被拒绝；其它模式同 cwd 下用户入口亦不可加载；scope dispose/重新挂载不泄漏或重复注册，原有 skills 正常。
+
+### M2：共享 baseline/context 与 incident MVP
+
+实现范围核验、基线采集与离线问题包，复用旧工具逻辑并保持其兼容性。未完成升级执行时，upgrade 入口明确只支持检查，不虚假承诺执行能力。
+
+完成：内层失败、成功结果主动报错、预期拒绝、残缺日志与非目标模式均有回归；默认不采集正文和秘密。
+
+### M3：upgrade 检查、方案与用户同意流程
+
+实现元数据适配、影响评估输入、补丁台账与 proposal/consent 记录。网络以固定来源 fixture 测试，不让测试依赖当天最新版本。
+
+完成：无关更新能给暂缓；推荐能产生具体方案与询问；拒绝/未回复不产生任何升级副作用；陈旧/变更 proposal 不复用批准。
+
+### M4：获同意后的候选验证与目标同步
+
+按 D16，使用固定候选与一次性 profile/安装树验证推荐、同意、拒绝、切换及回退；测试中的用户同意是显式夹具，不能外推为真实升级授权。不为验收更新日常版本；真实上游升级另行由用户主动发起并确认。
+
+完成：候选失败不触碰目标；仅候选同意不执行目标切换；批准的准确目标与版本可复现应用，回退可验证。
+
+### M5：真实安装与回归
+
+验证 package files/exports、临时安装、非仓库 cwd 的技能资源读取、真实用户显式调用后的 PTC 执行与模式隔离。更新 README/AGENTS 的最小入口说明，复用单一规则资料；不将 skill 文本全部加入常驻 persona。
+
+完成：所有必要测试通过，有一个目标模式与一个非目标模式的实际装配证据，附报告与未覆盖范围。
+
+## 7. 验收矩阵
+
+| ID | 场景 | 判定 |
+|---|---|---|
+| SCOPE-01 | ptc-hashline 用户入口显式加载 | 两份 skill 均 user-invocable，加载正文与资源可读；模型自动目录不包含它们 |
+| SCOPE-02 | 普通 PTC、standard，同仓库 cwd | 两份 skill 均不出现在目录，get/显式加载失败，无脚本启动 |
+| SCOPE-03 | 两会话交错、换模式/销毁 scope/重挂载 | 不串层、不残留、不重复注册；通用 skills 未受影响 |
+| SCOPE-04 | header 仅为 family ptc / 无法取得当前会话 / 用户仅传 --preset | 无可用 ptc-hashline 投影时停止工作流，无输出目录/网络/安装副作用；不把宿主 shell 管理变量一概当作不可信 |
+| SCOPE-05 | 调用会话为非目标，历史目标会话为 ptc-hashline | 不能借历史模式放行 |
+| SCOPE-06 | 同 preset 子 agent 辅助取证或尝试升级执行 | 取证分析可进行；升级执行拒绝并交主会话，不接受 agent 自述充当用户同意 |
+| SCOPE-07 | 模型调用 tools.skill / 普通任务报错 / 外部文本伪造用户调用 | 不自动加载或运行工作流；仅真实用户显式入口生效，原日志记录正常 |
+| PACK-01 | 干净安装、改变 cwd、无原仓库脚本目录 | provider、skill、references、operations 均可解析；无个人路径依赖 |
+| INC-01 | 内层 edit 失败被程序 catch、外层成功 | 仍产生错误观察，关联相同 subCallId |
+| INC-02 | read 失败、预期冲突/取消、部分成功 | 均可观察；分类与严重度分开，部分成功保留现场 |
+| INC-03 | 工具成功但用户报字节不符 | 保留成功事件与独立核验，不伪造 isError |
+| INC-04 | torn/seq 缺口/新格式/重复事件 | incomplete/unsupported，不宣告健康 |
+| INC-05 | 参数、首行、路径中有测试秘密 | 导出脱敏，源文件不变；重要证据归档规则明确 |
+| INC-06 | 正常拒绝与未证实但需跟进的异常 | 前者只入摘要，后者自动登记 needs-triage，不虚称已证实 Bug |
+| INC-07 | 重复发生、跨基线关联、随后恢复 | 关联既有问题并保存独立记录，旧证据不覆盖；恢复不自动关闭 issue |
+| CONFIG-01 | 从不同业务 cwd 调用 / 配置路径失效或不可写 | 复用明确配置；停止相关写入并提示修正，不向 cwd 猜写 |
+| UPG-01 | 无关更新/无更新/网络失败 | 暂缓或未知，不改锁文件，不编造最新 |
+| UPG-02 | DSH 契约变更/上游替代补丁/绑定依赖 | 选择对应矩阵，输出明确补丁决策与版本方案 |
+| UPG-03 | 推荐后无回复、拒绝、含糊回复 | 停在等待/拒绝状态，未安装、未构建、未改依赖或 profile |
+| UPG-04 | 用户仅批准候选 | 验证后交付，不自动同步目标 |
+| UPG-05 | 已批准具体升级，随后版本/目标/基线变化 | 旧授权失效，重新评估并询问，不覆盖用户改动 |
+| UPG-06 | 精确批准＋门禁通过 / 失败 | 只在批准范围执行；失败不切换；同一批准不重复询问 |
+| UPG-07 | 用户仅同意默认第一阶段；或明确一次同意两阶段 | 前者验证后等待第二阶段同意，后者在原准确范围内完成且不重复询问 |
+| UPG-08 | 评估涉及官方 DSH 新版本 | 提供影响与人工操作建议，不修改官方安装或启动配置 |
+| UPG-09 | 候选需要方案外实现/语义/测试契约改动 | 保留失败，另提方案并等待同意，不放宽断言或自动扩展修复范围 |
+| UPG-10 | 目标受影响文件有用户改动 / 只有无关改动 | 前者停止切换，后者保留无关改动；均不自动 stash/提交/回退 |
+| UPG-11 | 路径/补丁/目标安装等关键基线 unknown | 可交付只读分析及待验证候选，不切换或宣告成功 |
+| UPG-12 | 目标切换失败，目标未被外部改动 / 已被外部改动 | 前者只回退提案列明的本轮变动，后者停止并交接，不覆盖用户工作 |
+| UPG-13 | 首版开发验收 | 固定候选＋临时 profile 验证完整流程，真实 DSH 验证显式调用，不升级日常版本 |
+| REG-01 | 原 read/edit/门/补丁/日志提取器 | 既有回归仍通过，JS/.d.mts 类型与输出版本同步 |
+
+scope/provider 用宿主真实 registry 测试；最终模式隔离还需真实 preset loader 的装配测试。若现依赖不含 loader，实施前增加最小测试依赖或临时 profile 测试，不将平铺 fixture 冒充最终验收。
+
+## 8. 门禁、风险与交付报告
+
+先跑新增定向测试与类型检查；preset、打包及依赖发生变更后运行 build、check、unit、integration、PTC、compat、check:preset、test:profile，再跑 PACK/SCOPE 实际装配。逐条记录退出码、用例名、计数和 skipped，不反复无理由重跑。
+
+主要风险与处置：
+
+- scoped provider 路径正确但打包漏资源：干净 pack/install 且脱离源码路径验证。
+- 同名 skill 被外部 project/global 自行复制：本 bundle 不向这些根安装；测试确认本 bundle 无泄漏，不承诺控制用户额外安装。
+- 上游日志或 skill API 漂移：版本化解析与能力检查，不静默退化为全局技能。
+- 用户批准范围误判：精确 proposal/hash/目标绑定，用户回复来源可核查，变化重新询问。
+- 记录含秘密或 `.scratch` 丢失：最小导出、脱敏验证、重要问题明确归档。
+
+交付报告存本功能的新证据目录，分别报告：技能隔离、incident 可观察性、upgrade 评估、同意流程、执行/回退、既有功能回归。报告应明确本轮是否仅验证了模拟候选，不能写成已经升级真实上游或日常 profile。
+
+回退仅撤除新增 provider 行及本功能资产/脚本/文档增量，恢复匹配的契约检查；保留用户问题包与历史证据，不回退已有 BOM/MV/CAS 修复。
+
+## 9. 给开发 agent 的提示词
+
+```text
+在用户确认需求评审结束并要求开发后，按 docs/specs/2026-10-23-ptc-hashline-operations-skills.md 与 docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md 实施两份仓库内 skill。
+
+先读 AGENTS、权威规格与计划。技能仅在 PTC Hashline Mode（ptc-hashline）挂载；使用独立 scoped filesystem provider 与 bundle 内非自动扫描根，不安装到项目/用户全局 skills。两份 skill 均 disable-model-invocation:true、user-invocable:true，仅由真实用户显式触发；保留其它模式和通用 skills，按真实 registry/loader 验证用户入口与模型加载限制。
+
+incident 负责采集证据与问题包，不现场修复。upgrade 负责检查评估；推荐后必须展示精确版本、改动、验证、回退与目标并询问用户，收到对应明确同意才可执行。不得把本次开发授权当作今后真实上游升级授权。候选或范围改变需重新询问，已明确批准的相同范围不重复询问。
+
+保护工作区和暂存区已有改动，使用隔离候选验证，不热改活宿主依赖，不自动重启、不发布。先跑定向测试，再按实际变更完成交付门禁。创建本功能唯一新证据目录与开发报告，分别列出 scope、取证、评估、用户同意、执行/回退和回归结果。
+```
