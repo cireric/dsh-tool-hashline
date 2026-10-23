@@ -17,7 +17,8 @@
     "check:preset": "node scripts/check-preset.mjs",
     "test:profile": "node scripts/test-profile.mjs",
     "test:ptc": "vitest run --config vitest.ptc.config.ts",
-    "check:tests": "tsc -p tsconfig.tests.json"
+    "check:tests": "tsc -p tsconfig.tests.json",
+    "install:profile": "node scripts/install-profile.mjs"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

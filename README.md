@@ -23,6 +23,19 @@ contract packages: `@deepseek-ai/dsh-tools` (`defineTool`) and `@deepseek-ai/dsh
 config are forbidden; `pnpm test:unit` enforces this whitelist with an AST scan of `src` and
 `dist` (spec NFR-4 / C-08).
 
+## Install into a DSH profile
+
+```powershell
+pnpm install:profile                 # default: --profile web
+pnpm install:profile --profile other --dry-run
+```
+
+The script builds when a `dist/` entry is missing, links this checkout's four
+packages through the source `dsh` CLI (`pnpm dsh plugin add link:…`), registers
+the bundle, and verifies `--dump-config` plus resource resolution. It is
+idempotent (a second run reports "already installed") and never restarts the
+host; it prints the restart command and the preset to pick.
+
 ## Build, check, test
 
 ```powershell
