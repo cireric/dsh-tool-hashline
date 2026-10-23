@@ -1,8 +1,8 @@
 # BOM 保持、快照异常文案与工具说明修复 —— 验收记录
 
 - 日期：2026-10-23
-- 计划：[mv-rem-bom-and-snapshot-repair-plan r2](../../.scratch/ptc-hashline/2026-10-23-mv-rem-bom-and-snapshot-repair-plan.md)
-- 输入红测原文：[20261023-1453/RUN-REPORT.md](../../.scratch/ptc-hashline/evidence/20261023-1453/RUN-REPORT.md)（历史报告未改写）
+- 计划：本地 `.scratch/ptc-hashline/2026-10-23-mv-rem-bom-and-snapshot-repair-plan.md`（r2）
+- 输入红测原文：本地 `.scratch/ptc-hashline/evidence/20261023-1453/RUN-REPORT.md`（历史报告未改写，不随 clone 交付）
 - 本次证据：`.scratch/ptc-hashline/evidence/20261023-1602/`
 - 隔离候选根：`.scratch/ptc-hashline-candidate-20261023-1602/repo`
 
@@ -11,6 +11,8 @@
 > 候选可按上表 HEAD 重新复制并在独立 store 中重建；下文对候选根的任何引用均为删除前的记录。
 
 本文件只记录本轮实际执行过的命令与观察。上一轮的 FAIL 仍是 FAIL，本轮的 PASS 是新的运行结果。
+
+> 后续原 checkout 整合、五项审查修正及用户手动重启状态见[当前验收与证据索引](2026-10-23-current-status-and-evidence-index.md)。下文“整合未完成”“待重启”保留为本次候选验收时的状态，不再作为当前阻塞项；原始证据目录为本地留证，并不随仓库克隆。
 
 ## 1. 分层结论（先看这里）
 

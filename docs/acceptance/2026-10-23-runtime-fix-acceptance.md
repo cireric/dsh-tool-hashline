@@ -1,11 +1,13 @@
 # 运行修复验收记录：D1 目录适配 / D2 persona 保留
 
 日期：2026-10-23
-计划：[runtime-fix-plan](../../.scratch/ptc-hashline/runtime-fix-plan.md)
-原始实测报告：[runtime-verification-report](../../.scratch/ptc-hashline/runtime-verification-report.md)（保留原 FAIL，不改写）
+计划：本地 `.scratch/ptc-hashline/runtime-fix-plan.md`
+原始实测报告：本地 `.scratch/ptc-hashline/runtime-verification-report.md`（保留原 FAIL，不改写；不随 clone 交付）
 旧验收追溯：[2026-10-23-acceptance-traceability.md](./2026-10-23-acceptance-traceability.md)（其计数是修复前基线）
 
 本记录只陈述本次实际执行过的命令与观察。未执行的项列为 GAP，不用配置检查、进程内测试或历史记录替代。
+
+> 后续状态见[当前验收与证据索引](2026-10-23-current-status-and-evidence-index.md)。下文 GAP/计数是本轮历史结果，本地计划、日志和备份不属于版本库交付。
 
 ## 1. 判定摘要
 
@@ -73,7 +75,7 @@
 > `@deepseek-ai/dsh-fs-observation-policy`。因此这里的「MV 通过」只证明目录解析与内容结果，
 > **不证明**真实 profile 下的写入意图契约——真实会话里 MV 到不存在的新目标被
 > `fs/edit-intent` 以 `FS_NOT_OBSERVED` / `FS_NOT_FOUND` 拒绝（见
-> [相对路径 MV/REM 实测报告](../../.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md) §3）。
+> 本地 `.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md` §3，不随 clone 交付）。
 > 夹具现已默认挂载策略，修复与新的矩阵见
 > [2026-10-23-mv-observation-acceptance.md](./2026-10-23-mv-observation-acceptance.md)。
 

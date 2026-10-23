@@ -1,12 +1,14 @@
 # 运行修复验收记录：MV 目标写入意图 / 快照提交次序
 
 日期：2026-10-23
-计划：[2026-10-23-mv-observation-fix-plan](../../.scratch/ptc-hashline/2026-10-23-mv-observation-fix-plan.md)
-输入报告：[相对路径 MV/REM 实测报告](../../.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md)（保留原文）
+计划：本地 `.scratch/ptc-hashline/2026-10-23-mv-observation-fix-plan.md`
+输入报告：本地 `.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md`（保留原文，不随 clone 交付）
 前序验收：[2026-10-23-runtime-fix-acceptance.md](./2026-10-23-runtime-fix-acceptance.md)（其 MV/REM PASS 的夹具范围见 §6）
 决策：[ADR-0004](../adr/0004-mv-create-intent-and-snapshot-order.md)
 
 本记录只陈述本次实际执行过的命令与观察。未执行项列为 GAP，不用配置检查、进程内测试或历史记录替代。
+
+> 后续 BOM、policy 与取证修正见[当前验收与证据索引](2026-10-23-current-status-and-evidence-index.md)。本页记录本轮历史结果，不将其未执行项直接当作当前待办；原日志仅在本地留存。
 
 ## 1. 判定摘要
 

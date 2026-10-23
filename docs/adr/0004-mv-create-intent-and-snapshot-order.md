@@ -3,8 +3,9 @@
 日期：2026-10-23
 状态：已采纳（MV 观测修复计划阶段 B/C）
 关联：[ADR-0003 有效工作目录](./0003-effective-working-directory.md)、
-[实测报告](../../.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md)、
-[修复验收](../acceptance/2026-10-23-mv-observation-acceptance.md)
+[修复验收](../acceptance/2026-10-23-mv-observation-acceptance.md)、[当前状态与证据索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。
+
+原始实测报告位于本地 `.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md`，不随 clone 交付。以下背景描述的是修复前行为，决策与可重跑测试不依赖该本地文件可用。
 
 ## 背景
 

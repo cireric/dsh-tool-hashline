@@ -3,12 +3,12 @@
 日期：2026-10-23
 状态：已采纳（mv-rem-bom-and-snapshot-repair-plan r2 阶段 B）
 关联：[ADR-0003](./0003-effective-working-directory.md)、[ADR-0004](./0004-mv-create-intent-and-snapshot-order.md)、
-[修复验收](../acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)
+[修复验收](../acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)、[当前状态与证据索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)
 
 ## 背景
 
-任何 hashline 写通路径（纯 PUT、PUT+MV、纯 MV）都会丢弃文件开头的 UTF-8 BOM。实测归因
-（`.scratch/ptc-hashline/evidence/20261023-1453/07-bytes-bom-attribution.log`）：
+修复前，已复现的 hashline 写通路径（纯 PUT、PUT+MV、纯 MV）会丢弃文件开头的 UTF-8 BOM。实测归因
+（本地 `.scratch/ptc-hashline/evidence/20261023-1453/07-bytes-bom-attribution.log`，不随 clone 交付；当前回归入口见上述索引）：
 
 - 宿主 `FileSystem.readText` 的契约是"解码后的 UTF-8 文本"，**不承诺**保留 BOM。已核实的固定
   provider（`LocalFileSystem`）用 `new TextDecoder('utf-8', { fatal: true })`
