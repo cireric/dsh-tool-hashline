@@ -28,6 +28,14 @@
   `test:profile` 断言两份补丁在解析产物中生效，并跑 read→PUT→read→MV→read→REM，外加 BOM+CRLF 的 PUT/MV
   字节复查与无 BOM 对照。BOM 的支持范围与受限输入见
   [新验收记录](./docs/acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)。
+- 策略链辨别：`tests/integration/edit-policy-harness.ts` 按宿主的真实关系挂载（宿主根 `fs` +
+  `fs-observation-policy`，preset scope 挂 `tool-fs`/`tool-read`/`tool-edit`），POL-01..06 在
+  `tests/integration/edit-policy-composition.spec.ts`（hashline 与 replace 两模式各一遍），PTC 层 POL-07 在
+  `tests/ptc/edit-policy.spec.ts`；拓扑与 shipped preset 的隔离服务集合在
+  `tests/integration/edit-policy-topology.spec.ts`。该夹具不覆盖真实 preset loader 的行解析与装配。
+- 事件取证：`scripts/extract-runtime-evidence.mjs` 只读解码 v4 JSONL（含多帧 zstd），按 `subCallId` 配对
+  start/settle、按同轮校验载体，缺证据时判 incomplete（退出码 2）。用法见
+  `tests/integration/README.md`；测试在 `tests/integration/extract-runtime-evidence.spec.ts`。
 
 ## 硬约束
 
