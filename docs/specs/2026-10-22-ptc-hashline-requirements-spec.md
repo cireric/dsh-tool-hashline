@@ -5,10 +5,12 @@
 - 基线：DSH `0.2.1-rc.2`；`@hy-sde-org/dsh-hashline@0.2.1-alpha.4`、`@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4`
 - 迁入基线：`cireric/dsh-ptc-roles` 的 `ptc-gate` preset（克隆于 `.scratch/dsh-ptc-roles`，commit `3d8f36eb8`）；仅迁入 gate 所需 patch、persona、watchdog 与验收依据，不整合五角色系统
 - 术语：见 [`GLOSSARY.md`](../../GLOSSARY.md)（tag / seen 行 / observed / show path / store key / 零行窗口 / 行为改变型回合）
-- 上游依据：[选型分析](../background/2026-10-22-dsh-hashline-selection-analysis.md)、[HANDOFF](../../HANDOFF.md)
+- 上游依据：[选型分析](../background/2026-10-22-dsh-hashline-selection-analysis.md)、[初期交接快照](../archive/2026-10-23-initial-handoff.md)（历史背景，不覆盖本规格）
 - v2 变更：19 项审核决议（§7.2）落地，并据实测修正 9 处与引擎行为不符的描述（§10 证据索引已补）
 - v3 变更：有限守卫、完整行 seen、独立 gate 资源、单 preset、首版基线行为、全文读取成本及长行补救七项决议（§7.3）；补齐 canonical nextAction、部署与验收矩阵
 - 2026-10-23 修订：NFR-4 按 C-08 放宽为“契约面白名单”，并新增依赖白名单测试
+
+> 本页顶部“尚未完成”是 v3 定案时的状态，需求条文本身仍为原有功能的权威来源；后续实现/验收统一见[当前状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。新增运维 skills 以[独立需求](../specs/2026-10-23-ptc-hashline-operations-skills.md)和[实施计划](../plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)为准，尚未实施；不把文档迁移当作变更现有 preset 的授权。文中的 `.scratch` 历史来源不随 clone 交付。
 
 ---
 
@@ -326,7 +328,7 @@ export interface Config {
 | Q-09 | 三个默认值镜像常量 + preset 两处同值 + 漂移断言 | FR-10 |
 | Q-10 | 编辑 mismatch 带当前磁盘内容 tag 与重读指引（v3 澄清 head 含义） | FR-13 |
 | Q-11 | FR-9 补"外部改动/tag 漂移"，写成"拒 vs 告警"对照 | FR-9 |
-| Q-12 | 同步改写 `AGENTS.md` 与 `HANDOFF.md` 的装饰器路线（已完成） | 见两文件 |
+| Q-12 | 同步改写 `AGENTS.md` 与 `HANDOFF.md` 的装饰器路线（已完成） | 历史处置见[初期交接快照](../archive/2026-10-23-initial-handoff.md)，当前约束见根 AGENTS |
 | Q-13 | 零行窗口保留 `[0]` 哨兵，写成显式约定 + 单测 | FR-7 |
 | Q-14 | 补 `readMaxBytes`（50 KiB）与 capped footer | FR-5 |
 | Q-15 | 配置项拆为 `snapshotMaxBytes` / `maxBytes`，避免同名不同义 | FR-10 |
