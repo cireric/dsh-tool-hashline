@@ -15,6 +15,7 @@ import * as path from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import type { Agent } from '@deepseek-ai/dsh-agent'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import { provideWorkingDirectoryFixture } from '@deepseek-ai/dsh-agent-loop-testkit'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
@@ -31,6 +32,8 @@ export interface PtcHarnessOptions {
   watch?: boolean
   /** Mount stock tool-fs (for the duplicate-provider negative control). */
   stockRead?: boolean
+  /** Mount the production observation policy. Defaults to true. */
+  policy?: boolean
 }
 
 export interface PtcHarness {
@@ -70,6 +73,7 @@ export async function createPtcHarness(options: PtcHarnessOptions = {}): Promise
   await ctx.plugin(SystemPrompt, {})
   await ctx.plugin(LocalFileSystem, { cwd: dir })
   provideWorkingDirectoryFixture(ctx, dir)
+  if (options.policy !== false) await ctx.plugin(FsPolicy)
   const runtime = new ToolRuntime(ctx, { mode: 'ptc' })
   await ctx.plugin(InProcessPtcRuntime)
   await ctx.plugin(ToolRead, options.read ?? {})

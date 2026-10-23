@@ -7,12 +7,38 @@ daily profile.
 
 | DSH | engine (`dsh-hashline` / `dsh-tool-edit`) | status | notes |
 |---|---|---|---|
-| 0.2.1-rc.2 | 0.2.1-alpha.4 | target | initial development; 15 compat cases green |
-| next rc/minor | same pinned alpha | todo | run this gate first, then update the table |
+| 0.2.1-rc.2 | 0.2.1-alpha.4 **+ two local patches** | target | 17 compat cases green; both packages are patched (ADR-0003 effective directory, ADR-0004 MV create intent + snapshot order) |
+| next rc/minor | same pinned alpha + patches (or upstream fix) | todo | run this gate first, then update the table |
 
-The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22-ptc-hashline-需求规格.md).
+## Baseline: original version + two local patches
 
-## What the suite pins (`guard.spec.ts`, real `ToolRuntime` + upstream `edit`)
+Both engine packages are installed through `pnpm patchedDependencies`:
+
+- `patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch` — `toolCwdFromExec` reads the
+  host `workingDirectory` service instead of the non-existent `session.cwd`; both endpoints
+  of `MV` are confined to the session directory; the `MV` target is created through
+  `fs/write-intent` + `createIfAbsent` (never `fs/edit-intent`), and a target that landed
+  without its source being removed is reported as a partial move (ADR-0004).
+- `patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch` — `Patcher.commit` moves the file
+  first and only then relocates/records the snapshot, so a rejected or failing move cannot
+  migrate state that never moved (ADR-0004).
+
+On every upgrade:
+
+1. Check whether the new upstream already fixes all of these points. If yes, delete the
+   patch and its `patchedDependencies` entry; if no, redo the patch for the new
+   version (never edit `node_modules` by hand).
+2. `pnpm install` — the lockfile's `patch_hash` must change/refresh.
+3. Run `pnpm test:compat` **and** the real-Session directory matrix
+   (`packages/tool-read/tests/integration/working-directory.spec.ts`, part of
+   `pnpm test:integration`). The compat suite alone uses a fabricated Agent and
+   cannot see the cwd regression.
+
+The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22-ptc-hashline-requirements-spec.md).
+
+## What the suite pins (`guard.spec.ts` + `mv-snapshot-order.spec.ts`)
+
+`guard.spec.ts` runs a real `ToolRuntime` over the upstream `edit` and the upstream store.
 
 | Case | Assertion |
 |---|---|
@@ -30,6 +56,15 @@ The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22
 | Eviction | a path evicted from the bounded store loses its guard; the edit applies |
 | REM | deletes the file without a line anchor and without consuming the seen guard |
 | Engine identity | `tests/unit/engine-identity.spec.ts` — one physical hashline module for read and edit |
+
+`mv-snapshot-order.spec.ts` drives the upstream `Patcher` over the upstream in-memory
+filesystem and store, so it pins the engine commit contract without a host:
+
+| Case | Assertion |
+|---|---|
+| Failed move | a throwing `fs.move` leaves the source snapshot's text/hash/seen exactly as before the commit and creates no destination snapshot; the in-memory disk is unchanged |
+| Snapshot order | a successful move logs `move` → `relocate` → `record(destination)`; the source snapshot is gone and the destination snapshot has the source's text and seen lines |
+| Snapshot commit fault | a failing `relocate` after a successful move reports `SnapshotCommitError` ("moved on disk … was not committed … must not be used in its place"), leaves the file at the destination, does not move it back, and leaves the source snapshot un-migrated |
 
 Not exercised: `PUT N*` block edits. The app chain wires no tree-sitter
 `blockResolver`; an attempt to pin the no-resolver failure hung the suite, so this

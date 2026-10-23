@@ -79,7 +79,7 @@ describe('store keys (FR-7)', () => {
     expect(store.head(path.resolve(harness.dir, value.path))?.hash).toBe(value.tag)
     expect(harness.counts.readText).toBe(1)
     const edited = await harness.callEdit({ input: header(value) + '\nPUT 1.=1:\n+ONE' })
-    expect(edited.isError).toBe(false)
+    expect(edited.isError, edited.error?.message).toBe(false)
     expect(await readFixture(path.join(harness.dir, 'rel.txt'))).toBe('ONE\ntwo\nthree\n')
   })
 
@@ -88,9 +88,11 @@ describe('store keys (FR-7)', () => {
     onTestFinished(() => harness.cleanup())
     const absolute = await writeFixture(harness.dir, 'abs.txt', 'one\ntwo\n')
     const relValue = valueOf<ReadValue>(await harness.callRead({ file_path: 'abs.txt' }))
-    expect((await harness.callEdit({ input: header(relValue) + '\nPUT 1.=1:\n+ONE' })).isError).toBe(false)
+    const relEdit = await harness.callEdit({ input: header(relValue) + '\nPUT 1.=1:\n+ONE' })
+    expect(relEdit.isError, relEdit.error?.message).toBe(false)
     const absValue = valueOf<ReadValue>(await harness.callRead({ file_path: absolute }))
-    expect((await harness.callEdit({ input: header(absValue) + '\nPUT 2.=2:\n+TWO' })).isError).toBe(false)
+    const absEdit = await harness.callEdit({ input: header(absValue) + '\nPUT 2.=2:\n+TWO' })
+    expect(absEdit.isError, absEdit.error?.message).toBe(false)
     expect(await readFixture(absolute)).toBe('ONE\nTWO\n')
   })
 
@@ -225,7 +227,7 @@ describe('cross-session and eviction are known permissive paths (R-7)', () => {
     const value = valueOf<ReadValue>(await harness.callRead({ file_path: file }))
     const otherAgent = { session: { cwd: harness.dir, header: { cwd: harness.dir } } }
     const edited = await harness.callTool('edit', { input: header(value) + '\nPUT 2.=2:\n+TWO' }, { agent: otherAgent as never })
-    expect(edited.isError).toBe(false)
+    expect(edited.isError, edited.error?.message).toBe(false)
     expect(await readFixture(file)).toBe('one\nTWO\nthree\n')
   })
 

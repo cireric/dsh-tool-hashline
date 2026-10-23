@@ -10,7 +10,7 @@ describe('fs/observed emission (FR-6)', () => {
     valueOf<ReadValue>(await harness.callRead({ file_path: file }))
 
     const written = await harness.callTool('write', { file_path: file, content: 'after\n' })
-    expect(written.isError).toBe(false)
+    expect(written.isError, written.error?.message).toBe(false)
     expect(await readFixture(file)).toBe('after\n')
   })
 

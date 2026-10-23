@@ -100,6 +100,29 @@ try {
   if (fromRead !== fromEdit) fail('two hashline module instances in the profile: ' + fromRead + ' vs ' + fromEdit)
   else ok('one physical hashline instance for read and edit')
 
+  // Same version numbers are not evidence that a local patch loaded. Read the
+  // resolved files this profile actually imports and look for the patch markers.
+  const hashlinePkg = realpathSync(createRequire(readEntry).resolve('@hy-sde-org/dsh-hashline/package.json'))
+  const editorPkg = realpathSync(createRequire(editEntry).resolve('@hy-sde-org/dsh-tool-edit/package.json'))
+  ok('resolved hashline package -> ' + hashlinePkg)
+  ok('resolved tool-edit package -> ' + editorPkg)
+  const patchMarkers = [
+    [join(dirname(hashlinePkg), 'dist', 'patcher.js'), 'authorizes the snapshot migration', 'hashline MV relocates the snapshot only after the disk move'],
+    [join(dirname(editorPkg), 'dist', 'session.js'), "const intent = { kind: 'createIfAbsent' }", 'tool-edit MV creates its target through createIfAbsent'],
+  ]
+  for (const [markerFile, marker, label] of patchMarkers) {
+    const text = existsSync(markerFile) ? readFileSync(markerFile, 'utf8') : ''
+    if (!text.includes(marker)) fail('local patch is not in the resolved build: ' + label + ' (' + markerFile + ')')
+    else ok('patch marker present: ' + label)
+  }
+  // The repository lockfile must register both patches, not just the version.
+  const lockfile = readFileSync(join(repo, 'pnpm-lock.yaml'), 'utf8')
+  for (const packageName of ['@hy-sde-org/dsh-hashline@0.2.1-alpha.4', '@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4']) {
+    const registered = new RegExp("'" + packageName.replaceAll('/', '\\/') + "\\(patch_hash=", 'u').test(lockfile)
+    if (!registered) fail('lockfile does not register a patch hash for ' + packageName)
+    else ok('lockfile registers a patch hash for ' + packageName)
+  }
+
   step('compose the profile with the real dsh launcher (--dump-config)')
   let dump = ''
   if (dshCli === undefined) {
@@ -118,13 +141,14 @@ try {
     else ok('composed profile carries ' + needle)
   }
 
-  step('read -> edit through the profile-installed build')
+  step('read -> PUT -> read -> MV -> read -> REM through the profile-installed build, policy mounted')
   const driver = join(profileDir, 'read-edit.mjs')
-  writeFileSync(driver, `import { mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
+  writeFileSync(driver, `import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
 import { join } from 'node:path'
 import { Context } from '@deepseek-ai/cordis'
 import LocalFileSystem from '@deepseek-ai/dsh-fs-local'
+import * as FsPolicy from '@deepseek-ai/dsh-fs-observation-policy'
 import SystemPrompt from '@deepseek-ai/dsh-system-prompt'
 import ToolRuntime from '@deepseek-ai/dsh-tools'
 import * as ToolRead from '@dsh-tool-hashline/tool-read'
@@ -136,6 +160,9 @@ writeFileSync(file, 'one\\ntwo\\nthree\\n')
 const ctx = new Context()
 await ctx.plugin(SystemPrompt, {})
 await ctx.plugin(LocalFileSystem, { cwd: dir })
+// The deployment mounts this policy; without it an MV can look green here and
+// still be rejected in a real session (the original regression).
+await ctx.plugin(FsPolicy)
 ctx.provide('workingDirectory', { defaultDirectory: dir, get: session => session.header?.cwd ?? dir, ensure: agent => Promise.resolve(agent.session.header?.cwd ?? dir) })
 const runtime = new ToolRuntime(ctx)
 await ctx.plugin(ToolRead, {})
@@ -143,22 +170,37 @@ await ctx.plugin(ToolEdit, { mode: 'auto' })
 const session = { cwd: dir, header: { cwd: dir } }
 const agent = { session }
 const signal = new AbortController().signal
-const read = await runtime.execute({ callId: 'c1', name: 'read', arguments: { file_path: file }, signal, agent })
+const read = await runtime.execute({ callId: 'c1', name: 'read', arguments: { file_path: 'target.txt' }, signal, agent })
 if (read.isError) throw new Error('read failed: ' + read.error.message)
 const tag = read.value.tag
 if (typeof tag !== 'string' || !/^[0-9A-F]{4}$/u.test(tag)) throw new Error('read did not mint a tag: ' + JSON.stringify(read.value))
-const edit = await runtime.execute({ callId: 'c2', name: 'edit', arguments: { input: '[' + read.value.path + '#' + tag + ']\\nPUT 2.=2:\\n+TWO' }, signal, agent })
-if (edit.isError) throw new Error('edit failed: ' + edit.error.message)
-const disk = readFileSync(file, 'utf8')
-if (disk !== 'one\\nTWO\\nthree\\n') throw new Error('disk text unexpected: ' + JSON.stringify(disk))
-console.log(JSON.stringify({ tag, path: read.value.path, disk }))
+// 1) relative header PUT through the profile-installed edit.
+const put = await runtime.execute({ callId: 'c2', name: 'edit', arguments: { input: '[' + read.value.path + '#' + tag + ']\\nPUT 2.=2:\\n+TWO' }, signal, agent })
+if (put.isError) throw new Error('put failed: ' + put.error.message)
+const afterPut = readFileSync(file, 'utf8')
+if (afterPut !== 'one\\nTWO\\nthree\\n') throw new Error('disk text after PUT unexpected: ' + JSON.stringify(afterPut))
+// 2) relative MV to a target this session never observed, under the real policy.
+const reread = await runtime.execute({ callId: 'c3', name: 'read', arguments: { file_path: 'target.txt' }, signal, agent })
+if (reread.isError) throw new Error('re-read failed: ' + reread.error.message)
+const mv = await runtime.execute({ callId: 'c4', name: 'edit', arguments: { input: '[' + reread.value.path + '#' + reread.value.tag + ']\\nMV moved.txt' }, signal, agent })
+if (mv.isError) throw new Error('mv failed: ' + mv.error.message)
+if (existsSync(file)) throw new Error('the source survived the move: ' + file)
+// 3) read the moved target, then REM it.
+const movedRead = await runtime.execute({ callId: 'c5', name: 'read', arguments: { file_path: 'moved.txt' }, signal, agent })
+if (movedRead.isError) throw new Error('read of the moved file failed: ' + movedRead.error.message)
+const disk = readFileSync(join(dir, 'moved.txt'), 'utf8')
+if (disk !== 'one\\nTWO\\nthree\\n') throw new Error('disk text after MV unexpected: ' + JSON.stringify(disk))
+const rem = await runtime.execute({ callId: 'c6', name: 'edit', arguments: { input: '[' + movedRead.value.path + '#' + movedRead.value.tag + ']\\nREM' }, signal, agent })
+if (rem.isError) throw new Error('rem failed: ' + rem.error.message)
+if (existsSync(join(dir, 'moved.txt'))) throw new Error('REM left the moved file in place')
+console.log(JSON.stringify({ tag, path: read.value.path, disk, moved: true, removed: true }))
 `)
   try {
     const out = run(process.execPath, [driver], { cwd: profileDir, timeout: 120_000 })
     const result = JSON.parse(out.trim().split('\n').at(-1))
-    ok('read minted #' + result.tag + ' and edit landed: ' + JSON.stringify(result.disk))
+    ok('read minted #' + result.tag + ', relative PUT wrote, MV landed and REM removed: ' + JSON.stringify(result.disk))
   } catch (error) {
-    fail('profile read->edit failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
+    fail('profile read->MV->read->edit failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
   }
 
   step('intent gate over the profile-installed watchdog asset')
@@ -212,4 +254,4 @@ if (failures.length > 0) {
   for (const message of failures) console.error('  - ' + message)
   process.exit(1)
 }
-console.log('test:profile OK: clean profile installs the bundle, composes one ptc-hashline preset, resolves read/edit/persona/watchdog, and read->edit lands' + (gaps.length > 0 ? ` (${gaps.length} gap(s) reported above)` : ''))
+console.log('test:profile OK: clean profile installs the bundle, composes one ptc-hashline preset, resolves read/edit/persona/watchdog, both local patches are present in the resolved builds, and read -> PUT -> read -> MV -> read -> REM lands under the observation policy' + (gaps.length > 0 ? ` (${gaps.length} gap(s) reported above)` : ''))
