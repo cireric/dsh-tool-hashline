@@ -8,17 +8,19 @@ packages:
 # plain Node resolution works.
 nodeLinker: hoisted
 
-# esbuild (vitest's bundler) ships its platform binary through the optional
-# @esbuild/win32-x64 package; its postinstall only re-validates that binary.
-# Acknowledging the ignored script keeps `pnpm install` at exit 0 on Windows.
-ignoredBuiltDependencies:
-  - esbuild
-
 # pnpm 11 treats an unlisted dependency build script as a hard install error.
-# We acknowledge esbuild above; keep the install exit code clean instead of
-# failing the gate on a script we have already reviewed.
+# The reviewed decisions live in `allowBuilds` below; keep the install exit
+# code clean instead of failing the gate on a script we have already reviewed.
 strictDepBuilds: false
 
 patchedDependencies:
   '@hy-sde-org/dsh-hashline@0.2.1-alpha.4': patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch
   '@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4': patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch
+
+# Build-script decisions for the two dependencies that declare one. pnpm 11
+# replaced the old `ignoredBuiltDependencies` list with this map and writes the
+# placeholder entries itself on an interactive install; `false` is its
+# "ignored build script" record, so no script here runs unreviewed.
+allowBuilds:
+  esbuild: false
+  koffi: false
