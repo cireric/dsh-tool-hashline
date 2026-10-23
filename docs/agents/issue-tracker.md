@@ -1,14 +1,18 @@
 # Issue tracker: Local Markdown
 
-Issues and specs for this repo live as markdown files in `.scratch/`.
+Local issues, draft specs and raw runtime evidence live under `.scratch/` and are not tracked by Git. Durable requirements and implementation plans belong in `docs/specs/` and `docs/plans/`; existing documents under `docs/spec/` keep their current paths.
 
 ## Conventions
 
 - One feature per directory: `.scratch/<feature-slug>/`
-- The spec is `.scratch/<feature-slug>/spec.md`
+- A draft spec may start at `.scratch/<feature-slug>/spec.md`. Once promoted, maintain its authoritative body in `docs/specs/` and its plan in `docs/plans/`; a local tracker may link there but must not maintain a second requirements body.
 - Implementation issues are one file per ticket at `.scratch/<feature-slug>/issues/<NN>-<slug>.md`, numbered from `01`, never a single combined tickets file
 - Triage state is recorded as a `Status:` line near the top of each issue file (see `triage-labels.md` for the role strings)
 - Comments and conversation history append to the bottom of the file under a `## Comments` heading
+
+The operations-skills requirements are in [docs/specs](../specs/2026-10-23-ptc-hashline-operations-skills.md), with their [implementation plan](../plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md). Migration does not authorize implementation or a real dependency upgrade.
+
+Raw logs and local tickets are not restored by cloning this repository. Promote sanitized conclusions, reproducible tests and necessary evidence into formal docs when needed for maintenance; keep source locations and historical results explicit. The [current acceptance index](../acceptance/2026-10-23-current-status-and-evidence-index.md) distinguishes shipped documentation from local evidence.
 
 ## Existing contents
 

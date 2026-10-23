@@ -1,180 +1,51 @@
 # dsh-tool-hashline
 
-Make oh-my-pi style hashline editing work on **stock** DeepSeek Harness
-(DSH `0.2.1-rc.2`). The bundle ships one agent preset, `ptc-hashline`:
-PTC (the model only calls `run_code`, tools are SDK functions inside the
-program), a per-turn intent gate, and a self-built `read` whose
-canonical `value` carries a content tag the upstream `edit` accepts.
+为 stock DSH 提供 **PTC Hashline Mode**（`ptc-hashline`）：模型通过 `run_code` 编排工具，自建 `read` 返回内容 tag，上游 `edit` 使用该 tag 编辑文件，并保留每回合 Intent 门。
 
-## What is in the box
+验证基线为 DSH `0.2.1-rc.2`、hashline/tool-edit `0.2.1-alpha.4` 加本地补丁。项目仍为 private bundle；已验证能力与范围见[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
 
-| Package | Role |
-|---|---|
-| `@dsh-tool-hashline/hashline` | version anchor for `@hy-sde-org/dsh-hashline@0.2.1-alpha.4` (no vendoring) |
-| `@dsh-tool-hashline/tool-edit` | version anchor for `@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4` |
-| `@dsh-tool-hashline/tool-read` | the complete `read`: mint / window / seen / card / prompt |
-| `presets/ptc-hashline/` | the preset patch plus its persona and watchdog assets |
-| `patches/` | two local precise-version patches: `dsh-tool-edit` (effective working directory, MV containment + create intent, partial-move reporting, BOM-preserving hashline read, DEST/commit wording) and `dsh-hashline` (disk move before snapshot migration, truthful snapshot-commit error) |
+## 安装使用
 
-## Runtime dependency surface
-
-`tool-read` imports at runtime only Node builtins, the pinned hashline anchor, and two host
-contract packages: `@deepseek-ai/dsh-tools` (`defineTool`) and `@deepseek-ai/dsh-fs`
-(`FsError`, needed for the `FS_*` error codes). Host implementation packages and host read
-config are forbidden; `pnpm test:unit` enforces this whitelist with an AST scan of `src` and
-`dist` (spec NFR-4 / C-08).
-
-## Install into a DSH profile
+准备符合 [package.json](package.json) 要求的 Node/pnpm、已构建的 DSH 源码目录，以及一个已初始化的测试 profile。以下路径和 profile 名称替换为实际值：
 
 ```powershell
-pnpm install:profile                 # default: --profile web
-pnpm install:profile --profile other --dry-run
+pnpm install --frozen-lockfile
+pnpm build
+pnpm install:profile --profile "hashline-test" --dsh-checkout "D:/path/to/deepseek-harness" --dry-run
+pnpm install:profile --profile "hashline-test" --dsh-checkout "D:/path/to/deepseek-harness"
 ```
 
-The script builds when a `dist/` entry is missing, links this checkout's four
-packages through the source `dsh` CLI (`pnpm dsh plugin add link:…`), registers
-the bundle, and verifies `--dump-config` plus resource resolution. It is
-idempotent (a second run reports "already installed") and never restarts the
-host; it prints the restart command and the preset to pick.
+安装脚本将本 checkout 的 bundle 与三个包链接到指定 profile，并验证组合和资源解析。安装后手动重新启动该测试宿主，在新会话选择 **PTC Hashline Mode**。
 
-## Build, check, test
+这是开发链接安装：构建和依赖变更会影响使用该 checkout 的宿主，更新前应安排停止使用的窗口。
+
+## 使用边界
+
+- `read` 与 `edit` 使用会话有效工作目录；相对 `MV DEST` 也以该目录为基准，不以源文件父目录为基准。
+- MV 不覆盖已有目标，但移动和多节编辑可能部分完成；失败后先核验实际状态，不能假设自动回滚。
+- BOM 保真已验证范围为 Local provider 的 hashline 路径、零或单个 BOM；其它模式与后端不沿用该保证。
+- `read` 会读取全文，4 MiB 是生成 tag 的默认门槛，不是内存上限；截断或无 tag 时按 `nextAction` 处理。
+- seen 是有限守卫，与宿主 observed 策略不同，不是权限边界。
+
+## 开发验证
 
 ```powershell
-pnpm install
-pnpm build            # tsc -> packages/*/dist (host-loadable JS + .d.ts)
-pnpm check            # build + tsc --noEmit for every package and the root test suites
-pnpm test             # build + package tests
-pnpm test:unit        # tag/window/config/lang pure functions
-pnpm test:integration # real ToolRuntime + local fs + upstream edit
-pnpm test:ptc         # run_code dispatch via the production PTC bridge (in-process carrier), nullable SDK, intent gate
-pnpm test:compat      # upstream guard/recovery/lifecycle matrix
-pnpm check:preset     # baseline drift, caps equality, resource digests
-pnpm test:profile     # clean profile install + dsh composition + read->edit
+pnpm check
+pnpm test:unit
+pnpm test:integration
+pnpm test:ptc
+pnpm test:compat
+pnpm check:preset
+pnpm test:profile
 ```
 
-Every gate fails non-zero with a printed reason. `tests/compat/README.md`
-records the pinned upstream behaviors; `docs/acceptance/` maps each requirement
-to the case that proves it. See [acceptance traceability](./docs/acceptance/2026-10-23-acceptance-traceability.md)
-and the [runtime-fix acceptance record](./docs/acceptance/2026-10-23-runtime-fix-acceptance.md).
+`check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
 
-## Install into a profile (not the daily profile yet)
+## 文档入口
 
-The repository root is the bundle: `package.json` declares
-`dsh.bundle.patch -> ./presets/ptc-hashline/preset.patch.yml`.
+- [需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)
+- [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)
+- [上游功能分析](docs/background/2026-10-23-dsh-hashline-feature-analysis.md)：版本化研究快照，其中建议不代表已批准需求
+- [运维 skills 需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)：尚未实现
 
-1. Build: `pnpm build`.
-2. In a profile manifest (`$DSH_HOME/profiles/<name>/package.json`) depend on
-   this checkout and the two plugin packages, and register the bundle:
-   ```json
-   {
-     "dependencies": {
-       "dsh-tool-hashline": "link:<repo>",
-       "@dsh-tool-hashline/hashline": "link:<repo>/packages/hashline",
-       "@dsh-tool-hashline/tool-read": "link:<repo>/packages/tool-read",
-       "@dsh-tool-hashline/tool-edit": "link:<repo>/packages/tool-edit"
-     },
-     "dsh": { "profile": { "bundles": ["@deepseek-ai/dsh-base", "@deepseek-ai/dsh-headless", "dsh-tool-hashline"] } }
-   }
-   ```
-3. `pnpm install` in the profile, then **remount** the host (`dsh --profile <name>`)
-   — a preset is static, so a new session in the same process is not enough.
-4. `dsh --profile <name> --dump-config` should show one `ptc-hashline` preset,
-   `@dsh-tool-hashline/tool-read`, `@dsh-tool-hashline/tool-edit` and the
-   watchdog subpath. `pnpm test:profile` performs exactly this in a throwaway
-   profile. The composition leg needs the `dsh` launcher: it uses `$DSH_CLI` when set,
-   otherwise a sibling `deepseek-harness/apps/cli/lib/bin.js`, and reports a GAP when
-   neither is available.
-
-The preset turns stock `read`/`edit` **off** and mounts this `read` plus the
-upstream `edit`; both tools keep their names (`read`, `edit`) because the gate
-matches behavior tools by name.
-
-### Working directory (read and edit share one source)
-
-Both tools take the **effective** session directory from the host's
-`workingDirectory` service — the value the model is shown and that `cd` changes
-— and use it for path resolution and for the snapshot store key
-(`path.resolve(cwd, authoredPath)`). A Session's `header.cwd` is only its origin.
-
-Without an agent, both fall back to `process.cwd()` (matching the editor), so an
-agentless relative read resolves there rather than at the filesystem provider's
-mount default.
-
-The upstream editor reads `session.cwd`, which a real Session does not expose, so
-it always fell back to the host process directory. `pnpm patchedDependencies`
-applies a small patch to `@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4` that reads the
-service instead (and confines both MV endpoints). Read takes the same value, so
-`read` → relative-path `edit` finds the snapshot. See
-[ADR-0003](./docs/adr/0003-effective-working-directory.md); a clean install MUST
-resolve to the patched package (the lockfile records `patch_hash`).
-
-## Byte fidelity (BOM and line endings)
-
-Hashline edits on a UTF-8 file that starts with a **single** byte-order mark keep
-that marker, the CRLF/LF style and the trailing newline; a file without one never
-gains one. The mechanism: the local provider's decoder consumes one leading BOM
-and does not report it, so the editor adapter reads the hashline text through a
-dedicated BOM-preserving entry that re-attaches the marker from the raw three-byte
-prefix (and re-checks the file version before doing so).
-
-Scope, stated rather than implied:
-
-- One initial BOM, under the **Local** provider as verified at this version. A file
-  with **consecutive** leading BOMs is refused before any write with an explicit
-  message (no silent rewrite, no recovery-based repair); unify read/edit/diff
-  handling for that case before widening this.
-- The BOM-preserving entry is used by hashline mode only. `replace`, `patch`,
-  `apply_patch` and the diff preview keep their previous behavior.
-- The adapter read now costs one extra three-byte range read and one closing
-  `stat`, and REM/noop/recovery/preflight go through the same entry. `read`
-  itself is unchanged: still one `stat` and one `readText`.
-
-## Reading cost and degradation (read this before using it on big files)
-
-- A valid text read performs **one `stat` and one whole-file `readText`**. There is
-  no streaming; memory grows with the file. The 4 MiB snapshot ceiling only
-  decides whether a tag is minted — it is **not** a read memory bound.
-- Default window: 2000 lines / 2000 chars per line / 50 KiB of output. A single
-  long line is column-truncated; many lines can hit the byte cap and stop the
-  window. Both cases return an actionable `nextAction`.
-- Truncated or zero-line windows do not claim a tag is usable: re-reading with
-  the same config will not reveal the rest of a long line. Raise
-  `maxLineLength`/`maxBytes` in `tool-read` (and the mirrored `tool-fs` caps),
-  remount, then read again — or use `edit`'s `replace`/`patch` mode.
-- Files at/above `snapshotMaxBytes` (4 MiB), empty files, and reads without an
-  agent session do not mint a tag (`tagged:false`, `tag:null`, non-empty
-  `nextAction`). Replace/patch still work; they do not consume a tag.
-
-## seen vs observed (two different mechanisms)
-
-- **observed** is the filesystem policy's read-before-write state, keyed by the
-  target's realpath; `read` emits `fs/observed` so a later stock `write` is
-  allowed.
-- **seen** is the hashline engine's per-session provenance of the lines a
-  window fully returned. It is a *bounded* guard, not a permission boundary:
-  cross-session reads, evicted snapshots, recovery, `REM` (no line anchor),
-  block edits and mismatch snapshots can all let an edit through.
-  `pnpm test:compat` pins these behaviors so upgrades cannot change them
-  silently.
-
-## Upgrading the engine
-
-The two upstream packages are pinned exactly. Change the version in
-`packages/hashline/package.json` and `packages/tool-edit/package.json`, then:
-
-1. Re-check BOTH patches. `dsh-tool-edit`: the new version must read
-   `workingDirectory`, confine both MV endpoints, create the MV target through
-   `write-intent`/`createIfAbsent`, report partial moves, preserve a leading BOM
-   in hashline mode, and state the DEST basis plus the non-atomic commit.
-   `dsh-hashline`: it must move the disk file before migrating the snapshot and
-   report a failed commit without claiming an outcome it cannot prove. If the new
-   version covers all of that, delete the patch and its `patchedDependencies`
-   entry; otherwise redo it for the new version (never edit `node_modules` by hand).
-2. `pnpm install` (the lockfile must carry the new `patch_hash` for both).
-3. `pnpm test:unit && pnpm test:integration && pnpm test:compat` (plus
-   `pnpm check:preset` if the preset is touched) **before** switching any daily
-   profile.
-
-`tests/compat/README.md` records the baseline as "original version + local patches".
-This release stays `private`; nothing is published and the daily profile is
-untouched.
+参与开发前阅读 [AGENTS.md](AGENTS.md)。

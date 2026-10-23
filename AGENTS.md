@@ -1,87 +1,25 @@
 # AGENTS.md — dsh-tool-hashline
 
-本仓库是一个**可构建、可安装的 bundle**（尚未发布、未接入日常 profile）。
+## 按任务读取
 
-## 入口
+- 开始修改前读 [README](README.md)、[术语](GLOSSARY.md)和[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
+- 修改 read/edit/preset：读[权威规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)及相关 [ADR](docs/adr/)。历史交接和研究报告只作背景，不覆盖现行规格。
+- 升级 hashline/tool-edit 或宿主：读[兼容矩阵与补丁维护规则](tests/compat/README.md)。
+- 开发运维 skills：读[需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)和[计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)；当前仅有设计，未授权开发或真实升级。
 
-1. 先读 [`docs/spec/2026-10-22-ptc-hashline-requirements-spec.md`](./docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)（**v3 已落实两轮用户决议，实施以它为准**）。它是 FR/NFR/决议/证据索引的权威来源。
-2. 再读 [`HANDOFF.md`](./HANDOFF.md)（背景与历史决策；其中 D2 装饰器路线已被否决，见其正文标注）。
-3. 术语在 [`GLOSSARY.md`](./GLOSSARY.md)——`seen 行` 与 `observed` 是两套机制，别混用。
-4. 背景与选型证据在 [`docs/background/2026-10-22-dsh-hashline-selection-analysis.md`](./docs/background/2026-10-22-dsh-hashline-selection-analysis.md)。
+## 实现边界
 
-## 当前状态
+- 自有 read 在 `packages/tool-read`；hashline/tool-edit 是精确依赖的版本锚点。不得复制、fork 上游源码或 DSH；依赖修复通过 `patches/` 与 `pnpm patchedDependencies` 交付，不能只改 node_modules。
+- read 运行时依赖仅限 Node 内置模块、hashline 锚点、`@deepseek-ai/dsh-tools` 和 `@deepseek-ai/dsh-fs` 契约；其它宿主包只作类型引用。现有依赖白名单测试必须保留。
+- 保持工具名 `read`/`edit`、canonical value 与输出 schema 一致。PTC 消费 value；不恢复已否决的 stock read 装饰器路线。
+- read/edit 使用有效 workingDirectory，并共享同一物理 hashline 实例。MV 两端目录约束、createIfAbsent、不覆盖、部分成功报告、磁盘先于快照的次序遵循 ADR-0003/0004；BOM 支持范围遵循 ADR-0005。
+- seen 按上游有限守卫处理，read 只新增完整返回行，零完整行使用 `[0]`；不得将 seen 或 tag 描述为完整权限边界。
+- preset 自带 persona/watchdog；保留 Intent 门判据和资源摘要检查，按已确认规格变更，不顺带调整基线行为。
 
-- `packages/tool-read` 已是完整实现（mint / 窗口 / seen / 卡片 / 提示），入口为 `dist/index.js`；
-  `packages/hashline`、`packages/tool-edit` 仍是版本锚点。
-- 根包是 bundle：`dsh.bundle.patch` 指向 `presets/ptc-hashline/preset.patch.yml`；preset 自带
-  persona 与 watchdog 资产，摘要由 `check:preset` 校验。
-- 交付命令：`pnpm build`、`pnpm check`、`pnpm test:unit`、`pnpm test:integration`、
-  `pnpm test:ptc`、`pnpm test:compat`、`pnpm check:preset`、`pnpm test:profile`。
-- 仍不发布、不挂日常 profile；验收口径见 `docs/acceptance/2026-10-23-acceptance-traceability.md`，
-  运行修复（D1 目录 / D2 persona）的实测见 `docs/acceptance/2026-10-23-runtime-fix-acceptance.md`，
-  MV 写入意图与快照次序的实测见 `docs/acceptance/2026-10-23-mv-observation-acceptance.md`。
-- 真实策略回归：集成夹具默认挂载 `fs-observation-policy`（`createRealSessionHarness`），
-  MV/REM 矩阵在 `packages/tool-read/tests/integration/mv-observation.spec.ts`（41 例，含 PATH、BYTES/BOM-01..14、
-  PART-R1、SNAP-R3 与工具文案契约），引擎 commit 次序在 `tests/compat/mv-snapshot-order.spec.ts`（6 例），
-  PTC 层在 `tests/ptc/mv-policy.spec.ts`（5 例，含 SNAP-R3）与 `tests/ptc/ptc.spec.ts`
-  （含"编辑工具说明进入 PTC SDK"的 D3 断言）；
-  `test:profile` 断言两份补丁在解析产物中生效，并跑 read→PUT→read→MV→read→REM，外加 BOM+CRLF 的 PUT/MV
-  字节复查与无 BOM 对照。BOM 的支持范围与受限输入见
-  [新验收记录](./docs/acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)。
-- 策略链辨别：`tests/integration/edit-policy-harness.ts` 按宿主的真实关系挂载（宿主根 `fs` +
-  `fs-observation-policy`，preset scope 挂 `tool-fs`/`tool-read`/`tool-edit`），POL-01..06 在
-  `tests/integration/edit-policy-composition.spec.ts`（hashline 与 replace 两模式各一遍），PTC 层 POL-07 在
-  `tests/ptc/edit-policy.spec.ts`；拓扑与 shipped preset 的隔离服务集合在
-  `tests/integration/edit-policy-topology.spec.ts`。该夹具不覆盖真实 preset loader 的行解析与装配。
-- 事件取证：`scripts/extract-runtime-evidence.mjs` 只读解码 v4 JSONL（含多帧 zstd），按 `subCallId` 配对
-  start/settle、按同轮校验载体，缺证据时判 incomplete（退出码 2）。用法见
-  `tests/integration/README.md`；测试在 `tests/integration/extract-runtime-evidence.spec.ts`。
+## 验证与交付
 
-## 硬约束
+按 README 运行受影响测试；依赖、preset 或运行契约变更需跑完整交付门禁。版本相同不能证明补丁生效，升级须核验实际解析路径、补丁与兼容矩阵。
 
-- 不复制 / 不 fork `@hy-sde-org/dsh-hashline` 与 `@hy-sde-org/dsh-tool-edit` 的源码；用精确版本依赖。
-  两个包都通过 `pnpm patchedDependencies` 打本地补丁：
-  - `dsh-tool-edit`：有效工作目录 + MV 两端包含关系（[ADR-0003](./docs/adr/0003-effective-working-directory.md)）
-    + MV 目标走 `fs/write-intent`/`createIfAbsent`、部分成功报错与多节"已写/未写"包装
-      （[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)）
-    + hashline 适配器专用保 BOM 读取（[ADR-0005](./docs/adr/0005-bom-preserving-hashline-read.md)）
-    + 工具说明里的 MV DEST 基准与"非整次调用原子"表述；
-  - `dsh-hashline`：`Patcher.commit` 先移动磁盘、再迁移快照（[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)），
-    且 `SnapshotCommitError` 只陈述两端都成立的失败事实。
-  升级时先看上游是否已修好，再决定删/重做补丁；不得只改 `node_modules`。
-- 不 fork DSH。read 侧**自建**：`tool-fs.read: false` + `packages/tool-read` 注册完整 `read`。
-  装饰器路线已证伪——替换 `content` 对 PTC 无效（程序只拿 `value`），替换 `value` 会被 `createSuccessResult` 按 output schema 重校验（`core/tools/src/index.ts:1840-1843`），而 stock `read` 的 schema 是 `additionalProperties: false`。
-- `hashline` 和 `tool-edit` 的版本升级必须跑 `tests/compat` 后再改日常 profile。
-- 第一个实现任务是规格的 M1：`tool-read` 的 mint / 窗口 / seen 逻辑 + 单测。不要再花时间验证 `tools/post-execute`——该项已验证并否决，证据见规格 §10 与 HANDOFF §11。
-- 编辑工具必须仍叫 `edit`：意图门 watchdog 的 `BEHAVIOR_TOOLS` 按名字匹配，改名会让门对编辑静默失效（规格 FR-14）。
-- seen 采用上游有限守卫；read 仅新增完整返回行，零完整行用 `[0]`。recovery、REM/block、快照淘汰和错误回显有明确边界，见 FR-7；不要将它描述为全部未见内容的权限边界。
+保留用户已有工作树改动；不热改运行中宿主依赖，不自动重启或发布，目标 profile 切换需有用户明确授权。测试结果区分 PASS、FAIL、GAP 与 BLOCKED，不把 skipped、夹具或历史结果扩大为未执行的验收。
 
-## 常用命令
-
-```powershell
-pnpm install
-pnpm check
-pnpm test:unit; pnpm test:integration; pnpm test:ptc; pnpm test:compat
-pnpm check:preset
-pnpm test:profile
-```
-
-## 参考
-
-- DSH 工具管线：`D:\Project\source\__TEST__\deepseek-harness\packages\core\tools\src\index.ts`
-- DSH stock read：`D:\Project\source\__TEST__\deepseek-harness\packages\fs\tool-fs\src\read-render.ts`
-- hy-sde fork read（参考实现）：`https://github.com/hy-sde/deepseek-harness` → `packages/fs/tool-fs/src/read.ts`
-
-## Agent skills
-
-### Issue tracker
-
-Issues live as local markdown under `.scratch/<feature-slug>/`. See `docs/agents/issue-tracker.md`.
-
-### Triage labels
-
-The five canonical triage roles map 1:1 to labels of the same name. See `docs/agents/triage-labels.md`.
-
-### Domain docs
-
-Single-context: root `GLOSSARY.md` + `docs/adr/`. See `docs/agents/domain.md`.
+正式新需求/计划放 `docs/specs/`、`docs/plans/`；本地 issue、草稿和原始证据留在被忽略的 `.scratch/`。细则见[issue tracker](docs/agents/issue-tracker.md)、[领域文档约定](docs/agents/domain.md)。
