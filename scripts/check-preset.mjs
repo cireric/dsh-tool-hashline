@@ -16,7 +16,7 @@ const fail = (message) => failures.push(message)
 const PRESET_ID = 'ptc-hashline'
 const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': 'c4b5c766f59084be82d882e4e940776fcf2b202bbd242b3693e1a662009195be',
+  'personas/orchestrator.md': '902cd50a0b0f2faafeff22a9d2bbacaf177b7dafb30b81d6727e242f6f403cd6',
   'intent-gate-watchdog.mjs': 'a7c4b4aabfb8c32b4d44a03c0bc4168b7e05c42f56d3f9cb320c3e71b6800b50',
 }
 
@@ -100,6 +100,10 @@ else {
   const prefix = String(persona.config?.prefix ?? '')
   if (!prefix.includes("resolve('dsh-tool-hashline/package.json')")) fail("persona must resolve this bundle's package.json")
   if (!prefix.includes("'ptc-hashline', 'personas', 'orchestrator.md'")) fail("persona must read this bundle's orchestrator.md")
+  const suffix = String(persona.config?.suffix ?? '')
+  for (const match of suffix.matchAll(/\{\{(\w+)\}\}/gu)) {
+    if (!['provider', 'model'].includes(match[1])) fail('persona suffix uses an unregistered prompt variable: ' + match[0])
+  }
 }
 
 // The two delta rows are INSERTED immediately after tool-fs (§4.1 #2/#3).

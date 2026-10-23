@@ -47,11 +47,11 @@
           # ── identity ────────────────────────────────────────────────────────────────
 
           # The preset's own persona, shadowing the deployment default for this agent.
-          # `{{model}}` and `{{cwd}}` resolve from the agent's own route and workspace.
+          # `{{model}}` resolves from the agent's own route.
           - id: persona
             name: '@deepseek-ai/dsh-persona'
             config:
-              suffix: Your working directory is {{cwd}}.
+              suffix: Work from the session's working directory; the environment section states it.
               # the orchestrator preset: the orchestrator persona replaces the stock one-liner.
               # `!!js` reads it relative to THIS composition directory: the loader rewrites
               # `baseUrl` to the composition's own directory before evaluating the row.
