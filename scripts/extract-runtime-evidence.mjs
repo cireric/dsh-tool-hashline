@@ -39,9 +39,13 @@
 import { createHash } from 'node:crypto'
 import { readFile, writeFile } from 'node:fs/promises'
 import { pathToFileURL } from 'node:url'
-import { zstdDecompressSync } from 'node:zlib'
+// The decoder lives in the shipped operations bundle so one implementation
+// serves both this offline extractor and the two operations skills; the
+// re-export below keeps this module's public surface exactly as it was.
+import { decodeArtifact, parseRecords, scanZstdFrames } from '../presets/ptc-hashline/operations/session-log.mjs'
 
-const ZSTD_MAGIC = 0xFD2FB528
+export { decodeArtifact, parseRecords, scanZstdFrames }
+
 /** Mirrors the watchdog's GATE_LINE_RE: first line, literal token, six buckets. */
 const GATE_LINE_RE = /^Intent:\s*(research|implementation|investigation|evaluation|fix|open-ended)\b/i
 /** Mirrors GATEISH_RE: something gate-shaped was written but the bucket is wrong. */
@@ -59,85 +63,6 @@ const MODE_NOTICE = '[intent-gate-watchdog] mode='
 
 class UsageError extends Error {}
 
-/**
- * Locate structurally complete Zstandard frames without decompressing them.
- * Same algorithm as the host's session-persistence scanner: EOF inside the
- * final frame returns its start so the caller can report it as torn.
- * @param {Buffer} buffer bytes present in the artifact
- * @returns {{frames: {start: number, end: number}[], tornStart?: number}}
- */
-export function scanZstdFrames(buffer) {
-  const frames = []
-  let offset = 0
-  while (offset < buffer.length) {
-    const start = offset
-    if (buffer.length - offset < 4) return { frames, tornStart: start }
-    if (buffer.readUInt32LE(offset) !== ZSTD_MAGIC) throw new Error('invalid Zstandard frame magic at byte ' + offset)
-    offset += 4
-    if (offset === buffer.length) return { frames, tornStart: start }
-    const descriptor = buffer.readUInt8(offset)
-    offset += 1
-    if ((descriptor & 0x18) !== 0) throw new Error('reserved frame-header bit at byte ' + (offset - 1))
-    const contentSizeFlag = descriptor >>> 6
-    const singleSegment = (descriptor & 0x20) !== 0
-    const checksum = (descriptor & 0x04) !== 0
-    const dictionaryFlag = descriptor & 0x03
-    const dictionaryBytes = dictionaryFlag === 3 ? 4 : dictionaryFlag
-    const contentSizeBytes = contentSizeFlag === 0 ? (singleSegment ? 1 : 0) : 1 << contentSizeFlag
-    const headerRest = (singleSegment ? 0 : 1) + dictionaryBytes + contentSizeBytes
-    if (buffer.length - offset < headerRest) return { frames, tornStart: start }
-    offset += headerRest
-    for (;;) {
-      if (buffer.length - offset < 3) return { frames, tornStart: start }
-      const blockHeader = buffer.readUIntLE(offset, 3)
-      offset += 3
-      const lastBlock = (blockHeader & 1) !== 0
-      const blockType = (blockHeader >>> 1) & 0x03
-      const blockSize = blockHeader >>> 3
-      if (blockType === 0x03) throw new Error('reserved block type at byte ' + (offset - 3))
-      const payloadBytes = blockType === 0x01 ? 1 : blockSize
-      if (buffer.length - offset < payloadBytes) return { frames, tornStart: start }
-      offset += payloadBytes
-      if (lastBlock) break
-    }
-    if (checksum) {
-      if (buffer.length - offset < 4) return { frames, tornStart: start }
-      offset += 4
-    }
-    frames.push({ start, end: offset })
-  }
-  return { frames }
-}
-
-/**
- * Decode the artifact into JSONL text. Complete frames only; a torn frame is
- * reported instead of being half-decoded (a half frame is not evidence).
- * @param {Buffer} buffer artifact bytes
- * @returns {{format: string, text: string, frames: number, tornStart?: number}}
- */
-export function decodeArtifact(buffer) {
-  if (buffer.length >= 4 && buffer.subarray(0, 4).readUInt32LE(0) === ZSTD_MAGIC) {
-    const scan = scanZstdFrames(buffer)
-    const parts = scan.frames.map(frame => zstdDecompressSync(buffer.subarray(frame.start, frame.end)))
-    return { format: 'jsonl.v4.zstd', text: Buffer.concat(parts).toString('utf8'), frames: scan.frames.length, ...scan.tornStart === undefined ? {} : { tornStart: scan.tornStart } }
-  }
-  return { format: 'jsonl.v4', text: buffer.toString('utf8'), frames: 0 }
-}
-
-/** Parse one record per line; a bad line is a reported failure, not a skip. */
-export function parseRecords(text) {
-  const records = []
-  const failures = []
-  text.split('\n').forEach((line, index) => {
-    if (line.trim() === '') return
-    try {
-      records.push(JSON.parse(line))
-    } catch (error) {
-      failures.push({ line: index + 1, message: error instanceof Error ? error.message : String(error) })
-    }
-  })
-  return { records, failures }
-}
 
 /** Concatenate text blocks exactly like the watchdog's messageText. */
 export function messageText(message) {

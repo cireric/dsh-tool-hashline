@@ -83,3 +83,45 @@ start, a seq gap with no bounds given, inverted/negative/non-integer bounds
 (both CLI and the exported function), a torn zstd frame, an unparsable record,
 and a source whose header names another session. Each of those must produce
 INCOMPLETE or a refusal — never a pass.
+
+## The operations skills (ticket 01: invocation and baseline)
+
+Six suites cover the two user-invoked operations skills. Their claim boundary is
+stated once here: they mount the shipped SKILL ROWS through the real
+`@deepseek-ai/dsh-agent-preset-registry`, which composes an EntryTree through
+the real `@deepseek-ai/cordis-plugin-loader` under a real `createScope`
+revision scope, against the real `@deepseek-ai/dsh-skill` registry and
+`@deepseek-ai/dsh-skill-filesystem` provider. The FULL preset tree (persona,
+watchdog, tools, presentation) is not mounted here; that assembly is the
+delivery-acceptance ticket. Nothing in these suites is a flattened fixture
+standing in for the registry.
+
+- `operations-skills.spec.ts` — SCOPE-01/02/03/07. Discovery, user-only
+  invocation, the model-facing `skill` tool's exact refusal, host-plane
+  invisibility, two interleaved revisions, disposal and re-mount, and duplicate
+  provider-name rejection. The provider's skill root is EVALUATED with the
+  loader's own `baseUrl` binding, not substring-matched.
+- `operations-context.spec.ts` — SCOPE-04/05. The preset projection replayed
+  from the header initial value plus later selection events; the `ptc` family
+  marker, a hand-typed `--preset` and a sibling session's projection all fail
+  to authorize; no filesystem or network side effect on a refusal.
+- `operations-config.spec.ts` — CONFIG-01. One maintenance repository and one
+  evidence directory saved once, reused across business cwds, absolute-path
+  refusal, malformed configuration surfaced, and per-role usability so an
+  unusable evidence directory does not stop read-only analysis.
+- `operations-baseline.spec.ts` — the running combination as actually
+  resolved: versions, resolved paths, physical engine realpaths, patch evidence
+  read from the RESOLVED build (never from a version number), and the
+  maintenance worktree's commit/dirty/input digests.
+- `operations-cli.spec.ts` — the CLI contract the skill bodies call: exit
+  codes, host-managed environment facts, and baseline output that names every
+  gap instead of guessing.
+- `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
+  install into an unrelated project, and resolution + execution from a foreign
+  working directory. An engine the install does not carry reports `unknown`,
+  which is the difference the ticket asks for.
+
+`operations-preset-harness.ts` is the shared fixture: it reads the shipped rows
+from `presets/ptc-hashline/preset.patch.yml` with the loader's own YAML
+dialect, so a row that disappears or a frontmatter policy that flips fails a
+test rather than passing on a copy.

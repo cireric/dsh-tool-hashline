@@ -112,6 +112,57 @@ if (toolFsIndex < 0 || ids[toolFsIndex + 1] !== 'tool-read' || ids[toolFsIndex +
   fail('tool-read and tool-edit must be inserted immediately after tool-fs')
 }
 
+// ── operations skills (this feature's explicit preset delta) ────────────────
+// The two operations skills are delivered by a SECOND filesystem provider with
+// its own name and ONE private root. The checks below are the contract that
+// keeps the delta narrow: no default roots, no watcher, one root resolved
+// through this bundle's own manifest, and both skills present with the
+// user-only invocation policy. Everything else in the preset stays as it was.
+const OPERATIONS_SKILLS = ['ptc-hashline-incident', 'ptc-hashline-upgrade']
+const operations = byId.get('ptc-hashline-operations-skills')
+if (operations === undefined) fail('missing operations skill provider row: ptc-hashline-operations-skills')
+else {
+  if (operations.name !== '@deepseek-ai/dsh-skill-filesystem') fail('operations provider must mount @deepseek-ai/dsh-skill-filesystem')
+  const config = operations.config ?? {}
+  if (config.providerName !== 'ptc-hashline-operations') fail('operations provider name must be ptc-hashline-operations (a second same-named provider collides)')
+  if (config.includeDefaultRoots !== false) fail('operations provider must not add default roots')
+  if (config.watch !== false) fail('operations provider must not watch the delivered skills')
+  const dirs = Array.isArray(config.customSkillDirs) ? config.customSkillDirs : []
+  if (dirs.length !== 1) fail('operations provider must declare exactly one custom skill root, found ' + dirs.length)
+  for (const entry of dirs) {
+    const expression = String(entry?.__jsExpr ?? entry ?? '')
+    if (!expression.includes("resolve('dsh-tool-hashline/package.json')")) fail('operations skill root must resolve through this bundle\'s manifest, not a personal path')
+    if (!expression.includes("'presets', 'ptc-hashline', 'skills'")) fail('operations skill root must point at this bundle\'s preset skills directory')
+  }
+  // The row must sit beside the general skill rows, after them.
+  const toolSkillIndex = ids.indexOf('tool-skill')
+  if (toolSkillIndex < 0 || ids.indexOf('ptc-hashline-operations-skills') < toolSkillIndex) {
+    fail('operations provider must be inserted after the general skill rows')
+  }
+}
+for (const skill of OPERATIONS_SKILLS) {
+  const file = join('presets/ptc-hashline/skills', skill, 'SKILL.md')
+  if (!existsSync(join(repo, file))) { fail('missing shipped skill body: ' + file); continue }
+  const text = read(file)
+  if (!/^---\n/u.test(text)) fail(file + ' must start with YAML frontmatter')
+  if (!/^disable-model-invocation:\s*true$/mu.test(text)) fail(file + ' must set disable-model-invocation: true')
+  if (!/^user-invocable:\s*true$/mu.test(text)) fail(file + ' must set user-invocable: true')
+  if (!/^name:\s*/mu.test(text)) fail(file + ' must declare a name')
+  if (!/^description:\s*\S/mu.test(text)) fail(file + ' must declare a description')
+}
+// The operations runtime ships inside the bundle, so a packed install resolves
+// it without a checkout: every module the skills reference must exist and use
+// only Node builtins plus its own siblings.
+for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 'session-log.mjs']) {
+  const file = join('presets/ptc-hashline/operations', module)
+  if (!existsSync(join(repo, file))) { fail('missing operations module: ' + file); continue }
+  const text = read(file)
+  for (const match of text.matchAll(/from '([^']+)'/gu)) {
+    const specifier = match[1]
+    if (specifier.startsWith('./')) continue
+    if (!specifier.startsWith('node:')) fail(file + ' imports a non-builtin module: ' + specifier)
+  }
+}
 // ── resources ───────────────────────────────────────────────────────────────
 for (const [relative, expected] of Object.entries(EXPECTED_DIGESTS)) {
   const value = read(join('presets/ptc-hashline', relative))

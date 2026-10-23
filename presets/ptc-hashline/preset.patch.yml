@@ -149,6 +149,25 @@
           - id: tool-skill
             name: '@deepseek-ai/dsh-tool-skill'
 
+          # Operations skills (user-invoked only). A SECOND filesystem provider with
+          # its own name and ONE private root: the shipped skill files live in this
+          # bundle, not in a project/user skill directory, so they are never copied
+          # into a global scan root and never appear outside this preset.
+          # `includeDefaultRoots: false` keeps this provider from re-discovering the
+          # project/user roots under a second name, and `watch: false` holds the
+          # delivered revision stable until the preset is mounted again.
+          # The root resolves through this bundle's own manifest (createRequire +
+          # package.json), so it works from any working directory and from a packed
+          # install (PACK-01), never from a personal absolute path.
+          - id: ptc-hashline-operations-skills
+            name: '@deepseek-ai/dsh-skill-filesystem'
+            config:
+              providerName: ptc-hashline-operations
+              includeDefaultRoots: false
+              watch: false
+              customSkillDirs:
+                - !!js "process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-tool-hashline/package.json')), 'presets', 'ptc-hashline', 'skills')"
+
           # ── goals ───────────────────────────────────────────────────────────────────
 
           # The goal service and session driver stay on the host plane, where the Gateway
