@@ -19,7 +19,7 @@ import { resolveConfig, type Config, type ResolvedConfig } from './config.ts'
 import { nextActionFor } from './next-action.ts'
 import { readLangHint } from './lang.ts'
 import { byteCappedFromValue, readBody, readMetaFromMeta, renderEnvelope } from './render.ts'
-import { snapshotKeys, toolCwd } from './session.ts'
+import { snapshotKeys } from './session.ts'
 import { buildReadWindow, parseReadArgs } from './window.ts'
 
 export const name = 'tool-read-hashline'
@@ -136,19 +136,16 @@ export function apply(ctx: Context, config: Config = {}): void {
     isConcurrencySafe: () => true,
     async execute(args, exec): Promise<ReadValue> {
       const input = parseReadArgs(args, caps.limit)
-      // Two directories, deliberately not the same thing:
-      //  * resolution follows the deployment's working-directory owner, exactly
-      //    like stock read (a relative `file_path` must open the SESSION's file);
-      //  * the snapshot key stays on tool-edit's algorithm (session.cwd ?? process
-      //    .cwd()), because an edit of the same file must find that exact key.
-      const cwd = toolCwd(exec)
-      const resolveCwd = exec.agent === undefined ? undefined : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
+      // One directory for the whole call: the Session's effective working
+      // directory (origin + any `working-directory/change`, with the host's
+      // existence recovery). The path resolution and every snapshot key below
+      // use this same value, and the patched edit tool reads the same owner, so
+      // an edit of the same file cannot miss the read's key. No Agent keeps the
+      // explicit agentless fallback.
+      const cwd = exec.agent === undefined ? process.cwd() : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
       // Exactly one resolve + one stat per call: absence, regular-file check, and
       // the observed version all come from this single observation.
-      const target = await ctx.fs.resolve(input.filePath, {
-        ...resolveCwd === undefined ? {} : { cwd: resolveCwd },
-        signal: exec.signal,
-      })
+      const target = await ctx.fs.resolve(input.filePath, { cwd, signal: exec.signal })
       const info = await ctx.fs.stat(target, exec.signal)
       if (info === undefined) {
         ctx.emit('fs/observed', target, { kind: 'absent' }, exec)

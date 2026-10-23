@@ -129,9 +129,9 @@ describe('path resolution vs store key (FR-7)', () => {
     const harness = await createHarness()
     onTestFinished(() => harness.cleanup())
     await writeFixture(harness.dir, 'relres.txt', 'one\ntwo\n')
-    // Other tests fabricate session.cwd; a real 0.2.1-rc.2 Session exposes only
-    // header.cwd, so the store key falls back to process.cwd() while resolution
-    // must still follow the session's working directory.
+    // A real 0.2.1-rc.2 Session exposes only header.cwd; the effective directory
+    // comes from the workingDirectory fixture, and both resolution and the store
+    // key must use it.
     delete (harness.session as { cwd?: string }).cwd
     const value = valueOf<ReadValue>(await harness.callRead({ file_path: 'relres.txt' }))
     expect(value.path).toBe(path.join(harness.dir, 'relres.txt'))
