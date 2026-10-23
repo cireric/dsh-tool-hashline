@@ -8,6 +8,7 @@
 - 上游依据：[选型分析](../background/2026-10-22-dsh-hashline-选型分析.md)、[HANDOFF](../../HANDOFF.md)
 - v2 变更：19 项审核决议（§7.2）落地，并据实测修正 9 处与引擎行为不符的描述（§10 证据索引已补）
 - v3 变更：有限守卫、完整行 seen、独立 gate 资源、单 preset、首版基线行为、全文读取成本及长行补救七项决议（§7.3）；补齐 canonical nextAction、部署与验收矩阵
+- 2026-10-23 修订：NFR-4 按 C-08 放宽为“契约面白名单”，并新增依赖白名单测试
 
 ---
 
@@ -289,7 +290,7 @@ export interface Config {
 | NFR-1 | **确定性**：同一内容永远得到同一 tag；跨进程稳定 |
 | NFR-2 | **代价**：有效普通文本读取一次 stat + 一次 readText；同次调用不重复读；不引入流式读。明确接受大文件/size 未知文件全文驻留内存的成本，4 MiB 只限制快照，不是读取内存上限 |
 | NFR-3 | **失败可见**：自建 tool-read 不允许空 catch，异常原因进入工具错误；构建/核验脚本失败以非零退出码与原因报告。迁入 watchdog 首版保留基线 warn/catch 行为，不宣称其每个内部异常都进工具返回值，另由契约回归覆盖 |
-| NFR-4 | **依赖面**：仅约束自建 tool-read：不运行时 import `@deepseek-ai/*`，只允许 type-only import；第三方运行时能力只经精确锁定的 hashline（可经 workspace 锚点 re-export），Node 内置模块允许。上游 tool-edit、迁入 gate 与测试夹具不受此条限制 |
+| NFR-4 | **依赖面**：自建 tool-read 的运行时依赖仅限 Node 内置模块、精确锁定的 hashline（可经 workspace 锚点 re-export），以及宿主**契约面** `@deepseek-ai/dsh-tools`（`defineTool`）与 `@deepseek-ai/dsh-fs`（`FsError`）；其余 `@deepseek-ai/*` 一律 type-only。禁止导入宿主实现包（`dsh-tool-fs`、`dsh-fs-local` 等）或读取宿主 read 配置。白名单由 `packages/tool-read/tests/unit/dependencies.spec.ts` 强制。上游 tool-edit、迁入 gate 与测试夹具不受此条限制。（2026-10-23 用户批准修订，见 §7.3 C-08） |
 | NFR-5 | **测试**：纯函数与窗口逻辑有单测；read→edit 闭环、seen 守卫（含 `[0]` 哨兵与并集）、无 session 不 mint、投影对齐，各有真实 `ToolRuntime` 的集成测试 |
 | NFR-6 | **可回归**：M3 的判定必须是脚本（见 §8），人工实测只作冒烟 |
 
@@ -340,6 +341,7 @@ export interface Config {
 | C-05 | 只交付 ptc-hashline 一个 preset | §2、D-2 |
 | C-06 | 首版 persona/watchdog 保持基线正文和行为，只迁资源地址；以后独立演进 | §4.2、NFR-3 |
 | C-07 | 长行通过配置重挂载或显式 replace/patch 补救；截断窗口也返回 nextAction | FR-3/5 |
+| C-08 | （2026-10-23 用户批准）NFR-4 按“契约面”解释：允许 `defineTool` 与 `FsError` 两处运行时导入，禁止宿主实现包与宿主 read 配置；由依赖白名单测试强制 | §6 NFR-4、`packages/tool-read/tests/unit/dependencies.spec.ts` |
 
 ## 8. 交付里程碑
 

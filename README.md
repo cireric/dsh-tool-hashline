@@ -15,6 +15,14 @@ canonical `value` carries a content tag the upstream `edit` accepts.
 | `@dsh-tool-hashline/tool-read` | the complete `read`: mint / window / seen / card / prompt |
 | `preset/ptc-hashline/` | the preset patch plus the verbatim `ptc-gate` persona and watchdog |
 
+## Runtime dependency surface
+
+`tool-read` imports at runtime only Node builtins, the pinned hashline anchor, and two host
+contract packages: `@deepseek-ai/dsh-tools` (`defineTool`) and `@deepseek-ai/dsh-fs`
+(`FsError`, needed for the `FS_*` error codes). Host implementation packages and host read
+config are forbidden; `pnpm test:unit` enforces this whitelist with an AST scan of `src` and
+`dist` (spec NFR-4 / C-08).
+
 ## Build, check, test
 
 ```powershell
