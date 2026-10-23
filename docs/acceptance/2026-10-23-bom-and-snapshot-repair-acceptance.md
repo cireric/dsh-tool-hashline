@@ -6,6 +6,10 @@
 - 本次证据：`.scratch/ptc-hashline/evidence/20261023-1602/`
 - 隔离候选根：`.scratch/ptc-hashline-candidate-20261023-1602/repo`
 
+> 2026-10-23 补记：候选根与候选 store（`.scratch/ptc-hashline-candidate-20261023-1602/`，约 145.5 MB）
+> 已在工作树清理中删除。本轮的证据与结论仍在 `.scratch/ptc-hashline/evidence/20261023-1602/`（69 个文件），
+> 候选可按上表 HEAD 重新复制并在独立 store 中重建；下文对候选根的任何引用均为删除前的记录。
+
 本文件只记录本轮实际执行过的命令与观察。上一轮的 FAIL 仍是 FAIL，本轮的 PASS 是新的运行结果。
 
 ## 1. 分层结论（先看这里）
