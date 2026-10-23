@@ -217,11 +217,15 @@ traceability §代码评审处置：跨进程 tag 一次）。按"不可复现�
 
 ## 8. GAP（未执行，不用替代证据）
 
-1. **真实宿主重挂载 + 新会话**：当前 Web 会话所在的 profile（`C:/Users/lenovo/.dsh/profiles/web`、
-   `desktop`）没有引用本 bundle，仓库约束也禁止切换日常 profile 或替换宿主服务。
-   "禁用/重挂载 → 新会话 → 相对 MV → read → REM"的真实链路**未执行**。
-   已做的是隔离 profile 的安装、组合、补丁标记与 read→PUT→read→MV→read→REM（§4.3），它是进程内等价链路，
-   不是宿主重挂载。另外：宿主进程里旧模块已在内存中，仅"新开会话"不足以加载新补丁，必须重启宿主。
+1. **真实宿主上的两轮模型操作**：`C:/Users/lenovo/.dsh/profiles/web` **确实**挂载了本 bundle
+   （`dsh.profile.bundles` 含 `dsh-tool-hashline`，并把 `@dsh-tool-hashline/{hashline,tool-read,tool-edit}`
+   以 `link:` 指向本仓库），`dsh --profile web --dump-config` 的组合结果里也有 preset `ptc-hashline`
+   与 `tool-read`/`tool-edit` 两行；报告里的会话 `session-81f5fd47-…` 的系统提示含 Phase 0 / Intent
+   标记，说明它确实跑在该 preset 上。**未执行**的是修复后**重启宿主**并在这个 preset 下走完
+   《MV / REM 修复后测试计划》§5 的三轮模型操作。
+   两点必须说清：① 宿主进程在本次 `pnpm install` 之前就已加载旧模块，**只新开会话不会换代码**，
+   需要重启宿主；② 同时跑的其它会话若用原生 preset（例如本次工作会话，其 `read` 无 `tag` 字段），
+   本来就不会加载这两行——"插件页只有一项"与此一致，不是漏挂。
 2. **"创建前 sandbox 拒绝"**：本仓库未安装 `@deepseek-ai/dsh-fs-sandbox`，夹具无法驱动真实
    sandbox 后端。已注入一个 `FsError(…, 'FS_SANDBOX_DENIED')` 并断言错误码与文案保留
    （`mv-observation.spec.ts`「keeps a provider sandbox denial visible with its own code」），
