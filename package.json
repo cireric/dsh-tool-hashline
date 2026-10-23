@@ -15,7 +15,8 @@
     "test:integration": "vitest run --config vitest.integration.config.ts",
     "test:compat": "vitest run --config vitest.compat.config.ts",
     "check:preset": "node scripts/check-preset.mjs",
-    "test:profile": "node scripts/test-profile.mjs"
+    "test:profile": "node scripts/test-profile.mjs",
+    "test:ptc": "vitest run --config vitest.ptc.config.ts"
   },
   "devDependencies": {
     "@types/node": "^24.0.0",

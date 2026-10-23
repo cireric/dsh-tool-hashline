@@ -14,6 +14,7 @@ import { execFileSync } from 'node:child_process'
 import { cpSync, existsSync, mkdirSync, readFileSync, realpathSync, rmSync, writeFileSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
+import { pathToFileURL } from 'node:url'
 import { fileURLToPath } from 'node:url'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
@@ -78,7 +79,7 @@ try {
     catch (error) { fail(label + ' does not resolve: ' + error.message); return undefined }
   }
   const bundleManifestPath = resolveOrFail('dsh-tool-hashline/package.json', 'bundle package.json')
-  resolveOrFail('dsh-tool-hashline/preset/ptc-hashline/intent-gate-watchdog.mjs', 'watchdog module')
+  const watchdogPath = resolveOrFail('dsh-tool-hashline/preset/ptc-hashline/intent-gate-watchdog.mjs', 'watchdog module')
   const readEntry = resolveOrFail('@dsh-tool-hashline/tool-read', 'tool-read entry')
   const editEntry = resolveOrFail('@dsh-tool-hashline/tool-edit', 'tool-edit entry')
   const bundleManifest = bundleManifestPath === undefined ? {} : JSON.parse(readFileSync(bundleManifestPath, 'utf8'))
@@ -149,6 +150,47 @@ console.log(JSON.stringify({ tag, path: read.value.path, disk }))
     ok('read minted #' + result.tag + ' and edit landed: ' + JSON.stringify(result.disk))
   } catch (error) {
     fail('profile read->edit failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
+  }
+
+  step('intent gate over the profile-installed watchdog asset')
+  const gateDriver = join(profileDir, 'gate.mjs')
+  writeFileSync(gateDriver, `import { Context } from '@deepseek-ai/cordis'
+import * as Watchdog from ${JSON.stringify(pathToFileURL(watchdogPath ?? '').href)}
+
+const allow = () => Promise.resolve({ kind: 'allow' })
+const session = { id: 'gate-check', header: { cwd: process.cwd() }, append: () => 1 }
+async function decisionFor(text) {
+  const ctx = new Context()
+  await ctx.plugin(Watchdog, { gate: 'enforce' })
+  const agent = { ctx, session, options: {} }
+  await ctx.waterfall('agent/pre-step', {
+    agent,
+    messages: [{ role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text }] }],
+    turn: 1,
+    step: 1,
+  }, () => Promise.resolve({ kind: 'enter', messages: [] }))
+  ctx.emit('session/event', session, { type: 'turn/start', data: { turn: 1 } })
+  ctx.emit('session/event', session, { type: 'assistant/message', data: { turn: 1, message: { role: 'assistant', content: [{ type: 'text', text }] } } })
+  ctx.emit('session/event', session, { type: 'tool/call', data: { turn: 1, step: 1, callId: 'root-1', name: 'run_code', arguments: '{}' } })
+  ctx.emit('session/event', session, { type: 'tool/ptc-dispatch-start', data: { rootCallId: 'root-1', name: 'edit' } })
+  const decision = await ctx.waterfall('tools/pre-execute', { name: 'edit', agent, parent: {} }, allow)
+  await ctx.fiber.dispose()
+  return decision
+}
+const denied = await decisionFor('I will edit the file now.')
+if (denied.kind !== 'deny' || !String(denied.reason).includes('Intent')) {
+  throw new Error('gate did not deny a missing intent line: ' + JSON.stringify(denied))
+}
+const allowed = await decisionFor('Intent: fix — adjust the file; I will patch it.')
+if (allowed.kind !== 'allow') throw new Error('gate denied a valid intent line: ' + JSON.stringify(allowed))
+console.log(JSON.stringify({ denied: denied.kind, allowed: allowed.kind }))
+`)
+  try {
+    const out = run(process.execPath, [gateDriver], { cwd: profileDir, timeout: 120_000 })
+    const result = JSON.parse(out.trim().split('\n').at(-1))
+    ok('gate denied without a line and allowed with one: ' + JSON.stringify(result))
+  } catch (error) {
+    fail('profile gate check failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
   }
 } catch (error) {
   if (failures.length === 0) fail(String(error?.stack ?? error))
