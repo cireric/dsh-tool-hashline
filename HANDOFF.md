@@ -4,7 +4,7 @@
 > 先读这份，再读背景报告：`docs/background/2026-10-22-dsh-hashline-选型分析.md`。
 > **当前状态（2026-10-23）：8 票已实现，全部脚本化验收通过；仍未发布、未接入日常 profile。** 入口命令与已知缺项见 `README.md` 与 `docs/acceptance/2026-10-23-验收追溯.md`。
 >
-> **2026-10-22 v3 更新**：实施先读[需求规格](docs/spec/2026-10-22-ptc-hashline-需求规格.md)。两轮用户决议已落实：上游有限守卫、仅完整行新增 seen、全文读取成本、长行配置/显式降级；只交付 ptc-hashline，独立迁入 ptc-gate 资源，首版保持基线行为。本文未重写的历史方案不覆盖规格 v3；当前验收以规格 §8.1 为准。
+> **2026-10-22 v3 更新**：实施先读[需求规格](docs/spec/2026-10-22-ptc-hashline-需求规格.md)。两轮用户决议已落实：上游有限守卫、仅完整行新增 seen、全文读取成本、长行配置/显式降级；只交付 ptc-hashline，自带 intent gate 资源，首版保持基线行为。本文未重写的历史方案不覆盖规格 v3；当前验收以规格 §8.1 为准。
 
 ## 1. 一句话目标
 
@@ -283,7 +283,7 @@ pnpm -r test
 ```
 
 挂载（v2）：本仓库走 **bundle** 方式——profile 里 `link:` 本仓库 + `pnpm install` + 一次真正的重新挂载，
-preset 由 `dsh.bundle.patch` 声明（见规格 §4）。v3 还要求构建 JS/类型入口、profile 可解析插件依赖、登记 `dsh.profile.bundles` 并重新挂载；仅安装 link 不会激活 bundle。迁入的 persona/watchdog 解析本 bundle，不要求原 ptc-roles 存在。
+preset 由 `dsh.bundle.patch` 声明（见规格 §4）。v3 还要求构建 JS/类型入口、profile 可解析插件依赖、登记 `dsh.profile.bundles` 并重新挂载；仅安装 link 不会激活 bundle。preset 的 persona/watchdog 解析本 bundle。
 ~~把 `presets/agent.cordis.yml` 复制到 `~/.dsh/.agent-presets/dsh-tool-hashline/`~~ —— 0.2.0 起该目录不再被读取。
 
 ```powershell

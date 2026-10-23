@@ -1,4 +1,4 @@
-// intent-gate-watchdog.mjs — ptc-roles preset companion plugin.
+// intent-gate-watchdog.mjs — the orchestrator preset preset companion plugin.
 //
 // WHY THIS EXISTS
 // The orchestrator persona's Phase 0 "Intent Gate" (classify in ONE cheap line
@@ -57,7 +57,7 @@
 //      on `tool/call` itself. Boundary: an "I refuse, no tool" turn is not detectable
 //      and therefore never nudged.
 //      ⚠ BEHAVIOR_TOOLS is a deliberate second copy of the same list in
-//      `scripts/verify-ptc-roles.cjs` (its compliance denominator). Drift is visible,
+//      `scripts/verify-the orchestrator preset.cjs` (its compliance denominator). Drift is visible,
 //      not silent: when the two disagree the compliance rate flips.
 //   6. "DECLARED" MEANS THE MARKER SAT ON THE FIRST LINE OF THE MESSAGE THAT CARRIES
 //      THE FIRST BEHAVIOR ACTION — or of an earlier message in the same turn. The earlier
@@ -71,7 +71,7 @@
 //        · a message with no tool call ENDS the turn (agent.ts:487-488), so
 //          "declare in a message of its own, then act" is impossible in this harness.
 //      One criterion, three readers: this plugin's reminder, its pre-execute gate, and the
-//      verifier's compliance numerator (`verify-ptc-roles.cjs`). The two drifted apart once
+//      verifier's compliance numerator (`verify-the orchestrator preset.cjs`). The two drifted apart once
 //      already (2026-09-16, "anywhere" vs "first line"), which is why the口径 is registered
 //      in docs/pitfalls.md #19. Keep them equal.
 //   8. THE MODE IS IN THE DATA PLANE, AND THE DENY SAYS WHICH MISTAKE IT SAW (2026-09-21).
@@ -124,7 +124,7 @@ export const name = 'intent-gate-watchdog'
  * `Intent: 随便` used to pass as a substring match, on both this plugin and the reader.
  * Deliberately NOT validated: the separator, the because-clause, the commitment tail (content
  * quality stays prompt-side, pitfalls #16). Case-insensitive to keep false denies down.
- * Keep in sync with the reader's STRICT_GATE_RE (scripts/verify-ptc-roles.cjs) — the unit
+ * Keep in sync with the reader's STRICT_GATE_RE (scripts/verify-the orchestrator preset.cjs) — the unit
  * test's D contract pins the two regex literals byte-for-byte.
  */
 const GATE_LINE_RE = /^Intent:\s*(research|implementation|investigation|evaluation|fix|open-ended)\b/i
@@ -138,7 +138,7 @@ const GATEISH_RE = /^Intent:/i
 
 /**
  * Tools whose use makes a turn "behavior-changing" — the turns the persona's Phase 0
- * line is required on. Keep in sync with BEHAVIOR_TOOLS in scripts/verify-ptc-roles.cjs.
+ * line is required on. Keep in sync with BEHAVIOR_TOOLS in scripts/verify-the orchestrator preset.cjs.
  */
 const BEHAVIOR_TOOLS = new Set([
   'write', 'edit', 'bash', 'pwsh',

@@ -24,8 +24,8 @@
 只操作验收用临时 profile，不发布到 npm，不切换日常 profile。窗口/降级全量场景不作为本票前置条件，故不阻塞于 02/03。
 ## Comments
 
-- 2026-10-23 实现完成。根包增加 `dsh.bundle.patch -> ./preset/ptc-hashline/preset.patch.yml` 与 `exports`（`./preset/*`、`./package.json`）；三个 workspace 包改为 `dist` 入口并提供 `build: tsc -p tsconfig.build.json`（`rewriteRelativeImportExtensions` 把 `./x.ts` 落成 `./x.js`）。
-- 迁入资源：`preset/ptc-hashline/personas/orchestrator.md` 与 `intent-gate-watchdog.mjs` 逐字复制自 commit `3d8f36eb8`（sha256 `8fafe875…` / `865d4fd5…`，见 `preset/ptc-hashline/SOURCES.md`）；基线副本已于 2026-10-23 移除，来源与摘要记在 `preset/ptc-hashline/SOURCES.md`。preset 只改三处声明差异：preset 元数据、`tool-fs` read/edit 关闭并加三个上限、插入 `@dsh-tool-hashline/tool-read` 与 `tool-edit`；另改资源地址（persona 解析本 bundle 的 package.json，watchdog 指向本 bundle 子路径）。
+- 2026-10-23 实现完成。根包增加 `dsh.bundle.patch -> ./presets/ptc-hashline/preset.patch.yml` 与 `exports`（`./presets/*`、`./package.json`）；三个 workspace 包改为 `dist` 入口并提供 `build: tsc -p tsconfig.build.json`（`rewriteRelativeImportExtensions` 把 `./x.ts` 落成 `./x.js`）。
+- 迁入资源：`presets/ptc-hashline/personas/orchestrator.md` 与 `intent-gate-watchdog.mjs` 逐字复制自 commit `3d8f36eb8`（sha256 `8fafe875…` / `865d4fd5…`，见 `presets/ptc-hashline/SOURCES.md`）；基线副本已于 2026-10-23 移除，来源与摘要记在 `presets/ptc-hashline/SOURCES.md`。preset 只改三处声明差异：preset 元数据、`tool-fs` read/edit 关闭并加三个上限、插入 `@dsh-tool-hashline/tool-read` 与 `tool-edit`；另改资源地址（persona 解析本 bundle 的 package.json，watchdog 指向本 bundle 子路径）。
 - `pnpm check:preset`（`scripts/check-preset.mjs`）：结构 diff 只允许上述差异、断言 `tool-fs` 与 `tool-read` 三个上限同值、`tool-presentation: ptc`、`gate: enforce`、`tool-subagent.maxDepth: 1`、资源摘要与基线副本逐字一致；把 `tool-read.limit` 改成 1000 做阴性对照 ⇒ exit 1。
 - `pnpm test:profile`（`scripts/test-profile.mjs`）：构建 → 在 `.tmp` 建干净 profile（只 link 本 bundle 与三个包，登记 `dsh.profile.bundles`，不装 ptc-roles）→ `pnpm install` → 解析 bundle package.json/watchdog/read/edit → 用真实 `dsh --profile ptc-hashline --dump-config` 组合（输出无 `ptc-gate`，含 read/edit/watchdog）→ 在 profile 目录用构建产物跑真实 `ToolRuntime` read→edit，落盘 `one\nTWO\nthree\n`，read/edit 解析到同一物理 hashline 实例。全绿退出 0。
 - 已知边界：`--dump-config` 证明宿主组合与资源解析，子进程挂载证明构建产物可加载；"完整宿主进程 + 真实模型下重新挂载"留待 07/08 的 PTC 通道（本机无模型 key），08 会把它登记为证据口径。

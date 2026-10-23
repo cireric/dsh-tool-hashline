@@ -1,12 +1,7 @@
 #!/usr/bin/env node
 /**
- * Preset check: verifies the shipped `ptc-hashline` patch against the invariants
- * that came from the `ptc-gate` migration, plus its own resource digests.
- *
- * The frozen baseline copies were retired on 2026-10-23 (see
- * `preset/ptc-hashline/SOURCES.md`): `preset/ptc-hashline/` is now the source of
- * truth. This gate therefore enforces the *shape* of the preset and the asset
- * digests, not a byte diff against an external copy. Offline.
+ * Preset check: enforces the shape of the `ptc-hashline` preset and the
+ * integrity of its two gate assets. Offline; no external copy is consulted.
  */
 import { createHash } from 'node:crypto'
 import { existsSync, readFileSync } from 'node:fs'
@@ -19,11 +14,10 @@ const failures = []
 const fail = (message) => failures.push(message)
 
 const PRESET_ID = 'ptc-hashline'
-const BASELINE_COMMIT = '3d8f36eb8def861c3f2aa7d5f7b4983d96c92341'
 const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': '8fafe875d0de79276272c289d54a171aa864f8292682a0f2e9fd632186e7ab86',
-  'intent-gate-watchdog.mjs': '865d4fd5e1a9e663a9c8b3f669349f6f22c283157eb7ef240daa079f979389da',
+  'personas/orchestrator.md': 'c4b5c766f59084be82d882e4e940776fcf2b202bbd242b3693e1a662009195be',
+  'intent-gate-watchdog.mjs': 'a7c4b4aabfb8c32b4d44a03c0bc4168b7e05c42f56d3f9cb320c3e71b6800b50',
 }
 
 const read = relative => readFileSync(join(repo, relative), 'utf8')
@@ -38,27 +32,16 @@ const parsePatch = relative => {
 
 // ── manifest ─────────────────────────────────────────────────────────────────
 const manifest = JSON.parse(read('package.json'))
-if (manifest?.dsh?.bundle?.patch !== './preset/ptc-hashline/preset.patch.yml') {
-  fail('dsh.bundle.patch must be ./preset/ptc-hashline/preset.patch.yml')
+if (manifest?.dsh?.bundle?.patch !== './presets/ptc-hashline/preset.patch.yml') {
+  fail('dsh.bundle.patch must be ./presets/ptc-hashline/preset.patch.yml')
 }
-if (!existsSync(join(repo, 'preset/ptc-hashline/preset.patch.yml'))) fail('dsh.bundle.patch target is missing')
-for (const subpath of ['./preset/*', './package.json']) {
+if (!existsSync(join(repo, 'presets/ptc-hashline/preset.patch.yml'))) fail('dsh.bundle.patch target is missing')
+for (const subpath of ['./presets/*', './package.json']) {
   if (!(subpath in (manifest.exports ?? {}))) fail('package.json exports must expose ' + subpath)
 }
 
-// ── provenance ──────────────────────────────────────────────────────────────
-const sourcesPath = 'preset/ptc-hashline/SOURCES.md'
-if (!existsSync(join(repo, sourcesPath))) fail('missing ' + sourcesPath)
-else {
-  const sources = read(sourcesPath)
-  if (!sources.includes(BASELINE_COMMIT)) fail('SOURCES.md must name the ptc-gate baseline commit ' + BASELINE_COMMIT)
-  for (const [relative, expected] of Object.entries(EXPECTED_DIGESTS)) {
-    if (!sources.includes(expected)) fail('SOURCES.md must record the current ' + relative + ' digest')
-  }
-}
-
 // ── patch shape ─────────────────────────────────────────────────────────────
-const ours = parsePatch('preset/ptc-hashline/preset.patch.yml')
+const ours = parsePatch('presets/ptc-hashline/preset.patch.yml')
 const presets = ours.entries.filter(entry => entry?.config?.id === PRESET_ID)
 if (presets.length !== 1) fail('expected exactly one preset with id "' + PRESET_ID + '", found ' + presets.length)
 const preset = presets[0]
@@ -106,7 +89,7 @@ require_('tool-presentation', entry => {
 })
 require_('intent-gate-watchdog', entry => {
   if (entry.config?.gate !== 'enforce') fail('intent-gate-watchdog.gate must be enforce')
-  if (entry.name !== 'dsh-tool-hashline/preset/ptc-hashline/intent-gate-watchdog.mjs') fail('watchdog must load from this bundle')
+  if (entry.name !== 'dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs') fail('watchdog must load from this bundle')
 })
 require_('tool-subagent', entry => {
   if (entry.config?.maxDepth !== 1) fail('tool-subagent.maxDepth must be 1')
@@ -127,7 +110,7 @@ if (toolFsIndex < 0 || ids[toolFsIndex + 1] !== 'tool-read' || ids[toolFsIndex +
 
 // ── resources ───────────────────────────────────────────────────────────────
 for (const [relative, expected] of Object.entries(EXPECTED_DIGESTS)) {
-  const value = read(join('preset/ptc-hashline', relative))
+  const value = read(join('presets/ptc-hashline', relative))
   if (digest(value) !== expected) fail(relative + ' digest drifted: ' + digest(value))
 }
 

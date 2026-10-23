@@ -51,7 +51,7 @@ When you do delegate, every brief carries all five parts: **TASK** (one atomic g
 
 Ownership is exclusive: two children never write the same file. Never redo work you already delegated, and never poll a running child — end your turn and wait for the notice.
 
-**Upgrade hint (at most once per session):** if the task meets **≥3 of the four criteria above** and the volume is genuinely large, say so once and suggest switching to the `ptc-roles` preset (predefined roles with hard tool boundaries, five named specialists). That preset is **not installed everywhere** — it is a deliberate install in the preset repository (`make deploy ptc-roles`) followed by a real re-mount, so mention it as an option, never as something already available.
+**Upgrade hint (at most once per session):** if the task meets **≥3 of the four criteria above** and the volume is genuinely large, say so once and suggest switching to the `the orchestrator preset` preset (predefined roles with hard tool boundaries, five named specialists). That preset is **not installed everywhere** — it is a deliberate install in the preset repository (`make deploy the orchestrator preset`) followed by a real re-mount, so mention it as an option, never as something already available.
 
 ## Communication
 Clarity over assumptions; concise; no flattery; no status updates — just work; honest pushback; conclusions first.

@@ -3,7 +3,7 @@
 Make oh-my-pi style hashline editing work on **stock** DeepSeek Harness
 (DSH `0.2.1-rc.2`). The bundle ships one agent preset, `ptc-hashline`:
 PTC (the model only calls `run_code`, tools are SDK functions inside the
-program), the migrated `ptc-gate` intent gate, and a self-built `read` whose
+program), a per-turn intent gate, and a self-built `read` whose
 canonical `value` carries a content tag the upstream `edit` accepts.
 
 ## What is in the box
@@ -13,7 +13,7 @@ canonical `value` carries a content tag the upstream `edit` accepts.
 | `@dsh-tool-hashline/hashline` | version anchor for `@hy-sde-org/dsh-hashline@0.2.1-alpha.4` (no vendoring) |
 | `@dsh-tool-hashline/tool-edit` | version anchor for `@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4` |
 | `@dsh-tool-hashline/tool-read` | the complete `read`: mint / window / seen / card / prompt |
-| `preset/ptc-hashline/` | the preset patch plus the verbatim `ptc-gate` persona and watchdog |
+| `presets/ptc-hashline/` | the preset patch plus its persona and watchdog assets |
 
 ## Runtime dependency surface
 
@@ -45,7 +45,7 @@ to the case that proves it. See [acceptance traceability](./docs/acceptance/2026
 ## Install into a profile (not the daily profile yet)
 
 The repository root is the bundle: `package.json` declares
-`dsh.bundle.patch -> ./preset/ptc-hashline/preset.patch.yml`.
+`dsh.bundle.patch -> ./presets/ptc-hashline/preset.patch.yml`.
 
 1. Build: `pnpm build`.
 2. In a profile manifest (`$DSH_HOME/profiles/<name>/package.json`) depend on

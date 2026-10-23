@@ -46,7 +46,7 @@
 
 ## 4. 部署形态
 
-- 本仓库变成一个 **bundle**：`package.json` 增加 `dsh.bundle.patch` → `./preset/ptc-hashline/preset.patch.yml`。
+- 本仓库变成一个 **bundle**：`package.json` 增加 `dsh.bundle.patch` → `./presets/ptc-hashline/preset.patch.yml`。
 - 该 patch 文件声明一行 `@deepseek-ai/dsh-agent-preset`，`config.id = ptc-hashline`。
 - `config.plugins` = `ptc-gate` 基线 plugins 列表 + 三处功能 delta（§4.1）+ 资源定位 delta（§4.2）。
 - 安装 = 构建本仓库插件产物 + profile 依赖中 `link:` 本 bundle 及可解析的插件包 + 将 bundle 包名登记到 `dsh.profile.bundles` + `pnpm install` + 一次真正的重新挂载。
@@ -77,7 +77,7 @@
 
 ### 4.2 独立资源与加载契约
 
-- 将基线 `personas/orchestrator.md`、`intent-gate-watchdog.mjs` 迁入 `preset/ptc-hashline/` 对应位置，正文逐字保持；保留来源、SHA 与原有归属声明。
+- 将基线 `personas/orchestrator.md`、`intent-gate-watchdog.mjs` 迁入 `presets/ptc-hashline/` 对应位置，正文逐字保持；保留来源、SHA 与原有归属声明。
 - persona 的 `createRequire(baseUrl).resolve(...)` 改为解析本 bundle 的 `package.json`；watchdog 模块地址改为本 bundle 的子路径。根包必须允许这些子路径与 package.json 被解析。
 - 交付物、安装和测试不要求 `@cireric/dsh-ptc-roles`、原项目目录或 `.scratch/dsh-ptc-roles` 存在。原项目可以弃置。
 - 三个 workspace 包提供可被目标宿主加载的构建后 JavaScript 入口及类型声明；安装步骤显式建立 profile 对 tool-read、tool-edit 的可解析依赖。不能以 Vitest 能加载 src/index.ts 代替宿主可加载证明。

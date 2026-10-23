@@ -21,7 +21,7 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import * as ToolEdit from '@hy-sde-org/dsh-tool-edit'
 // @ts-ignore -- plain ESM asset copied verbatim from the gate baseline
-import * as Watchdog from '../../preset/ptc-hashline/intent-gate-watchdog.mjs'
+import * as Watchdog from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
 import * as ToolRead from '../../packages/tool-read/src/index.ts'
 import { InProcessPtcRuntime } from './carrier.ts'
 

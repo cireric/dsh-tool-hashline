@@ -86,11 +86,11 @@ try {
     catch (error) { fail(label + ' does not resolve: ' + error.message); return undefined }
   }
   const bundleManifestPath = resolveOrFail('dsh-tool-hashline/package.json', 'bundle package.json')
-  const watchdogPath = resolveOrFail('dsh-tool-hashline/preset/ptc-hashline/intent-gate-watchdog.mjs', 'watchdog module')
+  const watchdogPath = resolveOrFail('dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs', 'watchdog module')
   const readEntry = resolveOrFail('@dsh-tool-hashline/tool-read', 'tool-read entry')
   const editEntry = resolveOrFail('@dsh-tool-hashline/tool-edit', 'tool-edit entry')
   const bundleManifest = bundleManifestPath === undefined ? {} : JSON.parse(readFileSync(bundleManifestPath, 'utf8'))
-  if (bundleManifest?.dsh?.bundle?.patch !== './preset/ptc-hashline/preset.patch.yml') fail('bundle manifest does not declare the preset patch')
+  if (bundleManifest?.dsh?.bundle?.patch !== './presets/ptc-hashline/preset.patch.yml') fail('bundle manifest does not declare the preset patch')
   if (!bundleManifestPath?.includes('node_modules') && !bundleManifestPath?.includes('dsh-tool-hashline')) fail('bundle resolved outside the profile: ' + bundleManifestPath)
   if (readEntry === undefined || editEntry === undefined) throw new Error('plugin packages do not resolve')
 

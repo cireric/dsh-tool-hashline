@@ -27,16 +27,16 @@
   },
   "dsh": {
     "bundle": {
-      "patch": "./preset/ptc-hashline/preset.patch.yml"
+      "patch": "./presets/ptc-hashline/preset.patch.yml"
     }
   },
   "exports": {
     "./package.json": "./package.json",
-    "./preset/*": "./preset/*",
-    "./preset/ptc-hashline/intent-gate-watchdog.mjs": "./preset/ptc-hashline/intent-gate-watchdog.mjs"
+    "./presets/*": "./presets/*",
+    "./presets/ptc-hashline/intent-gate-watchdog.mjs": "./presets/ptc-hashline/intent-gate-watchdog.mjs"
   },
   "files": [
-    "preset",
+    "presets",
     "package.json",
     "README.md"
   ]

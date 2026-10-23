@@ -13,8 +13,8 @@
 
 - `packages/tool-read` 已是完整实现（mint / 窗口 / seen / 卡片 / 提示），入口为 `dist/index.js`；
   `packages/hashline`、`packages/tool-edit` 仍是版本锚点。
-- 根包是 bundle：`dsh.bundle.patch` 指向 `preset/ptc-hashline/preset.patch.yml`；迁入的
-  persona/watchdog 逐字保留，来源与摘要见 `preset/ptc-hashline/SOURCES.md`。
+- 根包是 bundle：`dsh.bundle.patch` 指向 `presets/ptc-hashline/preset.patch.yml`；preset 自带
+  persona 与 watchdog 资产，摘要由 `check:preset` 校验。
 - 交付命令：`pnpm build`、`pnpm check`、`pnpm test:unit`、`pnpm test:integration`、
   `pnpm test:ptc`、`pnpm test:compat`、`pnpm check:preset`、`pnpm test:profile`。
 - 仍不发布、不挂日常 profile；验收口径见 `docs/acceptance/2026-10-23-验收追溯.md`。
