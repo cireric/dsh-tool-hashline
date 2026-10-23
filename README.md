@@ -20,7 +20,7 @@ canonical `value` carries a content tag the upstream `edit` accepts.
 ```powershell
 pnpm install
 pnpm build            # tsc -> packages/*/dist (host-loadable JS + .d.ts)
-pnpm check            # build + tsc --noEmit for every package
+pnpm check            # build + tsc --noEmit for every package and the root test suites
 pnpm test             # build + package tests
 pnpm test:unit        # tag/window/config/lang pure functions
 pnpm test:integration # real ToolRuntime + local fs + upstream edit
@@ -88,7 +88,7 @@ matches behavior tools by name.
 - **seen** is the hashline engine's per-session provenance of the lines a
   window fully returned. It is a *bounded* guard, not a permission boundary:
   cross-session reads, evicted snapshots, recovery, `REM` (no line anchor),
-  block edits and mismatch snapshots can all let an edit through. 
+  block edits and mismatch snapshots can all let an edit through.
   `pnpm test:compat` pins these behaviors so upgrades cannot change them
   silently.
 
