@@ -1,10 +1,10 @@
 # HANDOFF — dsh-tool-hashline
 
 > 交接文档。目标读者：下一个会话里的实现者（人或 agent）。
-> 先读这份，再读背景报告：`docs/background/2026-10-22-dsh-hashline-选型分析.md`。
-> **当前状态（2026-10-23）：8 票已实现，全部脚本化验收通过；仍未发布、未接入日常 profile。** 入口命令与已知缺项见 `README.md` 与 `docs/acceptance/2026-10-23-验收追溯.md`。
+> 先读这份，再读背景报告：`docs/background/2026-10-22-dsh-hashline-selection-analysis.md`。
+> **当前状态（2026-10-23）：8 票已实现，全部脚本化验收通过；仍未发布、未接入日常 profile。** 入口命令与已知缺项见 `README.md` 与 `docs/acceptance/2026-10-23-acceptance-traceability.md`。
 >
-> **2026-10-22 v3 更新**：实施先读[需求规格](docs/spec/2026-10-22-ptc-hashline-需求规格.md)。两轮用户决议已落实：上游有限守卫、仅完整行新增 seen、全文读取成本、长行配置/显式降级；只交付 ptc-hashline，自带 intent gate 资源，首版保持基线行为。本文未重写的历史方案不覆盖规格 v3；当前验收以规格 §8.1 为准。
+> **2026-10-22 v3 更新**：实施先读[需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)。两轮用户决议已落实：上游有限守卫、仅完整行新增 seen、全文读取成本、长行配置/显式降级；只交付 ptc-hashline，自带 intent gate 资源，首版保持基线行为。本文未重写的历史方案不覆盖规格 v3；当前验收以规格 §8.1 为准。
 
 ## 1. 一句话目标
 
@@ -55,7 +55,7 @@
 >    stock `read` 的 schema 是 `additionalProperties: false`（`tool-fs/src/read.ts:86-88`），多一个 `tag` 直接抛 `ToolOutputError`。
 >
 > 定案：`tool-fs.read: false` + `packages/tool-read` 注册完整 `read`（即原来的「备选方案」）。
-> 权威口径见 `docs/spec/2026-10-22-ptc-hashline-需求规格.md` 的 FR-3 / FR-5 / FR-7 / FR-12。
+> 权威口径见 `docs/spec/2026-10-22-ptc-hashline-requirements-spec.md` 的 FR-3 / FR-5 / FR-7 / FR-12。
 
 ~~不替换 `read` 工具，只在它返回后~~（已否决，以下为历史设计）：
 
@@ -93,8 +93,21 @@ dsh-tool-hashline/
 ```yaml
 # pnpm-workspace.yaml
 patchedDependencies:
-  "@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4": patches/dsh-tool-edit.patch
+  '@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4': patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch
+  '@hy-sde-org/dsh-hashline@0.2.1-alpha.4': patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch
 ```
+
+**已落地（2026-10-23，runtime-fix-plan 阶段 B）**：补丁让 `toolCwdFromExec(exec, ctx)` 在有 agent 时读
+`ctx.workingDirectory.get(agent.session)`，无 agent 才回退 `process.cwd()`；`inject` 增加
+`workingDirectory`；`writer.move` 的写通分支也检查目标端在会话目录内。背景与升级边界见
+[ADR-0003](./docs/adr/0003-effective-working-directory.md)。
+
+**已落地（2026-10-23，MV 观测修复阶段 B/C）**：同一个 tool-edit 补丁让 MV **目标端**走
+`fs/write-intent` + `createIfAbsent`（而不是 `fs/edit-intent`，后者对未观察/确认缺失的目标必然拒绝），
+并把"目标已建、源未删"报成部分成功；新增的 hashline 补丁把 `snapshots.relocate` 移到
+`fs.move` 成功之后。背景、边界与回退见
+[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)。上游若已修好这些点，
+升级时应删除补丁而不是重做。
 
 ## 5. 关键事实（实现前必须知道）
 
@@ -115,7 +128,7 @@ patchedDependencies:
 ### 5.1 两个必须区分的路径
 
 - **show path**：`read` 的 `value.path`（`ctx.fs.processPath(target)`，规范绝对路径）。
-- **store key**：`tool-edit` 用 `path.resolve(cwd, filePath)`；自建 read 必须记录模型会使用的返回路径键，输入解析键不同时还记录该键，详见规格 FR-7。observed 的 realpath 身份不等于编辑侧路径键。
+- **store key**：补丁后的 `tool-edit` 用 `path.resolve(cwd, filePath)`，`cwd` 来自 `workingDirectory` 服务（无 agent 回退 `process.cwd()`）；自建 read 用同一个值，并记录模型会使用的返回路径键，输入解析键不同时还记录该键，详见规格 FR-7。observed 的 realpath 身份不等于编辑侧路径键。旧 `session.cwd ?? process.cwd()` 算法已作废——真实 Session 没有该属性。
 
 ### 5.2 已知的失败模式（装饰器要避免）
 
@@ -127,7 +140,7 @@ patchedDependencies:
 ## 6. 装饰器设计（⚠️ v2 起整体作废，仅作历史记录）
 
 > 本节及 §6.1–6.6 描述的方案已被否决（见 D2）。保留它是为了记住「为什么不行」，
-> 实施时**不要**照此实现；现行口径见 `docs/spec/2026-10-22-ptc-hashline-需求规格.md`。
+> 实施时**不要**照此实现；现行口径见 `docs/spec/2026-10-22-ptc-hashline-requirements-spec.md`。
 
 ### 6.1 触发条件
 
@@ -232,7 +245,7 @@ export interface Config {
 - [ ] 注册 `read`：value 带 tag、`fs/observed`、store.record（含 `[0]` 哨兵）
 - [ ] 在一个临时 profile 里验证：read 输出带 tag，`edit` 首次成功
 
-> 规格里的 M1–M4（`docs/spec/…-需求规格.md` §8）是权威切分，本节仅供粗粒度参考。
+> 规格里的 M1–M4（`docs/spec/…-requirements-spec.md` §8）是权威切分，本节仅供粗粒度参考。
 
 ### M2 — 边界与集成测试（2–3 天）
 
@@ -349,7 +362,7 @@ Windows + pnpm 11.28.5 + Node 24.19.0。踩过的六个坑已经固定在配置�
 
 ## 13. 参考
 
-- 背景报告：`docs/background/2026-10-22-dsh-hashline-选型分析.md`
+- 背景报告：`docs/background/2026-10-22-dsh-hashline-selection-analysis.md`
 - hy-sde 引擎与 edit：<https://github.com/hy-sde/dsh-tool-edit>
 - hy-sde fork（read 侧参考）：<https://github.com/hy-sde/deepseek-harness> `packages/fs/tool-fs/src/read.ts`
 - DSH 工具管线：`D:\Project\source\__TEST__\deepseek-harness\packages\core\tools\src\index.ts`

@@ -20,7 +20,7 @@
 
 ## Comments
 
-- 2026-10-23 验收编排完成。追溯表：`docs/acceptance/2026-10-23-验收追溯.md`（FR-1…14 / NFR-1…6 / §4 安装契约逐条映射到用例与判定，并单列未执行项）。
+- 2026-10-23 验收编排完成。追溯表：`docs/acceptance/2026-10-23-acceptance-traceability.md`（FR-1…14 / NFR-1…6 / §4 安装契约逐条映射到用例与判定，并单列未执行项）。
 - 复跑结果（同一提交）：`pnpm build` 0；`pnpm check` 0；`pnpm test` 0；`pnpm test:unit` 42 passed；`pnpm test:integration` 43 passed；`pnpm test:ptc` 9 passed；`pnpm test:compat` 15 passed；`pnpm check:preset` 0；`pnpm test:profile` 0（含 `dsh --dump-config`、profile 内 read→edit 落盘、门正负）。
 - 文档：README 重写为安装/激活/重挂载、全文读取成本、长行补救、无 tag 降级、seen 与 observed 区别、有限保护范围与升级 gate；AGENTS/HANDOFF 的「脚手架/stub」表述已替换；`tests/compat/README.md` 记录锁定行为与缺项。
 - 未执行项（明确不计通过）：`PUT N*` block 编辑（无 blockResolver）；真实宿主 + 真实模型的一轮 PTC（本机无 key）；PTC 子进程隔离/沙箱；非 Windows 符号链接平台。NFR-4 的两处运行时导入偏差在追溯表中有专段说明。

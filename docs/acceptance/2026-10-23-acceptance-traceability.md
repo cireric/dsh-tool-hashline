@@ -3,6 +3,15 @@
 本文件把规格 v3 的每条需求映射到可执行用例与最近一次结果。判定只认脚本输出；
 人工冒烟不作为通过依据。
 
+> **2026-10-23 运行修复（D1/D2）之后**：下面的命令计数是**修复前基线**，保留原样。
+> 修复后的门禁结果、真实 Session 目录矩阵与 persona 装配矩阵见
+> [2026-10-23-runtime-fix-acceptance.md](./2026-10-23-runtime-fix-acceptance.md)。两份记录不合并：旧结果不改写成新通过。
+>
+> **2026-10-23 MV 观测修复之后**：MV/REM 在真实 `fs-observation-policy` 下的矩阵、两份依赖补丁的
+> 生效证据与最新门禁计数见
+> [2026-10-23-mv-observation-acceptance.md](./2026-10-23-mv-observation-acceptance.md)
+> （integration 84 / ptc 13 / compat 18）。上面的计数仍按原样保留。
+
 ## 命令与最近结果
 
 | 命令 | 最近结果 |
@@ -26,7 +35,7 @@
 | FR-4 渲染 header | `tests/integration/read-edit.spec.ts`「mints the engine tag…」、`tests/integration/presentation.spec.ts` | 通过：header 在 `<content>` 首行，tagged=false 无假 header |
 | FR-5 窗口语义 | `tests/unit/window.spec.ts`（14 例）、`tests/integration/window-read.spec.ts` | 通过：分页/列截断/字节封顶/零行/越界 FS_NOT_FOUND |
 | FR-6 fs/observed | `tests/integration/observed.spec.ts`（正/负对照） | 通过：stock write 成功 vs 未观察 FS_NOT_OBSERVED |
-| FR-7 快照与 seen（含相对路径解析与 store key 分离） | `tests/unit/seen-set.spec.ts`、`tests/integration/window-read.spec.ts`「path resolution vs store key」「seen guard…」、`tests/compat/guard.spec.ts`（并集/双键/连续编辑/跨 session/淘汰/recovery/REM/无 resolver 的 block 拒绝） | 通过：有限守卫边界逐条断言 |
+| FR-7 快照与 seen（目录来源与 store key 同源） | `tests/unit/seen-set.spec.ts`、`tests/integration/window-read.spec.ts`「path resolution vs store key」「seen guard…」、`tests/integration/working-directory.spec.ts`（真实 Session 的相对/绝对/替换/补丁/REM/MV/切目录/多会话/守卫哨兵）、`tests/compat/guard.spec.ts`（并集/双键/连续编辑/跨 session/淘汰/recovery/REM/无 resolver 的 block 拒绝） | 通过：有限守卫边界逐条断言；cwd 契约见 ADR-0003 |
 | FR-8 引擎单实例 | `tests/unit/engine-identity.spec.ts`；`scripts/test-profile.mjs` 的 profile realpath 断言 | 通过 |
 | FR-9 边界（BOM/CRLF/阈值/空/错误/漂移） | `tests/integration/untagged.spec.ts`（14 例）、`tests/compat/guard.spec.ts` drift 三档 | 通过：N-1/N/N+1、多字节、size 未知、mismatch/head-tail |
 | FR-10 配置 | `tests/unit/config.spec.ts`、`tests/integration/window-read.spec.ts` 生效/非法、`check:preset` 同值断言 | 通过 |
@@ -104,6 +113,10 @@ pnpm check:preset; pnpm test:profile
    snapshot key 仍用 tool-edit 的 `session.cwd ?? process.cwd()`；新增
    `window-read.spec.ts`「path resolution vs store key」用**真实形状的 session**（只有 header.cwd）
    同时验证两者。
+   > **2026-10-23 运行修复后已取代**：`session.cwd` 算法在真实 Session 中恒失效，edit 因此落到进程目录。
+   > 现在 read 与 edit 共用 `workingDirectory` 的有效目录（edit 由本地依赖补丁对齐），见
+   > [ADR-0003](../adr/0003-effective-working-directory.md) 与
+   > [运行修复验收](./2026-10-23-runtime-fix-acceptance.md)。本段保留为当时记录。
 2. **空 catch**：`render` 改为全函数 `renderLimit()`，回放非法 limit 时回退到配置上限，不吞异常。
 3. **check:preset 豁免过宽**：persona 只允许 `prefix` 差异、watchdog 只允许 `name` 差异，其余逐字比较；
    并断言 `tool-read`/`tool-edit` 紧接 `tool-fs` 之后插入。

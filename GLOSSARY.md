@@ -21,7 +21,7 @@ read 返回给模型的规范绝对路径，也是模型抄进编辑 header 的�
 _Avoid_: 绝对路径、file path、realpath
 
 **store key**:
-编辑侧查快照用的键，由会话工作目录与传入路径解析得出；read 侧必须算出同一个键。
+编辑侧查快照用的键，由会话的**有效**工作目录（宿主 `workingDirectory` 服务，不是 header 初始目录）与传入路径解析得出；read 侧必须算出同一个键。
 _Avoid_: key、path key、snapshot key
 
 **零行窗口**:

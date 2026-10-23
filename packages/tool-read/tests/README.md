@@ -1,6 +1,6 @@
 # tool-read tests
 
-Implement M1 first; use [requirements v3 §8.1](../../../docs/spec/2026-10-22-ptc-hashline-需求规格.md) as the acceptance contract. Existing post-execute tests are historical experiments, not implementation coverage.
+Implement M1 first; use [requirements v3 §8.1](../../../docs/spec/2026-10-22-ptc-hashline-requirements-spec.md) as the acceptance contract. Existing post-execute tests are historical experiments, not implementation coverage.
 
 1. `mintTag` hashes BOM + CRLF normalized text identically to the engine.
 2. Header insertion lands after `<content>\n` and is idempotent.

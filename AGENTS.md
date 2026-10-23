@@ -4,10 +4,10 @@
 
 ## 入口
 
-1. 先读 [`docs/spec/2026-10-22-ptc-hashline-需求规格.md`](./docs/spec/2026-10-22-ptc-hashline-需求规格.md)（**v3 已落实两轮用户决议，实施以它为准**）。它是 FR/NFR/决议/证据索引的权威来源。
+1. 先读 [`docs/spec/2026-10-22-ptc-hashline-requirements-spec.md`](./docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)（**v3 已落实两轮用户决议，实施以它为准**）。它是 FR/NFR/决议/证据索引的权威来源。
 2. 再读 [`HANDOFF.md`](./HANDOFF.md)（背景与历史决策；其中 D2 装饰器路线已被否决，见其正文标注）。
 3. 术语在 [`GLOSSARY.md`](./GLOSSARY.md)——`seen 行` 与 `observed` 是两套机制，别混用。
-4. 背景与选型证据在 [`docs/background/2026-10-22-dsh-hashline-选型分析.md`](./docs/background/2026-10-22-dsh-hashline-选型分析.md)。
+4. 背景与选型证据在 [`docs/background/2026-10-22-dsh-hashline-selection-analysis.md`](./docs/background/2026-10-22-dsh-hashline-selection-analysis.md)。
 
 ## 当前状态
 
@@ -17,11 +17,23 @@
   persona 与 watchdog 资产，摘要由 `check:preset` 校验。
 - 交付命令：`pnpm build`、`pnpm check`、`pnpm test:unit`、`pnpm test:integration`、
   `pnpm test:ptc`、`pnpm test:compat`、`pnpm check:preset`、`pnpm test:profile`。
-- 仍不发布、不挂日常 profile；验收口径见 `docs/acceptance/2026-10-23-验收追溯.md`。
+- 仍不发布、不挂日常 profile；验收口径见 `docs/acceptance/2026-10-23-acceptance-traceability.md`，
+  运行修复（D1 目录 / D2 persona）的实测见 `docs/acceptance/2026-10-23-runtime-fix-acceptance.md`，
+  MV 写入意图与快照次序的实测见 `docs/acceptance/2026-10-23-mv-observation-acceptance.md`。
+- 真实策略回归：集成夹具默认挂载 `fs-observation-policy`（`createRealSessionHarness`），
+  MV/REM 矩阵在 `packages/tool-read/tests/integration/mv-observation.spec.ts`（17 例），引擎 commit 次序在
+  `tests/compat/mv-snapshot-order.spec.ts`（3 例），PTC 层在 `tests/ptc/mv-policy.spec.ts`（4 例）；
+  `test:profile` 断言两份补丁在解析产物中生效并跑 read→PUT→read→MV→read→REM。
 
 ## 硬约束
 
 - 不复制 / 不 fork `@hy-sde-org/dsh-hashline` 与 `@hy-sde-org/dsh-tool-edit` 的源码；用精确版本依赖。
+  两个包都通过 `pnpm patchedDependencies` 打本地补丁：
+  - `dsh-tool-edit`：有效工作目录 + MV 两端包含关系（[ADR-0003](./docs/adr/0003-effective-working-directory.md)）
+    + MV 目标走 `fs/write-intent`/`createIfAbsent`、部分成功报错与多节"已写/未写"包装
+      （[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)）；
+  - `dsh-hashline`：`Patcher.commit` 先移动磁盘、再迁移快照（[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)）。
+  升级时先看上游是否已修好，再决定删/重做补丁；不得只改 `node_modules`。
 - 不 fork DSH。read 侧**自建**：`tool-fs.read: false` + `packages/tool-read` 注册完整 `read`。
   装饰器路线已证伪——替换 `content` 对 PTC 无效（程序只拿 `value`），替换 `value` 会被 `createSuccessResult` 按 output schema 重校验（`core/tools/src/index.ts:1840-1843`），而 stock `read` 的 schema 是 `additionalProperties: false`。
 - `hashline` 和 `tool-edit` 的版本升级必须跑 `tests/compat` 后再改日常 profile。

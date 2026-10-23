@@ -1,7 +1,7 @@
 # ptc-hashline 需求闭环审查与决议记录
 
 - 日期：2026-10-22
-- 性质：保留 v2 审查过程与两轮用户决议；当前权威文档为[需求规格 v3](./2026-10-22-ptc-hashline-需求规格.md)，下方最初发现与推荐按当时状态阅读。
+- 性质：保留 v2 审查过程与两轮用户决议；当前权威文档为[需求规格 v3](./2026-10-22-ptc-hashline-requirements-spec.md)，下方最初发现与推荐按当时状态阅读。
 - 范围：本地规格、HANDOFF、GLOSSARY、已安装 alpha.4 引擎与编辑包、stock DSH 源码、ptc-gate 基线副本。
 - 当前结论：两轮共七项决议已确认并落实到规格 v3，需求具备实施基线。实现与交付验收未闭环：tool-read 仍是 stub，compat 仅有 README，根 manifest 尚无 bundle 声明。
 - 验证边界：做了静态交叉核对；事实核查子代理对 recovery、哨兵、淘汰和 REM 做了引擎级复现。未运行完整 ToolRuntime、PTC、Web 或干净 profile 验收。

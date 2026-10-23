@@ -5,7 +5,7 @@
 - 基线：DSH `0.2.1-rc.2`；`@hy-sde-org/dsh-hashline@0.2.1-alpha.4`、`@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4`
 - 迁入基线：`cireric/dsh-ptc-roles` 的 `ptc-gate` preset（克隆于 `.scratch/dsh-ptc-roles`，commit `3d8f36eb8`）；仅迁入 gate 所需 patch、persona、watchdog 与验收依据，不整合五角色系统
 - 术语：见 [`GLOSSARY.md`](../../GLOSSARY.md)（tag / seen 行 / observed / show path / store key / 零行窗口 / 行为改变型回合）
-- 上游依据：[选型分析](../background/2026-10-22-dsh-hashline-选型分析.md)、[HANDOFF](../../HANDOFF.md)
+- 上游依据：[选型分析](../background/2026-10-22-dsh-hashline-selection-analysis.md)、[HANDOFF](../../HANDOFF.md)
 - v2 变更：19 项审核决议（§7.2）落地，并据实测修正 9 处与引擎行为不符的描述（§10 证据索引已补）
 - v3 变更：有限守卫、完整行 seen、独立 gate 资源、单 preset、首版基线行为、全文读取成本及长行补救七项决议（§7.3）；补齐 canonical nextAction、部署与验收矩阵
 - 2026-10-23 修订：NFR-4 按 C-08 放宽为“契约面白名单”，并新增依赖白名单测试
@@ -179,9 +179,14 @@ preset 必须含 `tool-presentation` 且 `mode: ptc`。
 
 ### FR-7 snapshot 记录与 seen 语义
 
-- **store key** 必须用 `path.resolve(cwd, filePath)`，与 `tool-edit` 同源；`cwd` 取 `exec.agent?.session?.cwd`，
-  缺省 `process.cwd()`（与 `tool-edit` 完全一致，见 `tool-edit/dist/session.js:26-31`）。
-  **不得**改用 `ctx.workingDirectory` 服务——两边的键必须逐字相同，否则编辑端查不到快照。
+- **store key** 必须用 `path.resolve(cwd, filePath)`，与打过本地精确补丁的 `tool-edit` 同源；`cwd` 是宿主
+  `workingDirectory` 服务为本次调用解析出的**有效目录**（read：`ctx.workingDirectory.ensure(agent)` 的返回值；
+  无 agent 时 `process.cwd()`）。**不得**读 `session.cwd`：真实 Session 只在 `header.cwd` 暴露初始目录，
+  有效目录是投影，会随 `working-directory/change` 变化。
+- **编辑侧同源**：`@hy-sde-org/dsh-tool-edit` 由 `pnpm patchedDependencies` 打本地补丁（见
+  [ADR-0003](../adr/0003-effective-working-directory.md)）。补丁让 `toolCwdFromExec` 在有 agent 时取
+  `ctx.workingDirectory.get(agent.session)`、无 agent 才回退 `process.cwd()`，并让路径解析、canonical key、
+  recovery 范围与 REM/MV 包含关系共用这一个值。未打补丁的上游版本不满足本条。
 - **返回路径也要命中**：模型可抄 value.path 作为 edit 的 filePath，因此必须记录 `path.resolve(cwd, value.path)`。输入路径解析键与此键不同（例如符号链接/路径大小写规范化）时，在两个不同键下记录同文本与本次完整行集合；相同键仅记录一次，不另读文件、不自行合并 seen。不要改 edit 的键算法，也不要只按 observed 的 targetKey 推断键一致。
 - **seen 集合由引擎合并**：`store.record()` 命中同 hash + 同文本时调用 `mergeSeenLines`（`snapshots.js:68-75,159-169`），
   是**并集**。我们只传本次窗口完整返回的行号，**不要**自己预合并，也不要为相同键的重复读另造记录。
@@ -325,7 +330,7 @@ export interface Config {
 | Q-13 | 零行窗口保留 `[0]` 哨兵，写成显式约定 + 单测 | FR-7 |
 | Q-14 | 补 `readMaxBytes`（50 KiB）与 capped footer | FR-5 |
 | Q-15 | 配置项拆为 `snapshotMaxBytes` / `maxBytes`，避免同名不同义 | FR-10 |
-| Q-16 | store key 的 `cwd` 严格照 `tool-edit`：`session.cwd ?? process.cwd()` | FR-7 |
+| Q-16 | store key 的 `cwd` 与补丁后的 `tool-edit` 同源：`workingDirectory.get(session)`，无 agent 回退 `process.cwd()`（原 `session.cwd` 算法作废，见 ADR-0003） | FR-7 |
 | Q-17 | 错误码复刻 stock + 编辑工具名必须为 `edit` | FR-14 |
 | Q-18 | 建 `GLOSSARY.md`，明确 seen 行 ≠ observed | GLOSSARY.md |
 | Q-19 | 投影与契约面各配负向验收 | FR-12 / FR-14 |
@@ -405,6 +410,8 @@ export interface Config {
 | tool-edit 的 replace/patch 不碰 store，可作无 tag 降级 | `dsh-tool-edit/dist/index.js:48-59` |
 | tool-edit 归一化绝对路径、键为 `path.resolve(cwd, path)` | `dist/hashline/input.js:83-91`、`dist/hashline/filesystem.js:50-52` |
 | `exec.session` 不存在，须用 `exec.agent?.session` | `core/tools/src/index.ts:327-353`、`tool-edit/dist/session.js:109` |
+| 真实 Session 只有 `header.cwd`；有效目录是投影，`workingDirectory.get/ensure` 是唯一来源 | `packages/session/working-directory/src/index.ts:117-152`、`packages/core/session/src/index.ts:1178` |
+| 上游 `tool-edit` 读 `session.cwd` 恒为 undefined，静默回退进程 cwd（D1 根因） | `tool-edit/dist/session.js:26-31`（原版） |
 | 可空字段只能用 `oneOf` 表达 | `core/tools/src/json-schema.ts:303-306`、`ts-types.ts:176-195`、`tool-fs/src/write.ts:93-98` |
 | `ptc-gate` 的 tool-fs 行无 config；上游 SHA | `.scratch/dsh-ptc-roles/preset/ptc-gate/preset.patch.yml:101-102`、HEAD `3d8f36eb8` |
 | watchdog 的 BEHAVIOR_TOOLS 含 `write`/`edit`，每轮最多拒一次 | `intent-gate-watchdog.mjs:143-148,440-442` |

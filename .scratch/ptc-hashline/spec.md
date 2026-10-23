@@ -2,7 +2,7 @@
 
 **Status:** ready-for-agent
 
-权威来源：[ptc-hashline 需求规格 v3](../../docs/spec/2026-10-22-ptc-hashline-需求规格.md)。本文件仅为本地 tracker 的规格入口，不维护第二份需求正文；实施以权威规格为准。
+权威来源：[ptc-hashline 需求规格 v3](../../docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)。本文件仅为本地 tracker 的规格入口，不维护第二份需求正文；实施以权威规格为准。
 
 相关领域文档：[GLOSSARY](../../GLOSSARY.md)、[有限 seen 守卫决议](../../docs/adr/0001-inherit-bounded-seen-guard.md)、[独立 ptc-gate 决议](../../docs/adr/0002-own-ptc-gate-assets.md)。
 

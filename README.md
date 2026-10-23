@@ -14,6 +14,7 @@ canonical `value` carries a content tag the upstream `edit` accepts.
 | `@dsh-tool-hashline/tool-edit` | version anchor for `@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4` |
 | `@dsh-tool-hashline/tool-read` | the complete `read`: mint / window / seen / card / prompt |
 | `presets/ptc-hashline/` | the preset patch plus its persona and watchdog assets |
+| `patches/` | local precise-version patch for `@hy-sde-org/dsh-tool-edit` (effective working directory + MV containment) |
 
 ## Runtime dependency surface
 
@@ -53,7 +54,8 @@ pnpm test:profile     # clean profile install + dsh composition + read->edit
 
 Every gate fails non-zero with a printed reason. `tests/compat/README.md`
 records the pinned upstream behaviors; `docs/acceptance/` maps each requirement
-to the case that proves it. See [acceptance traceability](./docs/acceptance/2026-10-23-验收追溯.md).
+to the case that proves it. See [acceptance traceability](./docs/acceptance/2026-10-23-acceptance-traceability.md)
+and the [runtime-fix acceptance record](./docs/acceptance/2026-10-23-runtime-fix-acceptance.md).
 
 ## Install into a profile (not the daily profile yet)
 
@@ -87,6 +89,25 @@ The preset turns stock `read`/`edit` **off** and mounts this `read` plus the
 upstream `edit`; both tools keep their names (`read`, `edit`) because the gate
 matches behavior tools by name.
 
+### Working directory (read and edit share one source)
+
+Both tools take the **effective** session directory from the host's
+`workingDirectory` service — the value the model is shown and that `cd` changes
+— and use it for path resolution and for the snapshot store key
+(`path.resolve(cwd, authoredPath)`). A Session's `header.cwd` is only its origin.
+
+Without an agent, both fall back to `process.cwd()` (matching the editor), so an
+agentless relative read resolves there rather than at the filesystem provider's
+mount default.
+
+The upstream editor reads `session.cwd`, which a real Session does not expose, so
+it always fell back to the host process directory. `pnpm patchedDependencies`
+applies a small patch to `@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4` that reads the
+service instead (and confines both MV endpoints). Read takes the same value, so
+`read` → relative-path `edit` finds the snapshot. See
+[ADR-0003](./docs/adr/0003-effective-working-directory.md); a clean install MUST
+resolve to the patched package (the lockfile records `patch_hash`).
+
 ## Reading cost and degradation (read this before using it on big files)
 
 - A valid text read performs **one `stat` and one whole-file `readText`**. There is
@@ -118,7 +139,17 @@ matches behavior tools by name.
 ## Upgrading the engine
 
 The two upstream packages are pinned exactly. Change the version in
-`packages/hashline/package.json` and `packages/tool-edit/package.json`,
-`pnpm install`, then run `pnpm test:compat` (and `pnpm check:preset` if the
-preset is touched) **before** switching any daily profile. This release stays
-`private`; nothing is published and the daily profile is untouched.
+`packages/hashline/package.json` and `packages/tool-edit/package.json`, then:
+
+1. Re-check `patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch`. If the new
+   version already reads `workingDirectory` and confines both MV endpoints,
+   delete the patch and its `patchedDependencies` entry; otherwise redo it for
+   the new version (never edit `node_modules` by hand).
+2. `pnpm install` (the lockfile must carry the new `patch_hash`).
+3. `pnpm test:unit && pnpm test:integration && pnpm test:compat` (plus
+   `pnpm check:preset` if the preset is touched) **before** switching any daily
+   profile.
+
+`tests/compat/README.md` records the baseline as "original version + local patch".
+This release stays `private`; nothing is published and the daily profile is
+untouched.
