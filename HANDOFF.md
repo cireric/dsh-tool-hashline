@@ -79,7 +79,6 @@ dsh-tool-hashline/
     hashline/      # 版本锚点：re-export @hy-sde-org/dsh-hashline
     tool-edit/     # 版本锚点：re-export @hy-sde-org/dsh-tool-edit
     tool-read/     # 唯一有实现的包：完整 read（mint / 窗口 / seen / 投影）
-  presets/
   tests/compat/
 ```
 
@@ -208,11 +207,10 @@ export interface Config {
 ├── package.json                # private workspace root
 ├── pnpm-workspace.yaml
 ├── tsconfig.base.json
-├── presets/agent.cordis.yml    # 示例 agent preset（不含 tool-fs）
 ├── packages/
 │   ├── hashline/               # re-export 上游引擎
 │   ├── tool-edit/              # re-export 上游 edit 插件
-│   └── tool-read/              # 完整 read 实现（当前是 stub）
+│   └── tool-read/              # 完整 read 实现（dist 入口）
 │       ├── src/index.ts
 │       └── tests/README.md     # 测试用例清单
 └── tests/compat/               # 跨 DSH 版本的集成测试（待建）
