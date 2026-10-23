@@ -35,7 +35,20 @@ const gap = message => { gaps.push(message); console.log('  GAP ' + message) }
 const ok = message => console.log('  ok ' + message)
 
 const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
-const run = (command, args, options = {}) => execFileSync(command, args, { cwd: options.cwd ?? repo, encoding: 'utf8', stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'], shell: process.platform === 'win32', env: { ...process.env, ...options.env } })
+/**
+ * Synchronous runner. A caller's `timeout` is forwarded: without it an install,
+ * a compose or a driver could hang the gate indefinitely instead of failing it.
+ * On timeout the child is killed by execFileSync and the thrown error carries
+ * whatever the child wrote, which the callers below report.
+ */
+const run = (command, args, options = {}) => execFileSync(command, args, {
+  cwd: options.cwd ?? repo,
+  encoding: 'utf8',
+  stdio: options.stdio ?? ['ignore', 'pipe', 'pipe'],
+  shell: process.platform === 'win32',
+  env: { ...process.env, ...options.env },
+  ...options.timeout === undefined ? {} : { timeout: options.timeout, killSignal: 'SIGKILL' },
+})
 
 try {
   step('build workspace')
@@ -108,7 +121,12 @@ try {
   ok('resolved tool-edit package -> ' + editorPkg)
   const patchMarkers = [
     [join(dirname(hashlinePkg), 'dist', 'patcher.js'), 'authorizes the snapshot migration', 'hashline MV relocates the snapshot only after the disk move'],
+    [join(dirname(hashlinePkg), 'dist', 'patcher.js'), 'bookkeeping did not complete', 'hashline reports a failed snapshot commit as an incomplete bookkeeping step'],
     [join(dirname(editorPkg), 'dist', 'session.js'), "const intent = { kind: 'createIfAbsent' }", 'tool-edit MV creates its target through createIfAbsent'],
+    [join(dirname(editorPkg), 'dist', 'session.js'), 'async readTextPreservingBom(target, signal)', 'tool-edit reads hashline text through the BOM-preserving entry'],
+    [join(dirname(editorPkg), 'dist', 'hashline', 'filesystem.js'), 'readTextPreservingBom', 'the hashline adapter uses that entry'],
+    [join(dirname(editorPkg), 'dist', 'constants.js'), 'PATHS: both the section PATH', 'the edit description states the MV DEST basis'],
+    [join(dirname(editorPkg), 'dist', 'index.js'), 'not one atomic step for the whole call', 'the edit prompt no longer promises whole-call atomicity'],
   ]
   for (const [markerFile, marker, label] of patchMarkers) {
     const text = existsSync(markerFile) ? readFileSync(markerFile, 'utf8') : ''
@@ -141,7 +159,7 @@ try {
     else ok('composed profile carries ' + needle)
   }
 
-  step('read -> PUT -> read -> MV -> read -> REM through the profile-installed build, policy mounted')
+  step('read -> PUT -> read -> MV -> read -> REM, plus BOM PUT/MV and a no-BOM control, through the profile-installed build with the policy mounted')
   const driver = join(profileDir, 'read-edit.mjs')
   writeFileSync(driver, `import { existsSync, mkdtempSync, readFileSync, writeFileSync } from 'node:fs'
 import { tmpdir } from 'node:os'
@@ -193,12 +211,49 @@ if (disk !== 'one\\nTWO\\nthree\\n') throw new Error('disk text after MV unexpec
 const rem = await runtime.execute({ callId: 'c6', name: 'edit', arguments: { input: '[' + movedRead.value.path + '#' + movedRead.value.tag + ']\\nREM' }, signal, agent })
 if (rem.isError) throw new Error('rem failed: ' + rem.error.message)
 if (existsSync(join(dir, 'moved.txt'))) throw new Error('REM left the moved file in place')
-console.log(JSON.stringify({ tag, path: read.value.path, disk, moved: true, removed: true }))
+
+// 4) BOM + CRLF through the SAME profile-installed build: PUT, then MV, then the
+// raw bytes. A config summary or a marker string cannot substitute for this.
+const BOM = Buffer.from([0xef, 0xbb, 0xbf])
+const bomSource = join(dir, 'bom.txt')
+const bomRaw = Buffer.concat([BOM, Buffer.from('alpha\\r\\nbeta\\r\\ngamma\\r\\n', 'utf8')])
+writeFileSync(bomSource, bomRaw)
+const bomRead = await runtime.execute({ callId: 'c7', name: 'read', arguments: { file_path: 'bom.txt' }, signal, agent })
+if (bomRead.isError) throw new Error('read of the BOM file failed: ' + bomRead.error.message)
+const bomPut = await runtime.execute({ callId: 'c8', name: 'edit', arguments: { input: '[' + bomRead.value.path + '#' + bomRead.value.tag + ']\\nPUT 2.=2:\\n+BETA' }, signal, agent })
+if (bomPut.isError) throw new Error('BOM put failed: ' + bomPut.error.message)
+const bomExpectedPut = Buffer.concat([BOM, Buffer.from('alpha\\r\\nBETA\\r\\ngamma\\r\\n', 'utf8')])
+const bomAfterPut = readFileSync(bomSource)
+if (!bomAfterPut.equals(bomExpectedPut)) throw new Error('BOM dropped on PUT: ' + JSON.stringify(bomAfterPut.toString('utf8')))
+const bomReread = await runtime.execute({ callId: 'c9', name: 'read', arguments: { file_path: 'bom.txt' }, signal, agent })
+if (bomReread.isError) throw new Error('re-read of the BOM file failed: ' + bomReread.error.message)
+const bomMv = await runtime.execute({ callId: 'c10', name: 'edit', arguments: { input: '[' + bomReread.value.path + '#' + bomReread.value.tag + ']\\nMV bom-moved.txt' }, signal, agent })
+if (bomMv.isError) throw new Error('BOM mv failed: ' + bomMv.error.message)
+const bomMoved = readFileSync(join(dir, 'bom-moved.txt'))
+if (!bomMoved.equals(bomExpectedPut)) throw new Error('BOM dropped on MV: ' + JSON.stringify(bomMoved.toString('utf8')))
+if (!bomMoved.subarray(0, 3).equals(BOM)) throw new Error('moved file lost its BOM bytes')
+if ((bomMoved.toString('utf8').match(/\\r\\n/gu) ?? []).length !== 3) throw new Error('moved file lost its CRLFs')
+const bomReadBack = await runtime.execute({ callId: 'c11', name: 'read', arguments: { file_path: 'bom-moved.txt' }, signal, agent })
+if (bomReadBack.isError) throw new Error('read of the moved BOM file failed: ' + bomReadBack.error.message)
+const bomRem = await runtime.execute({ callId: 'c12', name: 'edit', arguments: { input: '[' + bomReadBack.value.path + '#' + bomReadBack.value.tag + ']\\nREM' }, signal, agent })
+if (bomRem.isError) throw new Error('BOM rem failed: ' + bomRem.error.message)
+if (existsSync(join(dir, 'bom-moved.txt'))) throw new Error('REM left the moved BOM file in place')
+// 5) No-BOM control through the same build: nothing may invent a marker.
+const plainSource = join(dir, 'plain.txt')
+writeFileSync(plainSource, 'one\\ntwo\\n')
+const plainRead = await runtime.execute({ callId: 'c13', name: 'read', arguments: { file_path: 'plain.txt' }, signal, agent })
+if (plainRead.isError) throw new Error('read of the plain file failed: ' + plainRead.error.message)
+const plainPut = await runtime.execute({ callId: 'c14', name: 'edit', arguments: { input: '[' + plainRead.value.path + '#' + plainRead.value.tag + ']\\nPUT 2.=2:\\n+TWO' }, signal, agent })
+if (plainPut.isError) throw new Error('plain put failed: ' + plainPut.error.message)
+const plainBytes = readFileSync(plainSource)
+if (!plainBytes.equals(Buffer.from('one\\nTWO\\n', 'utf8'))) throw new Error('plain PUT changed more than the edited line: ' + JSON.stringify(plainBytes.toString('utf8')))
+if (plainBytes.subarray(0, 3).equals(BOM)) throw new Error('a BOM was invented on a plain file')
+console.log(JSON.stringify({ tag, path: read.value.path, disk, moved: true, removed: true, bom: bomMoved.toString('utf8'), plain: plainBytes.toString('utf8') }))
 `)
   try {
     const out = run(process.execPath, [driver], { cwd: profileDir, timeout: 120_000 })
     const result = JSON.parse(out.trim().split('\n').at(-1))
-    ok('read minted #' + result.tag + ', relative PUT wrote, MV landed and REM removed: ' + JSON.stringify(result.disk))
+    ok('read minted #' + result.tag + ', relative PUT wrote, MV landed and REM removed: ' + JSON.stringify(result.disk) + '; BOM bytes kept through PUT+MV: ' + JSON.stringify(result.bom) + '; no-BOM control: ' + JSON.stringify(result.plain))
   } catch (error) {
     fail('profile read->MV->read->edit failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
   }
@@ -254,4 +309,4 @@ if (failures.length > 0) {
   for (const message of failures) console.error('  - ' + message)
   process.exit(1)
 }
-console.log('test:profile OK: clean profile installs the bundle, composes one ptc-hashline preset, resolves read/edit/persona/watchdog, both local patches are present in the resolved builds, and read -> PUT -> read -> MV -> read -> REM lands under the observation policy' + (gaps.length > 0 ? ` (${gaps.length} gap(s) reported above)` : ''))
+console.log('test:profile OK: clean profile installs the bundle, composes one ptc-hashline preset, resolves read/edit/persona/watchdog, both local patches are present in the resolved builds, read -> PUT -> read -> MV -> read -> REM lands under the observation policy, and a BOM + CRLF file keeps its bytes through hashline PUT and MV while a plain file gains none' + (gaps.length > 0 ? ` (${gaps.length} gap(s) reported above)` : ''))

@@ -7,7 +7,7 @@ daily profile.
 
 | DSH | engine (`dsh-hashline` / `dsh-tool-edit`) | status | notes |
 |---|---|---|---|
-| 0.2.1-rc.2 | 0.2.1-alpha.4 **+ two local patches** | target | 17 compat cases green; both packages are patched (ADR-0003 effective directory, ADR-0004 MV create intent + snapshot order) |
+| 0.2.1-rc.2 | 0.2.1-alpha.4 **+ two local patches** | target | 21 compat cases green; both packages are patched (ADR-0003 effective directory, ADR-0004 MV create intent + snapshot order, plus the BOM-preserving hashline read, the MV DEST/commit wording and the truthful snapshot-commit error) |
 | next rc/minor | same pinned alpha + patches (or upstream fix) | todo | run this gate first, then update the table |
 
 ## Baseline: original version + two local patches
@@ -18,10 +18,16 @@ Both engine packages are installed through `pnpm patchedDependencies`:
   host `workingDirectory` service instead of the non-existent `session.cwd`; both endpoints
   of `MV` are confined to the session directory; the `MV` target is created through
   `fs/write-intent` + `createIfAbsent` (never `fs/edit-intent`), and a target that landed
-  without its source being removed is reported as a partial move (ADR-0004).
+  without its source being removed is reported as a partial move (ADR-0004). It also adds
+  the hashline adapter's BOM-preserving read (`FileReader.readTextPreservingBom`: one extra
+  three-byte prefix read plus a closing `stat`/version check; consecutive leading BOMs are
+  refused before any write), and rewrites the model-facing text so the `MV` DEST basis and
+  the non-atomic commit are stated instead of an unconditional "applies atomically".
 - `patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch` — `Patcher.commit` moves the file
   first and only then relocates/records the snapshot, so a rejected or failing move cannot
-  migrate state that never moved (ADR-0004).
+  migrate state that never moved (ADR-0004). Its `SnapshotCommitError` text states only facts
+  that hold at both failure points (disk moved, bookkeeping incomplete, state may be
+  partial, re-read the destination) and never claims which side of the store survived.
 
 On every upgrade:
 
@@ -29,10 +35,10 @@ On every upgrade:
    patch and its `patchedDependencies` entry; if no, redo the patch for the new
    version (never edit `node_modules` by hand).
 2. `pnpm install` — the lockfile's `patch_hash` must change/refresh.
-3. Run `pnpm test:compat` **and** the real-Session directory matrix
-   (`packages/tool-read/tests/integration/working-directory.spec.ts`, part of
-   `pnpm test:integration`). The compat suite alone uses a fabricated Agent and
-   cannot see the cwd regression.
+3. Run `pnpm test:compat` **and** the real-Session matrix
+   (`packages/tool-read/tests/integration/working-directory.spec.ts` and
+   `.../mv-observation.spec.ts`, part of `pnpm test:integration`). The compat suite
+   alone uses a fabricated Agent and cannot see the cwd, MV or BOM regressions.
 
 The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22-ptc-hashline-requirements-spec.md).
 
@@ -64,7 +70,13 @@ filesystem and store, so it pins the engine commit contract without a host:
 |---|---|
 | Failed move | a throwing `fs.move` leaves the source snapshot's text/hash/seen exactly as before the commit and creates no destination snapshot; the in-memory disk is unchanged |
 | Snapshot order | a successful move logs `move` → `relocate` → `record(destination)`; the source snapshot is gone and the destination snapshot has the source's text and seen lines |
-| Snapshot commit fault | a failing `relocate` after a successful move reports `SnapshotCommitError` ("moved on disk … was not committed … must not be used in its place"), leaves the file at the destination, does not move it back, and leaves the source snapshot un-migrated |
+| Snapshot commit fault | a failing `relocate` after a successful move reports `SnapshotCommitError` naming both paths, the incomplete bookkeeping, the possibly-partial state and a re-read of the destination; the file stays at the destination, is not moved back, and this failure point leaves the source snapshot un-migrated |
+| Commit waits for the move (SNAP-R1) | while the move is parked on a barrier nothing is relocated or recorded and the commit has not settled; releasing it logs `move:start` → `move:finish` → `relocate` → `record(destination)` and the same promise then RESOLVES (the observer no longer swallows the outcome) |
+| Record fails after a real relocate (SNAP-R2) | the disk move and the relocation land, the destination keeps the pre-edit version, the error is a named `SnapshotCommitError` with its `cause`, and the message neither denies the move nor claims the source snapshot never migrated |
+
+The wording assertions are semantic (disk moved / bookkeeping incomplete / may be
+partial / re-read the destination / cause preserved), not a fixed sentence, so a
+future rewrite cannot pass by changing its mind about the state.
 
 Not exercised: `PUT N*` block edits. The app chain wires no tree-sitter
 `blockResolver`; an attempt to pin the no-resolver failure hung the suite, so this
@@ -73,3 +85,9 @@ truncation (>512 chars per revealed line) is engine-internal and not driven by
 the read tool; the 40-line reveal cap above is the app-level proxy.
 
 Known permissive paths are asserted as such; they are not "strict guard" passes.
+
+The tool- and PTC-level proofs of the same snapshot fault live outside this suite
+(`SNAP-R3` in `packages/tool-read/tests/integration/mv-observation.spec.ts` and
+`tests/ptc/mv-policy.spec.ts`): they inject one `record` failure on the real
+per-session store's destination key and check the facts both inside the tool result
+and outside the program.

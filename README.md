@@ -14,7 +14,7 @@ canonical `value` carries a content tag the upstream `edit` accepts.
 | `@dsh-tool-hashline/tool-edit` | version anchor for `@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4` |
 | `@dsh-tool-hashline/tool-read` | the complete `read`: mint / window / seen / card / prompt |
 | `presets/ptc-hashline/` | the preset patch plus its persona and watchdog assets |
-| `patches/` | local precise-version patch for `@hy-sde-org/dsh-tool-edit` (effective working directory + MV containment) |
+| `patches/` | two local precise-version patches: `dsh-tool-edit` (effective working directory, MV containment + create intent, partial-move reporting, BOM-preserving hashline read, DEST/commit wording) and `dsh-hashline` (disk move before snapshot migration, truthful snapshot-commit error) |
 
 ## Runtime dependency surface
 
@@ -108,6 +108,27 @@ service instead (and confines both MV endpoints). Read takes the same value, so
 [ADR-0003](./docs/adr/0003-effective-working-directory.md); a clean install MUST
 resolve to the patched package (the lockfile records `patch_hash`).
 
+## Byte fidelity (BOM and line endings)
+
+Hashline edits on a UTF-8 file that starts with a **single** byte-order mark keep
+that marker, the CRLF/LF style and the trailing newline; a file without one never
+gains one. The mechanism: the local provider's decoder consumes one leading BOM
+and does not report it, so the editor adapter reads the hashline text through a
+dedicated BOM-preserving entry that re-attaches the marker from the raw three-byte
+prefix (and re-checks the file version before doing so).
+
+Scope, stated rather than implied:
+
+- One initial BOM, under the **Local** provider as verified at this version. A file
+  with **consecutive** leading BOMs is refused before any write with an explicit
+  message (no silent rewrite, no recovery-based repair); unify read/edit/diff
+  handling for that case before widening this.
+- The BOM-preserving entry is used by hashline mode only. `replace`, `patch`,
+  `apply_patch` and the diff preview keep their previous behavior.
+- The adapter read now costs one extra three-byte range read and one closing
+  `stat`, and REM/noop/recovery/preflight go through the same entry. `read`
+  itself is unchanged: still one `stat` and one `readText`.
+
 ## Reading cost and degradation (read this before using it on big files)
 
 - A valid text read performs **one `stat` and one whole-file `readText`**. There is
@@ -141,15 +162,19 @@ resolve to the patched package (the lockfile records `patch_hash`).
 The two upstream packages are pinned exactly. Change the version in
 `packages/hashline/package.json` and `packages/tool-edit/package.json`, then:
 
-1. Re-check `patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch`. If the new
-   version already reads `workingDirectory` and confines both MV endpoints,
-   delete the patch and its `patchedDependencies` entry; otherwise redo it for
-   the new version (never edit `node_modules` by hand).
-2. `pnpm install` (the lockfile must carry the new `patch_hash`).
+1. Re-check BOTH patches. `dsh-tool-edit`: the new version must read
+   `workingDirectory`, confine both MV endpoints, create the MV target through
+   `write-intent`/`createIfAbsent`, report partial moves, preserve a leading BOM
+   in hashline mode, and state the DEST basis plus the non-atomic commit.
+   `dsh-hashline`: it must move the disk file before migrating the snapshot and
+   report a failed commit without claiming an outcome it cannot prove. If the new
+   version covers all of that, delete the patch and its `patchedDependencies`
+   entry; otherwise redo it for the new version (never edit `node_modules` by hand).
+2. `pnpm install` (the lockfile must carry the new `patch_hash` for both).
 3. `pnpm test:unit && pnpm test:integration && pnpm test:compat` (plus
    `pnpm check:preset` if the preset is touched) **before** switching any daily
    profile.
 
-`tests/compat/README.md` records the baseline as "original version + local patch".
+`tests/compat/README.md` records the baseline as "original version + local patches".
 This release stays `private`; nothing is published and the daily profile is
 untouched.

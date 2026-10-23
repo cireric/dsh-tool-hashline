@@ -1,3 +1,21 @@
+diff --git a/dist/constants.js b/dist/constants.js
+index ad887bd981dca4f6e7fddb8ca254ae5fff02b0dc..8ed3cda5bfda04a24ad857e9d226619efc961c0c 100644
+--- a/dist/constants.js
++++ b/dist/constants.js
+@@ -15,6 +15,13 @@ HEADER FORMS:
+ - PUT >N: — insert body rows after line N (PUT >$: = file tail)
+ - CUT N.=M / CUT N* — delete and capture lines / block; optional @name register
+ - REM — delete section file; MV DEST — move/rename section file
++- PATHS: both the section PATH and a relative MV DEST resolve against the session
++  working directory — NOT against the section file's own directory, and not
++  against the process directory. An existing DEST is never overwritten (the move
++  is refused and both files keep their bytes). To keep the file in a subdirectory,
++  write the full working-directory-relative DEST. Example, cwd = <root>,
++  section = sub/source.txt: "MV moved.txt" lands at <root>/moved.txt, while
++  "MV sub/moved.txt" lands at <root>/sub/moved.txt.
+ - Body rows ONLY below \`:\` headers; row is verbatim +TEXT (leading whitespace preserved).
+   Literal initial dash/plus: \`- item\` → \`+- item\`; \`+ item\` → \`++ item\`.
+ - Numbers are original, never shifted by hunks. Each edit renumbers and changes #TAG.
 diff --git a/dist/hashline/execute.js b/dist/hashline/execute.js
 index 4f967ad089e172e8579e7526807a66c8d4b6f369..8f18c2cd9bd66a07f388d054fe456ecf281c4b81 100644
 --- a/dist/hashline/execute.js
@@ -26,6 +44,24 @@ index 4f967ad089e172e8579e7526807a66c8d4b6f369..8f18c2cd9bd66a07f388d054fe456ecf
          commitClipboard(sectionStates[i], sessionClipboard);
          if (sectionResult.op === 'noop') {
              const { count, escalate } = recordNoopEdit(options.session.sessionKey ?? {}, sectionResult.canonicalPath, inputHash);
+diff --git a/dist/hashline/filesystem.js b/dist/hashline/filesystem.js
+index 1536d5cfeeedd1455cc22510f020c47021091bbb..742c01066c9d54dca1d8321ef0554535ad432c10 100644
+--- a/dist/hashline/filesystem.js
++++ b/dist/hashline/filesystem.js
+@@ -59,7 +59,12 @@ export class EditFilesystem extends Filesystem {
+         const target = await toFsTarget(this.session.reader, relativePath, this.#signal);
+         let content;
+         try {
+-            content = await this.session.reader.readText(target, this.#signal);
++            // The BOM-preserving entry, not the plain one: the patcher derives the
++            // persisted file's BOM from the text it is handed (it has no binary
++            // reader in this adapter), so a decoder that ate the marker has to be
++            // compensated or every hashline write drops it. Same target, same signal,
++            // same underlying reader.
++            content = await this.session.reader.readTextPreservingBom(target, this.#signal);
+         }
+         catch (error) {
+             if (isNotFound(error))
 diff --git a/dist/index.d.ts b/dist/index.d.ts
 index 6894eea634716ad00577c0ec130e14c7d528afb4..e6343c85bc125c1cbc78de6a2837fafc22544bd1 100644
 --- a/dist/index.d.ts
@@ -40,7 +76,7 @@ index 6894eea634716ad00577c0ec130e14c7d528afb4..e6343c85bc125c1cbc78de6a2837fafc
  export interface Config {
      /** Which mode the single `edit` tool runs (default 'hashline': line-anchored patches). */
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e4953366972c02515b088c6659016d33705a..ed3b61c1c393f9db1d2aae632c9ebbd1839f99c6 100644
+index 64c9e4953366972c02515b088c6659016d33705a..e15fb98c844452fe5ea39c7bf67b9ca60dc47fb2 100644
 --- a/dist/index.js
 +++ b/dist/index.js
 @@ -12,7 +12,7 @@ import { executeReplace } from "./replace.js";
@@ -52,11 +88,42 @@ index 64c9e4953366972c02515b088c6659016d33705a..ed3b61c1c393f9db1d2aae632c9ebbd1
  /** Runtime configuration schema for the `edit` tool. */
  export const Config = z.object({
      mode: z.union(['auto', 'hashline', 'replace', 'patch', 'apply_patch']).default('hashline'),
+@@ -246,9 +246,13 @@ function registerEditTool(ctx, config, provider) {
+         order: 102,
+         text: 'Use the edit tool for targeted changes to existing UTF-8 text files. ' +
+             'Read the file first to get its [path#tag] header and line numbers for hashline anchors; ' +
+-            'the tool verifies anchors against that tagged content, applies atomically, and its own reads ' +
++            'the tool verifies anchors against that tagged content and only then commits, and its own reads ' +
+             'satisfy the fs-observation-policy guard in this session. ' +
+-            'The tool runs in a fixed mode (see its description); call it with the argument shape for that mode.',
++            'The tool runs in a fixed mode (see its description); call it with the argument shape for that mode. ' +
++            'Committing is not one atomic step for the whole call: an MV is a two-step move (create the ' +
++            'destination, then delete the source) and a multi-section edit commits section by section, so a ' +
++            'failure can leave earlier work done. Read the error: it names what landed and what did not; ' +
++            'verify both endpoints / the already-written sections before retrying.',
+     });
+     ctx.tools.register(defineTool({
+         name: 'edit',
 diff --git a/dist/session.d.ts b/dist/session.d.ts
-index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..30a637bfca833d02ca6f0788f95251719251ff19 100644
+index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..d318c0e1b3722f7a779a530d4bdb39daa7dfecd4 100644
 --- a/dist/session.d.ts
 +++ b/dist/session.d.ts
-@@ -66,10 +66,13 @@ export interface CreateEditSessionArgs {
+@@ -29,6 +29,14 @@ export interface FileReader {
+     stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined>;
+     /** Full text of the target. Throws when absent. */
+     readText(target: FsTarget, signal?: AbortSignal): Promise<string>;
++    /**
++     * Full text of the target with a single leading UTF-8 BOM restored when the
++     * provider's decoder consumed it. Throws `FS_NOT_FOUND` for an absent target,
++     * `FS_NOT_REGULAR_FILE` for a non-regular one and `FS_STALE_VERSION` when the
++     * target changed between the text read and the prefix probe. Refuses (plain
++     * `Error`, nothing written) a file whose leading BOMs are consecutive.
++     */
++    readTextPreservingBom(target: FsTarget, signal?: AbortSignal): Promise<string>;
+ }
+ /** File mutations through `ctx.fs` (delete/move restricted to the cwd). */
+ export interface FileWriter {
+@@ -66,10 +74,13 @@ export interface CreateEditSessionArgs {
  /** Path containment check used for delete/move — strictly inside `cwd`. */
  export declare function isPathInsideCwd(candidate: string, cwd: string): boolean;
  /**
@@ -74,7 +141,7 @@ index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..30a637bfca833d02ca6f0788f9525171
   * Build the {@link EditSession} closing over one tool call's execution
   * context. `exec` and `ctx` capture everything the harness owns (signal,
 diff --git a/dist/session.js b/dist/session.js
-index 710d8737909b89879e6844b49a79c7c408c9002a..10cad23b01f5229abef52fb7ec2582d40be2297e 100644
+index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412bd0fb620 100644
 --- a/dist/session.js
 +++ b/dist/session.js
 @@ -13,6 +13,7 @@
@@ -128,7 +195,72 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..10cad23b01f5229abef52fb7ec2582d4
      const sandboxPolicy = ctx.fs.sandboxMode === undefined ? undefined : ctx.get('sandboxPolicy');
      const resolveSandbox = () => sandboxPolicy?.resolve({
          ...(exec.agent === undefined ? {} : { session: exec.agent.session }),
-@@ -88,19 +103,70 @@ export function createEditSession(args) {
+@@ -62,6 +77,64 @@ export function createEditSession(args) {
+                 ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec);
+             return content;
+         },
++        /**
++         * Text read that keeps a leading UTF-8 BOM the provider's decoder consumed.
++         *
++         * `ctx.fs.readText` is contractually "the decoded UTF-8 text" and does not
++         * promise to retain the byte-order mark; the Local provider decodes with
++         * `new TextDecoder('utf-8', {fatal: true})`, whose default
++         * `ignoreBOM: false` eats one leading EF BB BF. The hashline patcher then
++         * finds no BOM in the text and — because this adapter defines no
++         * `readBinary` — writes the file back without it, silently dropping the
++         * marker on every hashline PUT/MV.
++         *
++         * This entry re-attaches the marker from the raw prefix so the patcher's own
++         * `stripBom`/`restoreLineEndings` round-trip is byte-faithful. It is a
++         * dedicated capability of the hashline adapter on purpose: `readText` keeps
++         * its old shape for replace/patch/apply_patch and the diff preview.
++         *
++         * Scope: one initial BOM under a provider that consumes exactly one, as
++         * verified for the Local backend. A text that still begins with U+FEFF when
++         * the raw prefix is EF BB BF therefore means consecutive leading markers;
++         * that is refused before any write instead of being guessed at.
++         *
++         * Cost: one extra three-byte range read and one closing `stat` per adapter
++         * read (which is why REM/noop/recovery/preflight pay it too). The three
++         * reads are NOT one atomic snapshot; the version check narrows the window.
++         */
++        async readTextPreservingBom(target, signal) {
++            // Absence and file type are this call's own errors, not the reader's:
++            // a missing target is FS_NOT_FOUND, a non-regular one FS_NOT_REGULAR_FILE.
++            const first = await fs.stat(target, signal);
++            if (first === undefined)
++                throw new FsError(`cannot read "${target.displayPath}": not found`, 'FS_NOT_FOUND');
++            if (first.type !== 'file')
++                throw new FsError(`cannot read "${target.displayPath}": not a regular file`, 'FS_NOT_REGULAR_FILE');
++            const content = await fs.readText(target, signal);
++            const prefix = await fs.readByteRange(target, { offset: 0, length: 3 }, signal);
++            const last = await fs.stat(target, signal);
++            // Anything the provider itself raised (permission, abort, not-text) already
++            // propagated above; these two are this call's own consistency refusals.
++            if (last === undefined)
++                throw new FsError(`cannot read "${target.displayPath}": the file disappeared during the read`, 'FS_STALE_VERSION');
++            if (last.version !== first.version)
++                throw new FsError(`cannot read "${target.displayPath}": the file changed during the read`, 'FS_STALE_VERSION');
++            const hasBom = prefix.length === 3 && prefix[0] === 0xef && prefix[1] === 0xbb && prefix[2] === 0xbf;
++            if (hasBom && content.startsWith('\uFEFF')) {
++                // The provider consumed one marker and the text still starts with one:
++                // the file carries several consecutive BOMs. Restoring a single marker
++                // would rewrite the file's bytes, and staying silent would keep the
++                // mismatch between what the patcher hashed and what is on disk.
++                throw new Error(`Cannot edit "${target.displayPath}": the file starts with consecutive UTF-8 byte-order marks. ` +
++                    'Hashline editing preserves at most one leading BOM; this file was not modified. ' +
++                    'Rewrite the file with a single BOM (or none), then read it again.');
++            }
++            const text = hasBom ? '\uFEFF' + content : content;
++            // Observed only once the read, the consistency check and the support
++            // scope have all passed: a refused read must not claim a success.
++            ctx.emit('fs/observed', target, { kind: 'present', version: first.version }, exec);
++            return text;
++        },
+     };
+     const writer = {
+         async write(target, content, signal) {
+@@ -88,19 +161,70 @@ export function createEditSession(args) {
              await fsp.rm(target.displayPath, { force: false });
          },
          async move(from, to, content, signal) {
@@ -204,7 +336,7 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..10cad23b01f5229abef52fb7ec2582d4
              await fsp.rename(from.displayPath, to.displayPath);
          },
      };
-@@ -121,4 +187,55 @@ export function createEditSession(args) {
+@@ -121,4 +245,55 @@ export function createEditSession(args) {
          writer,
      };
  }

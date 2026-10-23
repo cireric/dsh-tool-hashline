@@ -1,8 +1,8 @@
 diff --git a/dist/patcher.js b/dist/patcher.js
-index 544c20570d2abdcaa20938e86f102210a8a522cb..5775f14ea869ff6c74c2acd313c8203241fb6374 100644
+index 544c20570d2abdcaa20938e86f102210a8a522cb..a0f4396240561be9550c9f33b981a2a027aeb09d 100644
 --- a/dist/patcher.js
 +++ b/dist/patcher.js
-@@ -566,9 +566,25 @@ export class Patcher {
+@@ -566,9 +566,35 @@ export class Patcher {
          const persisted = bom + restoreLineEndings(after, lineEnding);
          if (moveDest !== undefined) {
              const destCanonical = this.fs.canonicalPath(moveDest);
@@ -22,8 +22,18 @@ index 544c20570d2abdcaa20938e86f102210a8a522cb..5775f14ea869ff6c74c2acd313c82032
 +            catch (error) {
 +                // The content IS at the destination now; only the bookkeeping failed.
 +                // Report exactly that and do not attempt an unverified reverse move.
++                //
++                // The wording must stay true for BOTH failure points inside the try:
++                // `relocate` may have thrown before touching the store (source version
++                // intact) or after migrating it, and `record` always throws after the
++                // migration landed. So the message states only what the filesystem
++                // proved - the move happened - plus the one fact that holds in every
++                // case: the bookkeeping did not finish and the store may be partial.
++                // It never claims the source snapshot survived or vanished, and never
++                // claims the destination has no snapshot; it tells the caller to
++                // re-read the destination instead of reusing either side's old tag.
 +                const reason = error instanceof Error ? error.message : String(error);
-+                const failure = new Error(`File moved on disk from "${section.path}" to "${moveDest}", but the hashline snapshot was not committed: ${reason}. The content is at the destination; re-read it before the next anchored edit. The source snapshot was not migrated to the destination and must not be used in its place.`, { cause: error });
++                const failure = new Error(`The file moved on disk from "${section.path}" to "${moveDest}", but the hashline snapshot bookkeeping did not complete: ${reason}. Snapshot state may be partially updated, so do not keep using a tag for either path; re-read the destination before the next anchored edit. The move is not undone.`, { cause: error });
 +                failure.name = 'SnapshotCommitError';
 +                throw failure;
 +            }

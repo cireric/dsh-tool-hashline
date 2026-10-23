@@ -21,9 +21,13 @@
   运行修复（D1 目录 / D2 persona）的实测见 `docs/acceptance/2026-10-23-runtime-fix-acceptance.md`，
   MV 写入意图与快照次序的实测见 `docs/acceptance/2026-10-23-mv-observation-acceptance.md`。
 - 真实策略回归：集成夹具默认挂载 `fs-observation-policy`（`createRealSessionHarness`），
-  MV/REM 矩阵在 `packages/tool-read/tests/integration/mv-observation.spec.ts`（17 例），引擎 commit 次序在
-  `tests/compat/mv-snapshot-order.spec.ts`（3 例），PTC 层在 `tests/ptc/mv-policy.spec.ts`（4 例）；
-  `test:profile` 断言两份补丁在解析产物中生效并跑 read→PUT→read→MV→read→REM。
+  MV/REM 矩阵在 `packages/tool-read/tests/integration/mv-observation.spec.ts`（41 例，含 PATH、BYTES/BOM-01..14、
+  PART-R1、SNAP-R3 与工具文案契约），引擎 commit 次序在 `tests/compat/mv-snapshot-order.spec.ts`（6 例），
+  PTC 层在 `tests/ptc/mv-policy.spec.ts`（5 例，含 SNAP-R3）与 `tests/ptc/ptc.spec.ts`
+  （含"编辑工具说明进入 PTC SDK"的 D3 断言）；
+  `test:profile` 断言两份补丁在解析产物中生效，并跑 read→PUT→read→MV→read→REM，外加 BOM+CRLF 的 PUT/MV
+  字节复查与无 BOM 对照。BOM 的支持范围与受限输入见
+  [新验收记录](./docs/acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)。
 
 ## 硬约束
 
@@ -31,8 +35,11 @@
   两个包都通过 `pnpm patchedDependencies` 打本地补丁：
   - `dsh-tool-edit`：有效工作目录 + MV 两端包含关系（[ADR-0003](./docs/adr/0003-effective-working-directory.md)）
     + MV 目标走 `fs/write-intent`/`createIfAbsent`、部分成功报错与多节"已写/未写"包装
-      （[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)）；
-  - `dsh-hashline`：`Patcher.commit` 先移动磁盘、再迁移快照（[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)）。
+      （[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)）
+    + hashline 适配器专用保 BOM 读取（[ADR-0005](./docs/adr/0005-bom-preserving-hashline-read.md)）
+    + 工具说明里的 MV DEST 基准与"非整次调用原子"表述；
+  - `dsh-hashline`：`Patcher.commit` 先移动磁盘、再迁移快照（[ADR-0004](./docs/adr/0004-mv-create-intent-and-snapshot-order.md)），
+    且 `SnapshotCommitError` 只陈述两端都成立的失败事实。
   升级时先看上游是否已修好，再决定删/重做补丁；不得只改 `node_modules`。
 - 不 fork DSH。read 侧**自建**：`tool-fs.read: false` + `packages/tool-read` 注册完整 `read`。
   装饰器路线已证伪——替换 `content` 对 PTC 无效（程序只拿 `value`），替换 `value` 会被 `createSuccessResult` 按 output schema 重校验（`core/tools/src/index.ts:1840-1843`），而 stock `read` 的 schema 是 `additionalProperties: false`。

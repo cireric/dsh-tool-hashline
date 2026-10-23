@@ -48,6 +48,33 @@ describe('PTC bridge (FR-2/FR-3)', () => {
     expect(sdk).not.toMatch(/tag:\s*unknown/u)
   })
 
+  it('carries the edit tool description into the generated SDK (D3)', async () => {
+    const harness = await createPtcHarness()
+    onTestFinished(() => harness.cleanup())
+    const sdk = (await harness.ctx.systemPrompt.assemble())
+      .sections.find(section => section.name === 'tools:sdk')?.text ?? ''
+
+    // D3 asks for the description the model actually receives, not a scan of the
+    // patch file. In PTC mode that is the SDK's doc comment for `edit`, so the two
+    // product statements must be present there: the MV DEST basis with its nested
+    // example, and the removal of the whole-call atomicity promise.
+    expect(sdk).toContain('PATHS: both the section PATH')
+    expect(sdk).toContain('MV moved.txt')
+    expect(sdk).toContain('<root>/sub/moved.txt')
+    expect(sdk).toMatch(/existing DEST is never overwritten/iu)
+    // The SDK carries the tool DESCRIPTION, not the separate tool:edit prompt
+    // section, so the non-atomic wording is asserted where it actually ships.
+    expect(sdk).not.toMatch(/applies atomically/iu)
+    expect(sdk).not.toMatch(/atomically/iu)
+
+    // Contrast: the prompt section is a different carrier, and it must still hold
+    // the commit semantics. Asserting both keeps a future move between the two
+    // carriers from silently dropping the statement.
+    const prompt = (await harness.ctx.systemPrompt.assemble())
+      .sections.find(section => section.name === 'tool:edit')?.text ?? ''
+    expect(prompt).toMatch(/not one atomic step for the whole call/iu)
+  })
+
   it('exposes every non-mint reason to the program', async () => {
     const harness = await createPtcHarness({ read: { snapshotMaxBytes: 5 } })
     onTestFinished(() => harness.cleanup())
