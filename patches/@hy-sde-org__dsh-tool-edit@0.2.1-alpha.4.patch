@@ -1,0 +1,262 @@
+diff --git a/dist/hashline/execute.js b/dist/hashline/execute.js
+index 4f967ad089e172e8579e7526807a66c8d4b6f369..8f18c2cd9bd66a07f388d054fe456ecf281c4b81 100644
+--- a/dist/hashline/execute.js
++++ b/dist/hashline/execute.js
+@@ -264,7 +264,22 @@ export async function executeHashlineSingle(options) {
+     // failure — the model authored anchors that match the current file content.
+     const rendered = [];
+     for (let i = 0; i < prepared.length; i++) {
+-        const sectionResult = await patcher.commit(prepared[i]);
++        let sectionResult;
++        try {
++            sectionResult = await patcher.commit(prepared[i]);
++        }
++        catch (error) {
++            // Mirror the patcher's own multi-section wrapper. Without it the caller
++            // sees only the failing section's error and cannot tell that earlier
++            // sections already landed — which is exactly what an MV partial move
++            // (target created, source not removed) has to report.
++            const written = prepared.slice(0, i).map(entry => entry.section.path);
++            const notWritten = prepared.slice(i + 1).map(entry => entry.section.path);
++            const message = error instanceof Error ? error.message : String(error);
++            throw new Error(`Failed to write ${prepared[i].section.path}: ${message}`
++                + (written.length > 0 ? ` Sections already written: ${written.join(', ')}.` : '')
++                + (notWritten.length > 0 ? ` Sections not written: ${notWritten.join(', ')}.` : ''), { cause: error });
++        }
+         commitClipboard(sectionStates[i], sessionClipboard);
+         if (sectionResult.op === 'noop') {
+             const { count, escalate } = recordNoopEdit(options.session.sessionKey ?? {}, sectionResult.canonicalPath, inputHash);
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 6894eea634716ad00577c0ec130e14c7d528afb4..e6343c85bc125c1cbc78de6a2837fafc22544bd1 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -16,7 +16,7 @@ import z from '@deepseek-ai/schemastery';
+ import { type EditMode, type ResolvedConfig } from './session.ts';
+ import type { TypeScriptNativeConfig } from './lsp/provider.ts';
+ export declare const name = "tool-edit";
+-export declare const inject: readonly ["tools", "fs", "systemPrompt"];
++export declare const inject: readonly ["tools", "fs", "systemPrompt", "workingDirectory"];
+ /** Runtime configuration for the `edit` tool. */
+ export interface Config {
+     /** Which mode the single `edit` tool runs (default 'hashline': line-anchored patches). */
+diff --git a/dist/index.js b/dist/index.js
+index 64c9e4953366972c02515b088c6659016d33705a..ed3b61c1c393f9db1d2aae632c9ebbd1839f99c6 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -12,7 +12,7 @@ import { executeReplace } from "./replace.js";
+ import { createEditSession } from "./session.js";
+ import { DEFAULT_LSP_COMMAND, createEditLspProvider } from "./lsp/provider.js";
+ export const name = 'tool-edit';
+-export const inject = ['tools', 'fs', 'systemPrompt'];
++export const inject = ['tools', 'fs', 'systemPrompt', 'workingDirectory'];
+ /** Runtime configuration schema for the `edit` tool. */
+ export const Config = z.object({
+     mode: z.union(['auto', 'hashline', 'replace', 'patch', 'apply_patch']).default('hashline'),
+diff --git a/dist/session.d.ts b/dist/session.d.ts
+index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..30a637bfca833d02ca6f0788f95251719251ff19 100644
+--- a/dist/session.d.ts
++++ b/dist/session.d.ts
+@@ -66,10 +66,13 @@ export interface CreateEditSessionArgs {
+ /** Path containment check used for delete/move — strictly inside `cwd`. */
+ export declare function isPathInsideCwd(candidate: string, cwd: string): boolean;
+ /**
+- * The tool working directory: prefer the agent session cwd, else the harness
+- * process cwd.
++ * The tool working directory: the Session's effective directory from the
++ * harness `workingDirectory` owner, else the harness process cwd.
++ *
++ * A DSH Session exposes its origin only as `header.cwd`; the effective
++ * directory is a runtime projection.
+  */
+-export declare function toolCwdFromExec(exec: ToolRunContext): string;
++export declare function toolCwdFromExec(exec: ToolRunContext, ctx?: Context): string;
+ /**
+  * Build the {@link EditSession} closing over one tool call's execution
+  * context. `exec` and `ctx` capture everything the harness owns (signal,
+diff --git a/dist/session.js b/dist/session.js
+index 710d8737909b89879e6844b49a79c7c408c9002a..10cad23b01f5229abef52fb7ec2582d40be2297e 100644
+--- a/dist/session.js
++++ b/dist/session.js
+@@ -13,6 +13,7 @@
+  */
+ import * as fsp from 'node:fs/promises';
+ import * as path from 'node:path';
++import { FsError } from '@deepseek-ai/dsh-fs';
+ import { createWritethrough } from "./lsp/writethrough.js";
+ /** Path containment check used for delete/move — strictly inside `cwd`. */
+ export function isPathInsideCwd(candidate, cwd) {
+@@ -20,13 +21,27 @@ export function isPathInsideCwd(candidate, cwd) {
+     return rel !== '' && !rel.startsWith('..') && !path.isAbsolute(rel);
+ }
+ /**
+- * The tool working directory: prefer the agent session cwd, else the harness
+- * process cwd.
++ * The tool working directory: the Session's effective directory from the
++ * harness `workingDirectory` owner, else the harness process cwd.
++ *
++ * A DSH Session exposes its ORIGIN only as `header.cwd`; the effective
++ * directory is a projection that can change at runtime. Reading `session.cwd`
++ * therefore always missed and silently fell back to the host process directory,
++ * so relative paths and REM/MV resolved against the wrong tree.
++ *
++ * One value per call: {@link createEditSession} uses this single `cwd` for path
++ * resolution, canonical (snapshot) keys, recovery scope, and REM/MV containment.
+  */
+-export function toolCwdFromExec(exec) {
+-    const sessionCwd = exec.agent?.session?.cwd;
+-    if (typeof sessionCwd === 'string' && sessionCwd.length > 0)
+-        return sessionCwd;
++export function toolCwdFromExec(exec, ctx) {
++    const agent = exec.agent;
++    if (agent !== undefined) {
++        const workingDirectory = ctx?.workingDirectory ?? ctx?.get?.('workingDirectory');
++        if (workingDirectory !== undefined && typeof workingDirectory.get === 'function') {
++            const directory = workingDirectory.get(agent.session);
++            if (typeof directory === 'string' && directory.length > 0)
++                return directory;
++        }
++    }
+     return process.cwd();
+ }
+ /**
+@@ -36,7 +51,7 @@ export function toolCwdFromExec(exec) {
+  */
+ export function createEditSession(args) {
+     const { ctx, fs, provider, config, exec } = args;
+-    const cwd = toolCwdFromExec(exec);
++    const cwd = toolCwdFromExec(exec, ctx);
+     const sandboxPolicy = ctx.fs.sandboxMode === undefined ? undefined : ctx.get('sandboxPolicy');
+     const resolveSandbox = () => sandboxPolicy?.resolve({
+         ...(exec.agent === undefined ? {} : { session: exec.agent.session }),
+@@ -88,19 +103,70 @@ export function createEditSession(args) {
+             await fsp.rm(target.displayPath, { force: false });
+         },
+         async move(from, to, content, signal) {
++            // Both endpoints stay inside the session directory for EVERY move shape.
++            // The write-through branch (line edits + MV) used to bypass this check.
++            if (!isPathInsideCwd(from.displayPath, cwd) || !isPathInsideCwd(to.displayPath, cwd)) {
++                throw new Error(`Cannot move ${from.displayPath} to ${to.displayPath}: outside the working directory ${cwd}`);
++            }
++            // Creation is a side effect: a call cancelled before it must not land the target.
++            signal?.throwIfAborted();
+             // Write-through move: probe existence at destination first (non-overwriting).
++            // This stat is also the authoritative absence the create is authorized by.
+             const destInfo = await fs.stat(to, signal);
+             if (destInfo !== undefined) {
+                 throw new Error(`Cannot move ${from.displayPath} to ${to.displayPath}: destination already exists.`);
+             }
+             if (content !== undefined) {
+-                await this.write(to, content, signal);
+-                await this.delete(from, signal);
++                // MV targets a NEW path, so its target write is a write-intent decision,
++                // not an edit-intent one. fs/edit-intent means "mutate a file the model
++                // already saw" and rejects an unseen or absent target (FS_NOT_OBSERVED /
++                // FS_NOT_FOUND) — reusing it made every MV to a new path impossible
++                // under fs-observation-policy. The stat above observed the target as
++                // absent, so record that observation (attributed to this call's session)
++                // and let the write-intent waterfall decide: an unobserved or
++                // confirmed-absent target yields createIfAbsent, exactly what a create
++                // needs. The model does not have to read the destination first.
++                ctx.emit('fs/observed', to, { kind: 'absent' }, exec);
++                const requested = await ctx.waterfall('fs/write-intent', to, exec, () => undefined);
++                if (requested !== undefined && requested.kind !== 'createIfAbsent') {
++                    // A present observation for a target this call just observed absent
++                    // means the file the model saw is gone; documenting that as a
++                    // replace would turn "move" into "overwrite whatever is there now".
++                    throw new FsError(
++                        `Cannot move ${from.displayPath} to ${to.displayPath}: the destination was observed before and now reports ${requested.kind}, not createIfAbsent. Refusing to overwrite it; re-read the destination and choose another path.`,
++                        'FS_STALE_VERSION',
++                    );
++                }
++                // No policy mounted: keep the explicit create condition instead of the
++                // bare provider's unconditional write.
++                const intent = { kind: 'createIfAbsent' };
++                let outcome;
++                try {
++                    // The provider re-checks absence atomically, so a concurrent creator
++                    // wins with FS_NOT_OBSERVED and our content is never published.
++                    outcome = await fs.writeText(to, content, intent, signal, resolveSandbox());
++                }
++                catch (error) {
++                    throw await moveCreateError(error, from, to, fs);
++                }
++                ctx.emit('fs/observed', to, { kind: 'present', version: outcome.version }, exec);
++                // From here the target exists: any failure is a PARTIAL move, reported as
++                // such — never a plain success string and never a blind rollback.
++                try {
++                    signal?.throwIfAborted();
++                }
++                catch (error) {
++                    throw partialMoveError(from, to, 'the call was cancelled before the source was deleted; the source is untouched', error);
++                }
++                try {
++                    await this.delete(from, signal);
++                }
++                catch (error) {
++                    throw partialMoveError(from, to, 'deleting the source failed; its state is unknown (the delete may have landed)', error);
++                }
++                ctx.emit('fs/observed', from, { kind: 'absent' }, exec);
+                 return;
+             }
+-            if (!isPathInsideCwd(from.displayPath, cwd) || !isPathInsideCwd(to.displayPath, cwd)) {
+-                throw new Error(`Cannot move ${from.displayPath} to ${to.displayPath}: outside the working directory ${cwd}`);
+-            }
+             await fsp.rename(from.displayPath, to.displayPath);
+         },
+     };
+@@ -121,4 +187,55 @@ export function createEditSession(args) {
+         writer,
+     };
+ }
++/** The stable FsError codes a provider may raise; anything else degrades to FS_IO_ERROR. */
++const FS_ERROR_CODES = new Set([
++    'FS_NOT_FOUND', 'FS_NOT_DIRECTORY', 'FS_NOT_TEXT', 'FS_NOT_REGULAR_FILE', 'FS_TOO_LARGE',
++    'FS_PERMISSION_DENIED', 'FS_SANDBOX_DENIED', 'FS_IO_ERROR', 'FS_STALE_VERSION',
++    'FS_NOT_OBSERVED', 'FS_AMBIGUOUS_EDIT', 'FS_EDIT_NOT_FOUND', 'FS_ABORTED',
++]);
++/**
++ * Error for a failed create of a MOVED target. `FS_NOT_OBSERVED` from a
++ * `createIfAbsent` create means a concurrent creator won: that is a refusal with
++ * a known state, not an unknown outcome. Any other provider failure is reported
++ * together with the state this call can actually observe (a read-only probe), so
++ * the caller never has to assume both endpoints are unchanged.
++ */
++async function moveCreateError(error, from, to, fs) {
++    const reason = error instanceof Error ? error.message : String(error);
++    const rawCode = error !== null && typeof error === 'object' && typeof error.code === 'string' ? error.code : undefined;
++    // Keep a provider's own FsErrorCode when it has one: FS_SANDBOX_DENIED /
++    // FS_PERMISSION_DENIED are the difference between "your policy refused" and
++    // "the filesystem broke", and wrapping them all as FS_IO_ERROR would erase it.
++    const code = rawCode !== undefined && FS_ERROR_CODES.has(rawCode) ? rawCode : undefined;
++    if (code === 'FS_NOT_OBSERVED') {
++        return new FsError(`Cannot move "${from.displayPath}" to "${to.displayPath}": the destination appeared after this move observed it absent, so it was left untouched. The source still holds its content; re-read the destination and pick another path if that is not the file you meant.`, 'FS_NOT_OBSERVED', { cause: error });
++    }
++    let present;
++    try {
++        present = (await fs.stat(to)) !== undefined;
++    }
++    catch {
++        present = undefined;
++    }
++    const state = present === true
++        ? 'the target exists and its content is unverified'
++        : present === false
++            ? 'the target does not exist'
++            : 'the target state could not be probed';
++    const failure = new FsError(`Move from "${from.displayPath}" to "${to.displayPath}" failed while creating the target: ${reason}. The source was not deleted by this tool; ${state}. Re-check both paths before retrying, and do not delete the destination blindly.`, code ?? 'FS_IO_ERROR', { cause: error });
++    failure.name = 'MoveCreateError';
++    return failure;
++}
++/**
++ * Error for a move whose target was created but whose source removal did not
++ * follow. The target stays: undoing it without verifying ownership could destroy
++ * a file the user meant to keep, so the report names both endpoints, the phase,
++ * the known state and the remedy instead of guessing or retrying.
++ */
++function partialMoveError(from, to, phase, cause) {
++    const reason = cause instanceof Error ? cause.message : String(cause);
++    const failure = new FsError(`Move partly completed: the target "${to.displayPath}" was created from "${from.displayPath}", but the move is not finished — ${phase}. Cause: ${reason}. The target holds the intended content; verify both paths and remove the source yourself only after confirming it is the file you meant to move.`, 'FS_IO_ERROR', { cause });
++    failure.name = 'PartialMoveError';
++    return failure;
++}
+ //# sourceMappingURL=session.js.map

@@ -18,3 +18,7 @@ ignoredBuiltDependencies:
 # We acknowledge esbuild above; keep the install exit code clean instead of
 # failing the gate on a script we have already reviewed.
 strictDepBuilds: false
+
+patchedDependencies:
+  '@hy-sde-org/dsh-hashline@0.2.1-alpha.4': patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch
+  '@hy-sde-org/dsh-tool-edit@0.2.1-alpha.4': patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch

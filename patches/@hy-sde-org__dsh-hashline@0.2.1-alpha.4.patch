@@ -1,0 +1,32 @@
+diff --git a/dist/patcher.js b/dist/patcher.js
+index 544c20570d2abdcaa20938e86f102210a8a522cb..5775f14ea869ff6c74c2acd313c8203241fb6374 100644
+--- a/dist/patcher.js
++++ b/dist/patcher.js
+@@ -566,9 +566,25 @@ export class Patcher {
+         const persisted = bom + restoreLineEndings(after, lineEnding);
+         if (moveDest !== undefined) {
+             const destCanonical = this.fs.canonicalPath(moveDest);
+-            this.snapshots.relocate(canonicalPath, destCanonical);
++            // The disk move authorizes the snapshot migration, never the reverse.
++            // Migrating first left the store describing a move a rejected or
++            // throwing filesystem never performed: the source snapshot was gone,
++            // the destination snapshot existed, and the file was still at the
++            // source. Move first, then migrate.
+             await this.fs.move(section.path, moveDest, persisted);
+-            const fileHash = this.#recordFullSnapshot(destCanonical, after);
++            let fileHash;
++            try {
++                this.snapshots.relocate(canonicalPath, destCanonical);
++                fileHash = this.#recordFullSnapshot(destCanonical, after);
++            }
++            catch (error) {
++                // The content IS at the destination now; only the bookkeeping failed.
++                // Report exactly that and do not attempt an unverified reverse move.
++                const reason = error instanceof Error ? error.message : String(error);
++                const failure = new Error(`File moved on disk from "${section.path}" to "${moveDest}", but the hashline snapshot was not committed: ${reason}. The content is at the destination; re-read it before the next anchored edit. The source snapshot was not migrated to the destination and must not be used in its place.`, { cause: error });
++                failure.name = 'SnapshotCommitError';
++                throw failure;
++            }
+             return {
+                 path: resultPath,
+                 canonicalPath: destCanonical,
