@@ -194,11 +194,18 @@ if (dump.output.includes('ptc-gate')) fail(4, 'composed profile still carries pt
 ok('one ptc-hashline preset, read/edit/watchdog present')
 
 function resolveAsset(pkg, subpath, label) {
-  try {
-    return canonical(requireFromProfile.resolve(subpath === undefined ? pkg : pkg + '/' + subpath))
-  } catch {
-    fail(4, 'cannot resolve ' + label + ' from the profile')
+  // pnpm may finish linking a moment after the command returns on Windows;
+  // retry briefly instead of failing on a transient ENOENT.
+  let lastError
+  for (let attempt = 0; attempt < 10; attempt += 1) {
+    try {
+      return canonical(requireFromProfile.resolve(subpath === undefined ? pkg : pkg + '/' + subpath))
+    } catch (error) {
+      lastError = error
+      Atomics.wait(new Int32Array(new SharedArrayBuffer(4)), 0, 0, 200)
+    }
   }
+  fail(4, 'cannot resolve ' + label + ' from the profile: ' + (lastError instanceof Error ? lastError.message : String(lastError)))
 }
 const bundleManifest = resolveAsset(BUNDLE, 'package.json', 'the bundle manifest')
 const watchdog = resolveAsset(BUNDLE, 'presets/ptc-hashline/intent-gate-watchdog.mjs', 'the watchdog')
