@@ -13,6 +13,7 @@ import type { Context } from '@deepseek-ai/cordis'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import type { GenericCallView, ReadResultView, ToolResult } from '@deepseek-ai/dsh-tools'
 import { FsError } from '@deepseek-ai/dsh-fs'
+import type {} from '@deepseek-ai/dsh-working-directory'
 import { computeFileHash, formatHashlineHeader, getSessionSnapshotStore, normalizeToLF, stripBom } from '@dsh-tool-hashline/hashline'
 import { resolveConfig, type Config, type ResolvedConfig } from './config.ts'
 import { nextActionFor } from './next-action.ts'
@@ -22,7 +23,7 @@ import { snapshotKeys, toolCwd } from './session.ts'
 import { buildReadWindow, parseReadArgs } from './window.ts'
 
 export const name = 'tool-read-hashline'
-export const inject = ['tools', 'fs', 'systemPrompt'] as const
+export const inject = ['tools', 'fs', 'systemPrompt', 'workingDirectory'] as const
 export type { Config }
 
 /** The tool's canonical `value`: everything a PTC program can consume. */
@@ -41,6 +42,21 @@ export interface ReadValue {
   totalLines: number
   /** Actionable guidance when the read is not directly editable, else `null`. */
   nextAction: string | null
+}
+
+/**
+ * The `limit` a replayed call should be rendered with.
+ *
+ * Presentation may run on replay of arbitrary logged args (possibly from an
+ * older schema), so this is total: anything that is not a positive integer no
+ * larger than the deployment cap falls back to the cap instead of throwing.
+ * @param args - raw call arguments (unknown on replay).
+ * @param fallback - the configured line cap.
+ * @returns a positive integer limit.
+ */
+function renderLimit(args: unknown, fallback: number): number {
+  const candidate = typeof args === 'object' && args !== null ? (args as { limit?: unknown }).limit : undefined
+  return typeof candidate === 'number' && Number.isInteger(candidate) && candidate > 0 && candidate <= fallback ? candidate : fallback
 }
 
 /** Stock's system-prompt guidance for `read`, verbatim. */
@@ -97,13 +113,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         },
       },
       render: (args, value) => {
-        let limit = caps.limit
-        try {
-          limit = parseReadArgs(args, caps.limit).limit
-        } catch {
-          // Presentation must never throw on replay of outdated or malformed args.
-        }
-        const truncatedByBytes = byteCappedFromValue(value, limit)
+        const truncatedByBytes = byteCappedFromValue(value, renderLimit(args, caps.limit))
         const body = readBody({ offset: value.offset, lines: value.lines, totalLines: value.totalLines, truncatedByBytes })
         const header = value.tagged && value.tag !== null ? `${formatHashlineHeader(value.path, value.tag)}\n` : ''
         const guidance = value.nextAction === null ? '' : `\n\n${value.nextAction}`
@@ -126,10 +136,19 @@ export function apply(ctx: Context, config: Config = {}): void {
     isConcurrencySafe: () => true,
     async execute(args, exec): Promise<ReadValue> {
       const input = parseReadArgs(args, caps.limit)
+      // Two directories, deliberately not the same thing:
+      //  * resolution follows the deployment's working-directory owner, exactly
+      //    like stock read (a relative `file_path` must open the SESSION's file);
+      //  * the snapshot key stays on tool-edit's algorithm (session.cwd ?? process
+      //    .cwd()), because an edit of the same file must find that exact key.
       const cwd = toolCwd(exec)
+      const resolveCwd = exec.agent === undefined ? undefined : await ctx.workingDirectory.ensure(exec.agent, exec.signal)
       // Exactly one resolve + one stat per call: absence, regular-file check, and
       // the observed version all come from this single observation.
-      const target = await ctx.fs.resolve(input.filePath, { cwd, signal: exec.signal })
+      const target = await ctx.fs.resolve(input.filePath, {
+        ...resolveCwd === undefined ? {} : { cwd: resolveCwd },
+        signal: exec.signal,
+      })
       const info = await ctx.fs.stat(target, exec.signal)
       if (info === undefined) {
         ctx.emit('fs/observed', target, { kind: 'absent' }, exec)

@@ -24,7 +24,7 @@ pnpm check            # build + tsc --noEmit for every package and the root test
 pnpm test             # build + package tests
 pnpm test:unit        # tag/window/config/lang pure functions
 pnpm test:integration # real ToolRuntime + local fs + upstream edit
-pnpm test:ptc         # real run_code dispatch, nullable SDK, intent gate
+pnpm test:ptc         # run_code dispatch via the production PTC bridge (in-process carrier), nullable SDK, intent gate
 pnpm test:compat      # upstream guard/recovery/lifecycle matrix
 pnpm check:preset     # baseline drift, caps equality, resource digests
 pnpm test:profile     # clean profile install + dsh composition + read->edit
@@ -58,7 +58,9 @@ The repository root is the bundle: `package.json` declares
 4. `dsh --profile <name> --dump-config` should show one `ptc-hashline` preset,
    `@dsh-tool-hashline/tool-read`, `@dsh-tool-hashline/tool-edit` and the
    watchdog subpath. `pnpm test:profile` performs exactly this in a throwaway
-   profile.
+   profile. The composition leg needs the `dsh` launcher: it uses `$DSH_CLI` when set,
+   otherwise a sibling `deepseek-harness/apps/cli/lib/bin.js`, and reports a GAP when
+   neither is available.
 
 The preset turns stock `read`/`edit` **off** and mounts this `read` plus the
 upstream `edit`; both tools keep their names (`read`, `edit`) because the gate

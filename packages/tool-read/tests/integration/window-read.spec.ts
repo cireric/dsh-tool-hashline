@@ -124,6 +124,23 @@ describe('window semantics (ticket 02)', () => {
   })
 })
 
+describe('path resolution vs store key (FR-7)', () => {
+  it('opens a relative path in the session working directory while keeping the edit-side key', async () => {
+    const harness = await createHarness()
+    onTestFinished(() => harness.cleanup())
+    await writeFixture(harness.dir, 'relres.txt', 'one\ntwo\n')
+    // Other tests fabricate session.cwd; a real 0.2.1-rc.2 Session exposes only
+    // header.cwd, so the store key falls back to process.cwd() while resolution
+    // must still follow the session's working directory.
+    delete (harness.session as { cwd?: string }).cwd
+    const value = valueOf<ReadValue>(await harness.callRead({ file_path: 'relres.txt' }))
+    expect(value.path).toBe(path.join(harness.dir, 'relres.txt'))
+    const edited = await harness.callEdit({ input: '[' + value.path + '#' + value.tag + ']\nPUT 1.=1:\n+ONE' })
+    expect(edited.isError).toBe(false)
+    expect(await readFixture(path.join(harness.dir, 'relres.txt'))).toBe('ONE\ntwo\n')
+  })
+})
+
 describe('read provider exclusivity (FR-11)', () => {
   const mount = async (readConfig: ToolRead.Config, toolFs: ToolFs.Config, toolFsFirst = false) => {
     const ctx = new Context()
@@ -178,6 +195,16 @@ describe('seen guard from the read window (ticket 02)', () => {
     const retried = await harness.callEdit({ input: `[${value.path}#${value.tag}]\nPUT 8.=8:\n+changed` })
     expect(retried.isError).toBe(false)
     expect((await readFixture(file)).split('\n')[7]).toBe('changed')
+  })
+
+  it('rejects an edit to a line that was only returned truncated ([0] sentinel)', async () => {
+    const harness = await createHarness({ read: { maxLineLength: 5 } })
+    onTestFinished(() => harness.cleanup())
+    const file = await writeFixture(harness.dir, 'clipped.txt', 'abcdefghij\nsecond\n')
+    const value = valueOf<ReadValue>(await harness.callRead({ file_path: file }))
+    expect(value.lines[0]!.text).toBe('abcde... (line truncated to 5 chars)')
+    const rejected = await harness.callEdit({ input: '[' + value.path + '#' + value.tag + ']\nPUT 1.=1:\n+x' })
+    expect(rejected.isError).toBe(true)
   })
 
   it('drops the sentinel when the store is re-recorded without a seen set', async () => {

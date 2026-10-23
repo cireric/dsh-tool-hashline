@@ -23,12 +23,16 @@ const fail = (message) => failures.push(message)
 const PRESET_ID = 'ptc-hashline'
 const BASELINE_COMMIT = '3d8f36eb8def861c3f2aa7d5f7b4983d96c92341'
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': 'ebd083fb4fdfbe1fed2bf9c4996ef7b93729ec816a527866e0d6f5ef3a950125',
-  'intent-gate-watchdog.mjs': '566c462730d9b2569494dc67afe8f3f34ef8e4ea696dee0cb03f014687e69236',
+  'personas/orchestrator.md': '8fafe875d0de79276272c289d54a171aa864f8292682a0f2e9fd632186e7ab86',
+  'intent-gate-watchdog.mjs': '865d4fd5e1a9e663a9c8b3f669349f6f22c283157eb7ef240daa079f979389da',
 }
 const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
 
-const digest = text => createHash('sha256').update(text, 'utf8').digest('hex')
+// Digests are content digests over LF-normalized text: the source project stores
+// these files with CRLF, and a fresh checkout's line endings are a git artifact,
+// not a change to the gate's bytes.
+const normalizeEndings = text => text.replace(/\r\n/gu, '\n')
+const digest = text => createHash('sha256').update(normalizeEndings(text), 'utf8').digest('hex')
 const read = relative => readFileSync(join(repo, relative), 'utf8')
 const parsePatch = relative => {
   const text = read(relative)
@@ -125,13 +129,31 @@ if (JSON.stringify(stripped) !== JSON.stringify(baselineIds)) {
   fail('plugin order/ids differ from the baseline beyond tool-read/tool-edit\n  baseline: ' + baselineIds.join(',') + '\n  ours: ' + oursIds.join(','))
 }
 
-const ALLOWED_CONFIG_DRIFT = new Set(['tool-fs', 'persona', 'intent-gate-watchdog'])
 const baselineById = new Map((baseline.entries[0]?.config?.plugins ?? []).map(entry => [entry?.id, entry]))
+/** Deep copy of a row with selected top-level fields replaced. */
+const withFields = (entry, fields) => ({ ...structuredClone(entry ?? {}), ...fields })
 for (const id of baselineIds) {
-  if (ALLOWED_CONFIG_DRIFT.has(id) || allowedAdded.has(id)) continue
+  if (allowedAdded.has(id)) continue
   const before = baselineById.get(id)
   const after = byId.get(id)
-  if (JSON.stringify(before) !== JSON.stringify(after)) fail('row "' + id + '" changed beyond the allowed deltas')
+  let comparable = after
+  if (id === 'persona') {
+    // Only the resource address may differ; every other persona field must match.
+    comparable = withFields(after, { config: { ...after.config, prefix: before.config?.prefix } })
+  } else if (id === 'intent-gate-watchdog') {
+    // Only the module address may differ; the gate config must match verbatim.
+    comparable = withFields(after, { name: before.name })
+  } else if (id === 'tool-fs') {
+    // Only the three-way delta config may differ.
+    comparable = withFields(after, { config: before.config })
+  }
+  if (JSON.stringify(before) !== JSON.stringify(comparable)) fail('row "' + id + '" changed beyond the allowed deltas')
+}
+
+// §4.1 #2/#3: the two delta rows are INSERTED immediately after tool-fs.
+const toolFsIndex = oursIds.indexOf('tool-fs')
+if (toolFsIndex < 0 || oursIds[toolFsIndex + 1] !== 'tool-read' || oursIds[toolFsIndex + 2] !== 'tool-edit') {
+  fail('tool-read and tool-edit must be inserted immediately after tool-fs')
 }
 for (const id of ['tool-read', 'tool-edit']) {
   if (baselineById.has(id)) fail('row "' + id + '" is not a declared delta (already in baseline)')
@@ -143,7 +165,7 @@ for (const [relative, expected] of Object.entries(EXPECTED_DIGESTS)) {
   const value = readFileSync(path, 'utf8')
   if (digest(value) !== expected) fail(`${relative} digest drifted: ${digest(value)}`)
   const baselineCopy = readFileSync(join(repo, 'preset/baseline', relative.split('/').at(-1)), 'utf8')
-  if (value !== baselineCopy) fail(`${relative} is not byte-identical to preset/baseline/`)
+  if (normalizeEndings(value) !== normalizeEndings(baselineCopy)) fail(`${relative} differs from preset/baseline/`)
 }
 
 // ── report ───────────────────────────────────────────────────────────────────

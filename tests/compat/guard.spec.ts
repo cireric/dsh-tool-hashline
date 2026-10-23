@@ -1,9 +1,26 @@
+import { mkdtempSync, rmSync, symlinkSync } from 'node:fs'
 import { symlink, writeFile } from 'node:fs/promises'
+import * as os from 'node:os'
 import * as path from 'node:path'
 import { describe, expect, it, onTestFinished } from 'vitest'
 import { computeFileHash, getSessionSnapshotStore, normalizeToLF, stripBom } from '@dsh-tool-hashline/hashline'
 import type { ReadValue } from '../../packages/tool-read/src/index.ts'
 import { createHarness, readFixture, valueOf, writeFixture } from '../../packages/tool-read/tests/integration/harness.ts'
+
+/** Whether this platform lets us create a file symlink (Windows needs privilege). */
+const symlinkSupported = (() => {
+  try {
+    const dir = mkdtempSync(`${os.tmpdir()}/dsh-symlink-probe-`)
+    try {
+      symlinkSync('target', `${dir}/link`, 'file')
+      return true
+    } finally {
+      rmSync(dir, { recursive: true, force: true })
+    }
+  } catch {
+    return false
+  }
+})()
 
 const header = (value: ReadValue) => '[' + value.path + '#' + value.tag + ']'
 const textOf = (result: { content: { type: string; text?: string }[] }) =>
@@ -77,17 +94,12 @@ describe('store keys (FR-7)', () => {
     expect(await readFixture(absolute)).toBe('ONE\nTWO\n')
   })
 
-  it('records both keys for a symlinked alias when the platform allows symlinks', async () => {
+  it.skipIf(!symlinkSupported)('records both keys for a symlinked alias', async () => {
     const harness = await createHarness()
     onTestFinished(() => harness.cleanup())
     const target = await writeFixture(harness.dir, 'real.txt', 'one\ntwo\n')
     const alias = path.join(harness.dir, 'alias.txt')
-    try {
-      await symlink(target, alias, 'file')
-    } catch (error) {
-      console.warn('SKIP symlink case: platform refused symlink:', (error as Error).message)
-      return
-    }
+    await symlink(target, alias, 'file')
     const value = valueOf<ReadValue>(await harness.callRead({ file_path: 'alias.txt' }))
     const store = getSessionSnapshotStore(harness.session)
     expect(store.head(path.resolve(harness.dir, 'alias.txt'))?.hash).toBe(value.tag)

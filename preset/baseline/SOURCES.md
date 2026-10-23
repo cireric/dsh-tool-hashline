@@ -10,14 +10,16 @@ The `ptc-hashline` preset reuses the `ptc-gate` gate assets unchanged.
 | Local clone used | `.scratch/dsh-ptc-roles` (development only; not required to build, install or verify) |
 | Baseline patch copy | `preset/baseline/ptc-gate.preset.patch.yml` |
 
-## Resource digests (sha256, bytes)
+## Resource digests (sha256 over LF-normalized text, bytes as copied)
 
 | Resource | sha256 | bytes |
 |---|---|---|
-| `personas/orchestrator.md` | `ebd083fb4fdfbe1fed2bf9c4996ef7b93729ec816a527866e0d6f5ef3a950125` | 11818 |
-| `intent-gate-watchdog.mjs` | `566c462730d9b2569494dc67afe8f3f34ef8e4ea696dee0cb03f014687e69236` | 31480 |
+| `personas/orchestrator.md` | `8fafe875d0de79276272c289d54a171aa864f8292682a0f2e9fd632186e7ab86` | 11818 |
+| `intent-gate-watchdog.mjs` | `865d4fd5e1a9e663a9c8b3f669349f6f22c283157eb7ef240daa079f979389da` | 31480 |
 
-`pnpm check:preset` recomputes both digests and fails on any byte change.
+`pnpm check:preset` recomputes both digests and fails on any content change. The source
+files use CRLF; line endings are normalized before hashing so a git checkout's
+autocrlf setting cannot fail the gate.
 Copies under `preset/baseline/` are the comparison source; they are not loaded by
 the host.
 

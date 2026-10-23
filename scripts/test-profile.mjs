@@ -18,13 +18,20 @@ import { pathToFileURL } from 'node:url'
 import { fileURLToPath } from 'node:url'
 
 const repo = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const dshCli = process.env.DSH_CLI ?? 'D:\\Project\\source\\__TEST__\\deepseek-harness\\apps\\cli\\lib\\bin.js'
+const dshCli = (() => {
+  if (process.env.DSH_CLI) return process.env.DSH_CLI
+  // Portable default: the DSH checkout this workspace sits beside.
+  const sibling = resolve(repo, '..', '..', 'deepseek-harness', 'apps', 'cli', 'lib', 'bin.js')
+  return existsSync(sibling) ? sibling : undefined
+})()
+const gaps = []
 const root = join(repo, '.tmp', 'profile-' + Date.now())
 const home = join(root, 'dsh-home')
 const profileDir = join(home, 'profiles', 'ptc-hashline')
 const failures = []
 const step = message => console.log('== ' + message)
 const fail = message => { failures.push(message); console.error('  x ' + message) }
+const gap = message => { gaps.push(message); console.log('  GAP ' + message) }
 const ok = message => console.log('  ok ' + message)
 
 const PNPM = process.platform === 'win32' ? 'pnpm.cmd' : 'pnpm'
@@ -95,7 +102,9 @@ try {
 
   step('compose the profile with the real dsh launcher (--dump-config)')
   let dump = ''
-  try {
+  if (dshCli === undefined) {
+    gap('dsh CLI not found; set DSH_CLI to <dsh>/apps/cli/lib/bin.js to run the composition check')
+  } else try {
     dump = run(process.execPath, [dshCli, '--profile', 'ptc-hashline', '--dump-config'], { env: { DSH_HOME: home }, timeout: 180_000 })
     ok('dsh --dump-config exited 0')
   } catch (error) {
@@ -203,4 +212,4 @@ if (failures.length > 0) {
   for (const message of failures) console.error('  - ' + message)
   process.exit(1)
 }
-console.log('test:profile OK: clean profile installs the bundle, composes one ptc-hashline preset, resolves read/edit/persona/watchdog, and read->edit lands')
+console.log('test:profile OK: clean profile installs the bundle, composes one ptc-hashline preset, resolves read/edit/persona/watchdog, and read->edit lands' + (gaps.length > 0 ? ` (${gaps.length} gap(s) reported above)` : ''))
