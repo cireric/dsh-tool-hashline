@@ -1,6 +1,6 @@
 # AGENTS.md — dsh-tool-hashline
 
-本仓库是 **脚手架**，不是可用插件。
+本仓库是一个**可构建、可安装的 bundle**（尚未发布、未接入日常 profile）。
 
 ## 入口
 
@@ -11,10 +11,13 @@
 
 ## 当前状态
 
-- `packages/hashline`、`packages/tool-edit` 只是上游 npm 包的版本锚点，没有实现；
-- `packages/tool-read/src/index.ts` 是 stub，目标是**注册一个完整的 `read`**（不接 `tools/post-execute`，原因见规格 FR-3）；
-- 先不要发布，也不要把它挂进日常 profile。
-- 只交付 `ptc-hashline` 一个 preset；首版将锁定基线的 ptc-gate persona/watchdog 原样迁入本 bundle、改资源地址，独立部署不依赖 ptc-roles 原项目。
+- `packages/tool-read` 已是完整实现（mint / 窗口 / seen / 卡片 / 提示），入口为 `dist/index.js`；
+  `packages/hashline`、`packages/tool-edit` 仍是版本锚点。
+- 根包是 bundle：`dsh.bundle.patch` 指向 `preset/ptc-hashline/preset.patch.yml`；迁入的
+  persona/watchdog 逐字保留，来源与摘要见 `preset/baseline/SOURCES.md`。
+- 交付命令：`pnpm build`、`pnpm check`、`pnpm test:unit`、`pnpm test:integration`、
+  `pnpm test:ptc`、`pnpm test:compat`、`pnpm check:preset`、`pnpm test:profile`。
+- 仍不发布、不挂日常 profile；验收口径见 `docs/acceptance/2026-10-23-验收追溯.md`。
 
 ## 硬约束
 
@@ -30,8 +33,10 @@
 
 ```powershell
 pnpm install
-pnpm -r check
-pnpm -r test
+pnpm check
+pnpm test:unit; pnpm test:integration; pnpm test:ptc; pnpm test:compat
+pnpm check:preset
+pnpm test:profile
 ```
 
 ## 参考
