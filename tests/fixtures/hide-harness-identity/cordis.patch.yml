@@ -1,0 +1,55 @@
+# @local/hide-harness-identity — 让模型看到的系统提示词里没有 Harness 品牌
+#
+# 两层改动，顺序不能反：
+#   1. 本 patch 关掉 system-prompt 行的固定开场白（order −1000 的 harness:identity）。
+#   2. index.js 挂一个 system-prompt/assemble 瀑布监听，先按句式把
+#      “You are … powered by / built on …” 这类含品牌的自我介绍句整句换掉，再按 replace
+#      列表擦掉残余品牌字样；覆盖已装配的段落、运行时上下文与工具描述。
+#      句式判定会先用装配变量展开 {{model}} 之类的引用（persona 的第一句就是这种形状），
+#      因为 assemble 瀑布早于 renderPrompt 的插值。
+#      被改写过的运行时上下文会改名成 “<原名>#brand-scrubbed”：agent loop 每个请求前
+#      都会 refreshContext() 重新解析仍有 provider 的 context，不改名就会被原文盖回来。
+#
+# 为什么第 1 层必须在第 2 层之前：只做字符串替换会把
+#   “You are an AI agent powered by DeepSeek Harness.”
+# 改成 “You are an AI agent powered by <另一个品牌>.”——仍是一句自我介绍 + 品牌。
+# 上游判据认的正是这个句式，所以先整句去掉，再擦残留。
+#
+# 1.4.0 起不再在 agent 作用域注册同名 deployment:persona-prefix。那一层会在
+# SystemPrompt.assemble 的 scope 合并阶段整段遮蔽 preset persona（Phase 0、六桶、
+# 委派/验收规则一起消失），而瀑布监听拿不到已经被合并掉的段落。persona 归 preset 所有；
+# 旧配置里的 text / complete 会在加载时被显式拒绝，而不是静默失效。
+#
+# personaPrefix 只影响“没有 preset persona”的装配路径；preset 作用域的同名段落仍然盖过它。
+#
+# 本行 config 由 index.js 的 Config（Standard Schema）校验：形状写错会在加载时
+# 报错，而不是静默回落默认值。
+#
+# 回滚：插件页禁用或卸载本 bundle，两层一起消失。
+
+- id: system-prompt
+  name: '@deepseek-ai/dsh-system-prompt'
+  config:
+    includeHarnessIdentity: false
+    personaPrefix: >-
+      You are a helpful assistant.
+
+- insert:
+    - id: hide-harness-identity
+      name: '@local/hide-harness-identity'
+      config:
+        # 自我介绍句被整句换成这句（You are … powered by / built on …）。
+        neutralText: You are a helpful AI assistant.
+        # 只对含这些品牌名的自我介绍句生效；留空＝不做句式改写。
+        # 默认只认 DeepSeek/Harness 一家，别的厂商的自我介绍不碰。
+        brands: ['DeepSeek Harness', 'DeepSeek', 'Harness']
+        # 句式改写之后仍残留的品牌字样，按顺序处理；to 留空＝删掉这个词。
+        # 默认只删 "DeepSeek Harness" 这个词组，不换成别的品牌——换品牌会把提示词
+        # 继续写成「第三方客户端的自我介绍」，也会把无关模型一起改名。
+        # 注意 `DSH` 故意不在列表里：`$env:DSH_*`、`window.__DSH_BOOT__` 是真实
+        # 变量名，改成别的会让模型照着错的变量名去找。要换/删请自己加一条。
+        replace:
+          - from: DeepSeek Harness
+            to: ''
+        # 是否连工具描述一起改写。默认 true；设为 false 时只改段落与运行时上下文。
+        scrubTools: true
