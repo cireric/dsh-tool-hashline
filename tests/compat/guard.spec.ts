@@ -243,6 +243,19 @@ describe('cross-session and eviction are known permissive paths (R-7)', () => {
   })
 })
 
+describe('block edits without a resolver (FR-7 baseline)', () => {
+  it('rejects PUT N* with a clear unresolved-block message', async () => {
+    const harness = await createHarness()
+    onTestFinished(() => harness.cleanup())
+    const file = await writeFixture(harness.dir, 'block.txt', 'function f() {\n  return 1\n}\n')
+    const value = valueOf<ReadValue>(await harness.callRead({ file_path: file }))
+    const result = await harness.callEdit({ input: header(value) + '\nPUT 1*:\n+function f() { return 2 }' })
+    expect(result.isError).toBe(true)
+    expect(result.error?.message ?? '').toMatch(/block/iu)
+    expect(await readFixture(file)).toBe('function f() {\n  return 1\n}\n')
+  })
+})
+
 describe('REM has no line anchor (FR-7)', () => {
   it('deletes the file without consuming the seen guard', async () => {
     const harness = await createHarness()

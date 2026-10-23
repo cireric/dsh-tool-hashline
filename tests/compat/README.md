@@ -29,11 +29,12 @@ The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22
 | Cross-session | another session edits with a tag minted here (silent guard skip — known permissive) |
 | Eviction | a path evicted from the bounded store loses its guard; the edit applies |
 | REM | deletes the file without a line anchor and without consuming the seen guard |
+| Block without a resolver | `PUT N*` is rejected with a clear unresolved-block message and the file is unchanged (the app chain wires no tree-sitter resolver) |
 | Engine identity | `tests/unit/engine-identity.spec.ts` — one physical hashline module for read and edit |
 
-Not exercised here: `PUT N*` block edits (the app chain wires no tree-sitter
-`blockResolver`, so block spans are unavailable); `FR-7`'s block boundary is
-therefore reported as an unexecuted gap rather than a pass. Error-reveal column
+Block editing with a resolver is not exercised (the app chain wires no tree-sitter
+`blockResolver`); the no-resolver rejection above is the pinned baseline, not
+proof of FR-7's block-span semantics. Error-reveal column
 truncation (>512 chars per revealed line) is engine-internal and not driven by
 the read tool; the 40-line reveal cap above is the app-level proxy.
 
