@@ -190,8 +190,10 @@ if (dump.code !== 0) fail(4, 'dsh --dump-config failed:\n' + dump.output)
 for (const needle of ['ptc-hashline', '@dsh-tool-hashline/tool-read', '@dsh-tool-hashline/tool-edit', 'intent-gate-watchdog']) {
   if (!dump.output.includes(needle)) fail(4, 'composed profile is missing ' + needle)
 }
-if (dump.output.includes('ptc-gate')) fail(4, 'composed profile still carries ptc-gate')
-ok('one ptc-hashline preset, read/edit/watchdog present')
+// Profiles may provide other selectable presets (for example, ptc-gate from
+// dsh-ptc-roles). The install target is the presence of this bundle's preset;
+// users choose PTC Hashline Mode in a new session after restarting the host.
+ok('ptc-hashline preset, read/edit/watchdog present')
 
 function resolveAsset(pkg, subpath, label) {
   // pnpm may finish linking a moment after the command returns on Windows;
