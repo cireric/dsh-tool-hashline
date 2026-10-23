@@ -48,3 +48,25 @@
 
 headless 路线被事实 1 直接排除；Web 路线的剩余未知集中在 typert/web 客户端的会话语义（创建、
 发消息、等待 idle）与 mock SSE 帧格式。这需要一轮专门的实现与调试，不适合在本次收尾里仓促拼装。
+
+## 路径 A 的实现锚点（2026-10-23 追加）
+
+已确认 registry 暴露了不经过 Web UI 的挂载入口：
+
+```ts
+// packages/preset/agent-preset-registry/src/index.ts:373
+async acquireScope(id?: string): Promise<{ key: ScopeKey } & AsyncDisposable>
+```
+
+因此 A 的驱动不必是 Web 客户端：可以在临时 profile 的用户层（`cordis.patch.yml`）挂一个
+**host 测试插件**，由它：
+
+1. `const scope = await ctx.get('agentPresets').acquireScope('ptc-hashline')`；
+2. 用该 `scope.key` 创建 agent（与 session-controller 的 composeAgent 同一把 key），把工作目录指向
+   临时目录；
+3. `agent.followup(...)` 发送任务，监听 `agent/status` 到 idle；
+4. 把会话事件与磁盘结果写到 JSON，退出进程。
+
+模型侧仍用 `DEEPSEEK_BASE_URL` 指向本地 Messages mock（`BASE_URL_ENV`，`llm-deepseek/src/config.ts:118,300`）。
+剩余未知：agent 创建 API 接受 scope key 的确切字段，以及 mock SSE 帧格式（优先用已发布的
+`@deepseek-ai/dsh-llm-mock-server`，避免手写帧）。这两点确定后即可把 A 落成 `pnpm test:host`。
