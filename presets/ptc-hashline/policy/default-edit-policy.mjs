@@ -237,6 +237,43 @@ export function createPolicy({ ctx, config }) {
     return { target, info }
   }
   /**
+   * Classify ONE planned entry by what it does to the real file.
+   *
+   * The classification is measured, not inferred from the op name: an `update`
+   * that finds a missing or empty target is a creation case, a `create` that
+   * finds existing non-empty content is a content update, and a pure delete or
+   * move (no diff) is an exception that never needs Hashline. The result decides
+   * whether the default policy applies at all.
+   * @param {{cwd: string, entry: object, signal: AbortSignal | undefined}} context classification context
+   * @returns {Promise<string>} 'content-update' | 'exception' | 'unknown'
+   */
+  const classifyEntry = async context => {
+    const { cwd, entry, signal } = context
+    const op = entry?.op
+    if (typeof entry?.path !== 'string' || entry.path.trim() === '') return 'unknown'
+    if (op === 'delete' || op === 'rename') return 'exception'
+    // A patch entry with no diff is not an update of any content.
+    if (entry.hasDiff === false) return 'exception'
+    const target = await ctx.fs.resolve(entry.path, signal === undefined ? { cwd } : { cwd, signal })
+    const info = await ctx.fs.stat(target, signal)
+    const missing = info === undefined
+    if (op === 'create') {
+      if (missing) return 'exception'
+      if (info.type !== 'file') return 'unknown'
+      const text = await ctx.fs.readText(target, signal)
+      // `create` over existing NON-EMPTY content is an overwrite, i.e. a content
+      // update; over an empty file it is the creation exception.
+      return text.length === 0 ? 'exception' : 'content-update'
+    }
+    if (op === 'update' || op === undefined) {
+      if (missing) return 'exception'
+      if (info.type !== 'file') return 'unknown'
+      const text = await ctx.fs.readText(target, signal)
+      return text.length === 0 ? 'exception' : 'content-update'
+    }
+    return 'unknown'
+  }
+  /**
    * Verify a `snapshot-limit` fallback against the read it cites.
    *
    * Every clause is a fact this process measured; none of them comes from the
@@ -370,7 +407,7 @@ export function createPolicy({ ctx, config }) {
    * @returns {Promise<void>} resolves when the citation is a real user message
    */
   const verifyUserOverride = async context => {
-    const { session, cwd, fallback, targetPath, signal, mode } = context
+    const { session, cwd, fallback, targetPath, signal, mode, emptyTarget } = context
     const source = fallback.userSource
     const events = typeof session.snapshotEvents === 'function' ? session.snapshotEvents() : undefined
     if (events === undefined) {
@@ -516,35 +553,60 @@ export function createPolicy({ ctx, config }) {
         }
         return
       }
-      if (fallbacks.length === 0) {
-        throw new EditPolicyError(
-          'EDIT_POLICY_FALLBACK_REQUIRED',
-          'this request is an ordinary ' + mode + ' content update, which the default edit policy does not allow without a declared degradation. Use Hashline (input with [path#tag] from your latest read) instead; if the target genuinely cannot be edited with Hashline, declare fallbacks with one of ' + reasonList() + ' and its evidence. Nothing was written.',
-        )
-      }
-      const targets = requestTargets(mode, args)
-      if (targets.length === 0) {
+      // Classification comes FIRST: a creation, an empty-file fill, a pure delete
+      // or a pure move is an exception that never needs a degradation, so a
+      // missing fallbacks field only matters for a real content update.
+      const plan = Array.isArray(request.plan) ? request.plan : []
+      if (plan.length === 0) {
         throw new EditPolicyError(
           'EDIT_POLICY_TARGET_UNKNOWN',
           'this ' + mode + ' request does not name a target this policy can resolve, so no fallback can be matched to it. Name the file with `path`, or use a Hashline program. Nothing was written.',
         )
       }
-      if (targets.length > 1) {
-        throw new EditPolicyError(
-          'EDIT_POLICY_TARGET_UNKNOWN',
-          'this request names ' + targets.length + ' targets (' + targets.join(', ') + '); a degraded update is verified one target at a time and mixed requests are not supported by this build yet. Use Hashline for the batch, or split the degraded target out. Nothing was written.',
-        )
+      // EVERY entry is classified and, when it is a content update, verified
+      // BEFORE the first write. One exception never unlocks the rest, and a single
+      // refusal stops the whole request while nothing has landed yet.
+      const constrained = []
+      for (const entry of plan) {
+        const kind = await classifyEntry({ cwd, entry, signal: exec.signal })
+        if (kind === 'content-update') constrained.push(entry)
+        else if (kind === 'unknown') {
+          throw new EditPolicyError(
+            'EDIT_POLICY_TARGET_UNKNOWN',
+            'the request touches "' + entry.path + '" in a shape this policy cannot classify (' + String(entry.op) + '), so it cannot decide whether Hashline is required. Nothing was written.',
+          )
+        }
       }
-      const targetPath = targets[0]
-      // The declared fallback must cover the target this call actually updates.
-      const matching = fallbacks.filter(fallback => fallback.path === targetPath)
-      if (matching.length !== 1) {
+      const byPath = new Map()
+      for (const entry of constrained) {
+        const key = entry.path
+        byPath.set(key, (byPath.get(key) ?? 0) + 1)
+      }
+      for (const [path, count] of byPath) {
+        const matching = fallbacks.filter(fallback => fallback.path === path)
+        if (matching.length === 0) {
+          throw new EditPolicyError(
+            'EDIT_POLICY_FALLBACK_REQUIRED',
+            'the request updates existing non-empty content of "' + path + '" ' + (count > 1 ? '(' + count + ' entries) ' : '') + 'without a declared degradation. Use Hashline (input with [path#tag] from your latest read) for it, or declare a fallback with one of ' + reasonList() + ' and its evidence. Nothing was written.',
+          )
+        }
+        if (matching.length > 1) {
+          throw new EditPolicyError(
+            'EDIT_POLICY_FALLBACK_UNUSED',
+            'the request declares ' + matching.length + ' fallbacks for "' + path + '". Declare exactly one fallback per updated target. Nothing was written.',
+          )
+        }
+        await verifyReason({ session, cwd, fallback: matching[0], targetPath: path, signal: exec.signal, mode })
+      }
+      // A fallback that no constrained target needs would be an unused declaration:
+      // it must not sit there as an implicit unlock for a later call.
+      const unused = fallbacks.filter(fallback => !byPath.has(fallback.path))
+      if (unused.length > 0) {
         throw new EditPolicyError(
           'EDIT_POLICY_FALLBACK_UNUSED',
-          'the request updates "' + targetPath + '" but declares ' + matching.length + ' fallback(s) for it. Declare exactly one fallback per updated target, and none for targets the call does not touch. Nothing was written.',
+          'the request declares a fallback for ' + unused.map(fallback => '"' + fallback.path + '"').join(', ') + ', which is not an existing non-empty content update in this request (it is a creation, deletion or move exception). Remove the fallback. Nothing was written.',
         )
       }
-      await verifyReason({ session, cwd, fallback: matching[0], targetPath, signal: exec.signal, mode })
     },
     /**
      * Re-check one target right before its side effect.

@@ -98,7 +98,7 @@ index 6894eea..be28691 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e49..529fd3a 100644
+index 64c9e49..ad637b4 100644
 --- a/a/dist/index.js
 +++ b/dist/index.js
 @@ -1,5 +1,6 @@
@@ -137,17 +137,63 @@ index 64c9e49..529fd3a 100644
      };
  }
  // ═══════════════════════════════════════════════════════════════════════════
-@@ -228,6 +231,9 @@ function requirePath(args) {
+@@ -228,6 +231,55 @@ function requirePath(args) {
          throw new Error('Parameter `path` is required and must be a string');
      return value;
  }
++/**
++ * Describe one request as the targets it will actually touch.
++ *
++ * The policy classifies operations from THIS, never from payload text:
++ * `apply_patch` is expanded by the upstream parser and `patch` is the entry
++ * array the editor will execute, so the create/delete/update/rename decision is
++ * the one the engine will make.
++ * @param mode - the dispatched mode.
++ * @param args - validated call arguments.
++ * @returns the per-target plan, or an empty list when it cannot be described.
++ */
++function describeRequest(mode, args) {
++    if (mode === 'replace') {
++        const path = resolvePathArg(args);
++        return path === undefined ? [] : [{ path, op: 'update', hasDiff: true }];
++    }
++    if (mode === 'patch') {
++        const path = resolvePathArg(args);
++        const edits = Array.isArray(args.edits) ? args.edits : [];
++        if (path === undefined)
++            return [];
++        return edits.map(entry => ({
++            path,
++            op: entry?.op === 'create' || entry?.op === 'delete' ? entry.op : 'update',
++            ...(typeof entry?.rename === 'string' ? { rename: entry.rename } : {}),
++            hasDiff: typeof entry?.diff === 'string',
++        }));
++    }
++    if (mode === 'apply_patch') {
++        const input = typeof args.input === 'string' ? args.input : '';
++        try {
++            return expandApplyPatchToEntries({ input }).map(entry => ({
++                path: entry.path,
++                op: entry.op === 'create' || entry.op === 'delete' ? entry.op : 'update',
++                ...(typeof entry.rename === 'string' ? { rename: entry.rename } : {}),
++                hasDiff: typeof entry.diff === 'string',
++            }));
++        }
++        catch {
++            // A malformed envelope is the engine's own error to report; an empty plan
++            // makes the policy refuse for lack of a describable target.
++            return [];
++        }
++    }
++    return [];
++}
 +/** Model-facing description of the declared-degradation field (SRS FR-03/FR-06). */
 +const FALLBACK_SCHEMA_DESCRIPTION = 'Declared degradation for an ordinary content update. Only present when this registration mounts a default-edit policy; a Hashline edit must omit it. Each entry binds ONE target to ONE reason: snapshot-limit (the target is at or above the snapshot byte ceiling and cannot be tagged), window-limit (the content this update needs is cut by the column or byte cap and paging cannot supply it), or user-override (the user explicitly asked for this target and mode). Every entry is verified against real evidence; a legal reason whose check is unavailable is refused with a gap instead of being allowed.';
 +
  /** Whether an error is the fs layer's concurrent-mutation refusal. */
  export function isStaleVersionError(error) {
      if (error instanceof FsError)
-@@ -239,17 +245,45 @@ export function isStaleVersionError(error) {
+@@ -239,17 +291,45 @@ export function isStaleVersionError(error) {
   * @param ctx - the plugin context; registrations are effects scoped to it.
   * @param config - resolved runtime configuration.
   */
@@ -196,7 +242,7 @@ index 64c9e49..529fd3a 100644
      ctx.tools.register(defineTool({
          name: 'edit',
          description,
-@@ -262,6 +296,48 @@ function registerEditTool(ctx, config, provider) {
+@@ -262,6 +342,48 @@ function registerEditTool(ctx, config, provider) {
              replace_all: { type: 'boolean', description: REPLACE_SCHEMA_DESCRIPTIONS.replace_all },
              edits: { type: 'array', description: PATCH_SCHEMA_DESCRIPTIONS.edits },
              input: { type: 'string', description: `${APPLY_PATCH_SCHEMA_DESCRIPTIONS.input}. ${HASHLINE_SCHEMA_DESCRIPTIONS.input}` },
@@ -245,7 +291,7 @@ index 64c9e49..529fd3a 100644
          },
          output: {
              schema: { type: 'string' },
-@@ -292,6 +368,12 @@ function registerEditTool(ctx, config, provider) {
+@@ -292,6 +414,12 @@ function registerEditTool(ctx, config, provider) {
              try {
                  const mode = dispatchMode(resolved, args);
                  const record = args;
@@ -254,11 +300,11 @@ index 64c9e49..529fd3a 100644
 +                // disk yet. A registration without a policy module keeps the upstream
 +                // behavior exactly (no field, no check, no extra I/O).
 +                if (policy !== undefined)
-+                    await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx) });
++                    await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx), plan: describeRequest(mode, record) });
                  const run = () => {
                      switch (mode) {
                          case 'replace':
-@@ -307,9 +389,12 @@ function registerEditTool(ctx, config, provider) {
+@@ -307,9 +435,12 @@ function registerEditTool(ctx, config, provider) {
                      }
                  };
                  try {
@@ -272,7 +318,7 @@ index 64c9e49..529fd3a 100644
                      // A concurrent mutation between the executor's read and its guarded
                      // write aborts the WHOLE edit before anything lands (the write is
                      // the single side effect), so re-running once is safe for replace
-@@ -341,12 +426,78 @@ function registerEditTool(ctx, config, provider) {
+@@ -341,12 +472,78 @@ function registerEditTool(ctx, config, provider) {
          presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
      }));
  }
@@ -352,7 +398,7 @@ index 64c9e49..529fd3a 100644
      const resolved = resolveConfig(config);
      if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
          throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
-@@ -359,6 +510,10 @@ export function apply(ctx, config) {
+@@ -359,6 +556,10 @@ export function apply(ctx, config) {
          ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
      });
      ctx.effect(() => () => { void provider.dispose(); });

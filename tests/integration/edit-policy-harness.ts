@@ -24,7 +24,7 @@
  * @module dsh-tool-hashline/tests/integration/edit-policy-harness
  */
 
-import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
+import { mkdtemp, readFile, realpath, rm, writeFile } from 'node:fs/promises'
 import * as fsp from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
@@ -183,7 +183,12 @@ const writeFixture = async (dir: string, name: string, text: string): Promise<st
  * @returns the harness; call `cleanup` when done.
  */
 export async function createPolicyHarness(options: PolicyHarnessOptions = {}): Promise<PolicyHarness> {
-  const dir = await mkdtemp(path.join(os.tmpdir(), 'dsh-hashline-policy-'))
+  // Resolve the temp directory through realpath BEFORE mounting: on macOS the
+  // /var -> /private/var alias otherwise makes the session cwd and every resolved
+  // target spell the same directory differently, which breaks the editor's
+  // containment check for REM/MV for reasons that have nothing to do with this
+  // repository's code.
+  const dir = await realpath(await mkdtemp(path.join(os.tmpdir(), 'dsh-hashline-policy-')))
   const events: { type: string; data: unknown }[] = []
   const session = {
     id: 'policy-' + Math.random().toString(36).slice(2),
