@@ -28,7 +28,7 @@ import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promise
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { replayRoute } from './context.mjs'
-import { clip, firstLineOf, textOfBlocks } from './text.mjs'
+import { clip, firstLineOf, isUserMessage, textOfBlocks } from './text.mjs'
 
 /** Report identity written into every bundle. */
 export const INCIDENT_TOOL = 'ptc-hashline-operations-incident'
@@ -416,7 +416,7 @@ export function buildIncident(options) {
     counts.severities[event.severity] = (counts.severities[event.severity] ?? 0) + 1
   }
 
-  const lastUser = [...inScope].reverse().find((record) => record.type === 'user/message' && record.data?.source?.kind === 'user')
+  const lastUser = [...inScope].reverse().find((record) => isUserMessage(record))
   const conversation = {
     lastUserMessage: lastUser === undefined ? null : { seq: lastUser.seq, firstLine: clip(redactText(firstLineOf(textOfBlocks(lastUser.data?.content)), { home }), 240) },
   }

@@ -17,6 +17,20 @@ export function clip(value, limit) {
   return typeof value !== 'string' ? value : value.length <= limit ? value : value.slice(0, limit) + '…'
 }
 
+/**
+ * Whether one decoded record is the USER'S OWN message.
+ *
+ * One predicate in one place: the incident bundle reports the session's last
+ * user message and the upgrade consent quotes the user's reply, and both must
+ * agree on what counts. An agent message, a tool result and another session's
+ * text are all something else.
+ * @param {object} record a decoded session record
+ * @returns {boolean} true when the record is a user-authored message
+ */
+export function isUserMessage(record) {
+  return record?.type === 'user/message' && record?.data?.source?.kind === 'user'
+}
+
 /** Concatenate the text blocks of one message body. */
 export function textOfBlocks(blocks) {
   return Array.isArray(blocks) ? blocks.filter((block) => block?.type === 'text').map((block) => block.text ?? '').join('\n') : ''

@@ -161,6 +161,29 @@ standing in for the registry.
   pre-release or branch head could still hide something newer), an unready bound
   dependency defers even when the baseline cannot be compared, and a write
   failure reports `incomplete` (exit 2) rather than a usage error.
+- `operations-upgrade-proposal-consent.spec.ts` — UPG-03/05/06/07 and SCOPE-06's
+  execution branch. The proposal is built from a REAL `upgrade assess` run, so
+  the freshness rule is measured against the collection the proposal re-runs:
+  every required field lands in `proposal.json` (id/hash, exact baseline and its
+  hash, candidate combination, reasons with their upstream sources, per-item
+  patch decisions, change set, candidate directory — named, never created —,
+  declared-only verification commands, scope, risks, stop conditions, rollback),
+  the candidate directory stays outside the worktree, and neither assess nor
+  incident ever produces a proposal or a consent. The id is
+  `<stamp>-<hash[0..12]>`: the same bound inputs hash the same, and any change to
+  the candidates, target, scope, patch decisions, verification list or baseline
+  (committed AND uncommitted input) is another payload in another directory. An
+  assessment that is not `recommend-candidate` with a recommended component, a
+  missing assessment, and an evidence directory inside the worktree all stop with
+  exit 2 and write nothing. Consent is a record, not an execution: with no record
+  the status stays `pending`; an approval defaults to candidate validation only
+  (`switch: false`), an explicit `--scope validation-and-switch` grants both
+  phases, a rejection stores an empty scope, records are append-only, and a quote
+  this session never wrote, a stale `proposalHash`, a drifted baseline, a moved
+  target, an approval carried over from another hash and an assisted (subagent)
+  session are all refused with nothing recorded. `--yes`, `--approved`, `--auto`,
+  an empty reply and unknown flags exit 3 through the real CLI. The maintenance
+  worktree is byte-identical afterwards.
 - `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
   install into an unrelated project, and resolution + execution from a foreign
   working directory. An engine the install does not carry reports `unknown`,
