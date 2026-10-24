@@ -34,6 +34,8 @@ export interface PtcHarnessOptions {
   stockRead?: boolean
   /** Mount the production observation policy. Defaults to true. */
   policy?: boolean
+  /** Mount the default-edit policy on the editor by pointing it at a module address. */
+  policyModule?: string
 }
 
 export interface PtcHarness {
@@ -77,7 +79,10 @@ export async function createPtcHarness(options: PtcHarnessOptions = {}): Promise
   const runtime = new ToolRuntime(ctx, { mode: 'ptc' })
   await ctx.plugin(InProcessPtcRuntime)
   await ctx.plugin(ToolRead, options.read ?? {})
-  await ctx.plugin(ToolEdit, { mode: 'auto' })
+  await ctx.plugin(ToolEdit, {
+    mode: 'auto',
+    ...options.policyModule === undefined ? {} : { contentPolicyModule: options.policyModule },
+  })
   if (options.watch === true) await ctx.plugin(Watchdog as never, { gate: 'enforce' } as never)
 
   let calls = 0

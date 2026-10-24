@@ -88,6 +88,11 @@ export interface PolicyHarnessOptions {
   race?: boolean
   /** Restrict the competing write to targets whose path ends with this string. */
   raceOn?: string
+  /**
+   * Mount the default-edit policy on the editor registration by pointing
+   * `contentPolicyModule` at a module address. Omitted = the upstream editor.
+   */
+  policyModule?: string
 }
 
 export interface PolicyHarness {
@@ -117,6 +122,15 @@ export interface PolicyHarness {
   fsRealmMatchesHost: boolean
   /** Whether every `fs/edit-intent` listener is untagged (host plane, no scope). */
   intentOwnedByHostPlane: boolean
+  /**
+   * Dispose the preset scope and mount the same rows into a FRESH scope.
+   *
+   * This is the only way a test can prove that unmounting drops the policy's
+   * state: the registration (and therefore its policy instance) is destroyed
+   * and rebuilt, so anything a stale instance remembered would show up here.
+   * @returns the new scope's key, for `schemas()`.
+   */
+  remount(): Promise<object | undefined>
   callTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
   /** `read` through the registry. */
   read(file_path: string): Promise<ToolExecutionResult>
@@ -174,11 +188,20 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
   }
 
   // The agent preset lives in its own scope, exactly as the preset registry mounts it.
-  const scope = createScope(root, agent)
+  let scope = createScope(root, agent)
   ;(agent as unknown as { ctx: Context }).ctx = scope.ctx
-  await scope.ctx.plugin(ToolRead, {})
-  await scope.ctx.plugin(ToolEdit, { mode: 'auto', formatOnWrite: false, diagnosticsOnEdit: false })
-  if (options.stockWrite === true) await scope.ctx.plugin(ToolFs, { read: false, edit: false })
+  /** Mount the preset's rows into one agent scope (also used by the remount case). */
+  const mountRows = async (target: Context): Promise<void> => {
+    await target.plugin(ToolRead, {})
+    await target.plugin(ToolEdit, {
+      mode: 'auto',
+      formatOnWrite: false,
+      diagnosticsOnEdit: false,
+      ...options.policyModule === undefined ? {} : { contentPolicyModule: options.policyModule },
+    })
+    if (options.stockWrite === true) await target.plugin(ToolFs, { read: false, edit: false })
+  }
+  await mountRows(scope.ctx)
 
   const hostFs = root.fs as unknown as { writeText: (...args: unknown[]) => Promise<unknown>; stat: (target: unknown, signal?: unknown) => Promise<{ version: string } | undefined> }
   const writes: ProviderWrite[] = []
@@ -264,6 +287,14 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
     fsRealmMatchesHost: (scope.ctx as unknown as Record<symbol, Record<string, unknown>>)[Context.isolate]?.['fs']
       === (root as unknown as Record<symbol, Record<string, unknown>>)[Context.isolate]?.['fs'],
     intentOwnedByHostPlane: (hooks['fs/edit-intent'] ?? []).every(hook => scopeOf((hook as { ctx: Context }).ctx) === undefined),
+    async remount() {
+      await scope.dispose()
+      const fresh = createScope(root, agent)
+      ;(agent as unknown as { ctx: Context }).ctx = fresh.ctx
+      await mountRows(fresh.ctx)
+      scope = fresh
+      return scopeOf(fresh.ctx)
+    },
     callTool,
     read: file_path => callTool('read', { file_path }),
     edit: input => callTool('edit', { input }),

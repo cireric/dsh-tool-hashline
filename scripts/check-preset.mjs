@@ -16,7 +16,7 @@ const fail = (message) => failures.push(message)
 const PRESET_ID = 'ptc-hashline'
 const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': '902cd50a0b0f2faafeff22a9d2bbacaf177b7dafb30b81d6727e242f6f403cd6',
+  'personas/orchestrator.md': 'b60c1846157504db50514aae9ac8730a381bbc92c36d3dce7af07ade938d8c3e',
   'intent-gate-watchdog.mjs': 'a7c4b4aabfb8c32b4d44a03c0bc4168b7e05c42f56d3f9cb320c3e71b6800b50',
 }
 
@@ -83,6 +83,15 @@ require_('tool-read', entry => {
 require_('tool-edit', entry => {
   if (entry.name !== '@dsh-tool-hashline/tool-edit') fail('tool-edit row must mount @dsh-tool-hashline/tool-edit')
   if (entry.config?.mode !== 'auto') fail('tool-edit.mode must be auto')
+  // The default-edit policy is enabled HERE and nowhere else, and it must be
+  // addressed through this bundle's own manifest: a packed install resolves it
+  // from the install root, and a personal absolute path must never appear.
+  const policy = String(entry.config?.contentPolicyModule?.__jsExpr ?? entry.config?.contentPolicyModule ?? '')
+  if (policy === '') fail('tool-edit.contentPolicyModule must mount the default-edit policy (SRS 2026-10-24)')
+  else {
+    if (!policy.includes("resolve('dsh-tool-hashline/package.json')")) fail("the policy module must resolve through this bundle's manifest, not a personal path")
+    if (!policy.includes("'presets', 'ptc-hashline', 'policy', 'default-edit-policy.mjs'")) fail("the policy module must point at this bundle's policy file")
+  }
 })
 require_('tool-presentation', entry => {
   if (entry.config?.mode !== 'ptc') fail('tool-presentation.mode must be ptc')
@@ -163,6 +172,22 @@ for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 's
     const specifier = match[1]
     if (specifier.startsWith('./')) continue
     if (!specifier.startsWith('node:')) fail(file + ' imports a non-builtin module: ' + specifier)
+  }
+}
+// The policy module ships inside the bundle and is loaded from the install root,
+// so it must exist and stay on the same builtin-only surface as the operations
+// runtime: a policy that imported a host package would break a packed install.
+const policyFile = join('presets/ptc-hashline/policy', 'default-edit-policy.mjs')
+if (!existsSync(join(repo, policyFile))) fail('missing default-edit policy module: ' + policyFile)
+else {
+  const text = read(policyFile)
+  for (const match of text.matchAll(/from '([^']+)'/gu)) {
+    const specifier = match[1]
+    if (specifier.startsWith('./')) continue
+    if (!specifier.startsWith('node:')) fail(policyFile + ' imports a non-builtin module: ' + specifier)
+  }
+  for (const marker of ['createPolicy', 'snapshot-limit', 'window-limit', 'user-override']) {
+    if (!text.includes(marker)) fail(policyFile + ' must declare ' + marker)
   }
 }
 // ── resources ───────────────────────────────────────────────────────────────

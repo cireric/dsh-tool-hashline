@@ -118,6 +118,12 @@
               mode: auto
               formatOnWrite: false
               diagnosticsOnEdit: false
+              # Default edit policy (SRS 2026-10-24): the editor loads this module once
+              # per mounted registration. It is addressed through THIS bundle's own
+              # manifest, so a packed install resolves it from the install root and a
+              # personal absolute path is never involved. Removing this line restores
+              # the upstream editor exactly (no fallbacks field, no policy checks).
+              contentPolicyModule: !!js "process.getBuiltinModule('node:path').join(process.getBuiltinModule('node:path').dirname(process.getBuiltinModule('node:module').createRequire(baseUrl).resolve('dsh-tool-hashline/package.json')), 'presets', 'ptc-hashline', 'policy', 'default-edit-policy.mjs')"
 
           - id: tool-fs-search
             name: '@deepseek-ai/dsh-tool-fs-search'

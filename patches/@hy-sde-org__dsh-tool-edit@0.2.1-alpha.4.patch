@@ -1,6 +1,6 @@
 diff --git a/dist/constants.js b/dist/constants.js
-index ad887bd981dca4f6e7fddb8ca254ae5fff02b0dc..8ed3cda5bfda04a24ad857e9d226619efc961c0c 100644
---- a/dist/constants.js
+index ad887bd..8ed3cda 100644
+--- a/a/dist/constants.js
 +++ b/dist/constants.js
 @@ -15,6 +15,13 @@ HEADER FORMS:
  - PUT >N: — insert body rows after line N (PUT >$: = file tail)
@@ -17,8 +17,8 @@ index ad887bd981dca4f6e7fddb8ca254ae5fff02b0dc..8ed3cda5bfda04a24ad857e9d226619e
    Literal initial dash/plus: \`- item\` → \`+- item\`; \`+ item\` → \`++ item\`.
  - Numbers are original, never shifted by hunks. Each edit renumbers and changes #TAG.
 diff --git a/dist/hashline/execute.js b/dist/hashline/execute.js
-index 4f967ad089e172e8579e7526807a66c8d4b6f369..8f18c2cd9bd66a07f388d054fe456ecf281c4b81 100644
---- a/dist/hashline/execute.js
+index 4f967ad..8f18c2c 100644
+--- a/a/dist/hashline/execute.js
 +++ b/dist/hashline/execute.js
 @@ -264,7 +264,22 @@ export async function executeHashlineSingle(options) {
      // failure — the model authored anchors that match the current file content.
@@ -45,8 +45,8 @@ index 4f967ad089e172e8579e7526807a66c8d4b6f369..8f18c2cd9bd66a07f388d054fe456ecf
          if (sectionResult.op === 'noop') {
              const { count, escalate } = recordNoopEdit(options.session.sessionKey ?? {}, sectionResult.canonicalPath, inputHash);
 diff --git a/dist/hashline/filesystem.js b/dist/hashline/filesystem.js
-index 1536d5cfeeedd1455cc22510f020c47021091bbb..742c01066c9d54dca1d8321ef0554535ad432c10 100644
---- a/dist/hashline/filesystem.js
+index 1536d5c..742c010 100644
+--- a/a/dist/hashline/filesystem.js
 +++ b/dist/hashline/filesystem.js
 @@ -59,7 +59,12 @@ export class EditFilesystem extends Filesystem {
          const target = await toFsTarget(this.session.reader, relativePath, this.#signal);
@@ -63,8 +63,8 @@ index 1536d5cfeeedd1455cc22510f020c47021091bbb..742c01066c9d54dca1d8321ef0554535
          catch (error) {
              if (isNotFound(error))
 diff --git a/dist/index.d.ts b/dist/index.d.ts
-index 6894eea634716ad00577c0ec130e14c7d528afb4..e6343c85bc125c1cbc78de6a2837fafc22544bd1 100644
---- a/dist/index.d.ts
+index 6894eea..be28691 100644
+--- a/a/dist/index.d.ts
 +++ b/dist/index.d.ts
 @@ -16,7 +16,7 @@ import z from '@deepseek-ai/schemastery';
  import { type EditMode, type ResolvedConfig } from './session.ts';
@@ -75,12 +75,45 @@ index 6894eea634716ad00577c0ec130e14c7d528afb4..e6343c85bc125c1cbc78de6a2837fafc
  /** Runtime configuration for the `edit` tool. */
  export interface Config {
      /** Which mode the single `edit` tool runs (default 'hashline': line-anchored patches). */
+@@ -44,6 +44,11 @@ export interface Config {
+     typescriptNative?: TypeScriptNativeConfig;
+     /** Override the model-facing tool description. */
+     description?: string;
++    /**
++     * Optional default-edit policy module (SRS FR-06): its `createPolicy` factory
++     * is loaded once per mounted registration. Absent keeps the upstream behavior.
++     */
++    contentPolicyModule?: string;
+ }
+ /** Runtime configuration schema for the `edit` tool. */
+ export declare const Config: z<Config>;
+@@ -59,6 +64,6 @@ export declare function dispatchMode(resolved: ResolvedConfig, args: Record<stri
+ export declare function resolvePathArg(args: Record<string, unknown>): string | undefined;
+ /** Whether an error is the fs layer's concurrent-mutation refusal. */
+ export declare function isStaleVersionError(error: unknown): boolean;
+-/** Mount the plugin: config validation, system prompt, and the single tool. */
+-export declare function apply(ctx: Context, config: Config): void;
++/** Mount the plugin: config validation, policy instance, system prompt, and the single tool. */
++export declare function apply(ctx: Context, config: Config): Promise<void>;
+ //# sourceMappingURL=index.d.ts.map
+\ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e4953366972c02515b088c6659016d33705a..e15fb98c844452fe5ea39c7bf67b9ca60dc47fb2 100644
---- a/dist/index.js
+index 64c9e49..61fba9e 100644
+--- a/a/dist/index.js
 +++ b/dist/index.js
-@@ -12,7 +12,7 @@ import { executeReplace } from "./replace.js";
- import { createEditSession } from "./session.js";
+@@ -1,5 +1,6 @@
+ import z from '@deepseek-ai/schemastery';
+ import { defineTool } from '@deepseek-ai/dsh-tools';
++import { pathToFileURL } from 'node:url';
+ import { FsError } from '@deepseek-ai/dsh-fs';
+ import { APPLY_PATCH_SCHEMA_DESCRIPTIONS, EDIT_TOOL_DESCRIPTION, HASHLINE_SCHEMA_DESCRIPTIONS, PATCH_SCHEMA_DESCRIPTIONS, REPLACE_SCHEMA_DESCRIPTIONS, } from "./constants.js";
+ import { fileDiffsFromMeta } from "./details.js";
+@@ -9,10 +10,10 @@ import { executeHashlineSingle } from "./hashline/execute.js";
+ import { executePatchEntry } from "./patch.js";
+ import { expandApplyPatchToEntries } from "./apply-patch.js";
+ import { executeReplace } from "./replace.js";
+-import { createEditSession } from "./session.js";
++import { createEditSession, toolCwdFromExec } from "./session.js";
  import { DEFAULT_LSP_COMMAND, createEditLspProvider } from "./lsp/provider.js";
  export const name = 'tool-edit';
 -export const inject = ['tools', 'fs', 'systemPrompt'];
@@ -88,27 +121,269 @@ index 64c9e4953366972c02515b088c6659016d33705a..e15fb98c844452fe5ea39c7bf67b9ca6
  /** Runtime configuration schema for the `edit` tool. */
  export const Config = z.object({
      mode: z.union(['auto', 'hashline', 'replace', 'patch', 'apply_patch']).default('hashline'),
-@@ -246,9 +246,13 @@ function registerEditTool(ctx, config, provider) {
+@@ -25,6 +26,7 @@ export const Config = z.object({
+     lspCommand: z.string().default(DEFAULT_LSP_COMMAND),
+     typescriptNative: z.object({ command: z.string().default('tsc') }),
+     description: z.string(),
++    contentPolicyModule: z.string(),
+ });
+ /** Resolve the schema defaults into the runtime config handed to sessions. */
+ export function resolveConfig(config) {
+@@ -39,6 +41,7 @@ export function resolveConfig(config) {
+         lspCommand: config.lspCommand ?? DEFAULT_LSP_COMMAND,
+         ...config.typescriptNative === undefined ? {} : { typescriptNative: config.typescriptNative },
+         ...config.description === undefined ? {} : { description: config.description },
++        ...config.contentPolicyModule === undefined ? {} : { contentPolicyModule: config.contentPolicyModule },
+     };
+ }
+ // ═══════════════════════════════════════════════════════════════════════════
+@@ -228,6 +231,9 @@ function requirePath(args) {
+         throw new Error('Parameter `path` is required and must be a string');
+     return value;
+ }
++/** Model-facing description of the declared-degradation field (SRS FR-03/FR-06). */
++const FALLBACK_SCHEMA_DESCRIPTION = 'Declared degradation for an ordinary content update. Only present when this registration mounts a default-edit policy; a Hashline edit must omit it. Each entry binds ONE target to ONE reason: snapshot-limit (the target is at or above the snapshot byte ceiling and cannot be tagged), window-limit (the content this update needs is cut by the column or byte cap and paging cannot supply it), or user-override (the user explicitly asked for this target and mode). Every entry is verified against real evidence; a legal reason whose check is unavailable is refused with a gap instead of being allowed.';
++
+ /** Whether an error is the fs layer's concurrent-mutation refusal. */
+ export function isStaleVersionError(error) {
+     if (error instanceof FsError)
+@@ -239,17 +245,45 @@ export function isStaleVersionError(error) {
+  * @param ctx - the plugin context; registrations are effects scoped to it.
+  * @param config - resolved runtime configuration.
+  */
+-function registerEditTool(ctx, config, provider) {
++function registerEditTool(ctx, config, provider, policy) {
+     const description = config.description ?? EDIT_TOOL_DESCRIPTION;
+     ctx.systemPrompt.section({
+         name: 'tool:edit',
          order: 102,
++        // The mode statement is decided by the ACTUAL configuration: `auto`
++        // selects the branch from the argument shape, an explicit mode does not.
++        // The non-atomic commit statement holds for both and is a fact about the
++        // engine, not about this deployment.
          text: 'Use the edit tool for targeted changes to existing UTF-8 text files. ' +
              'Read the file first to get its [path#tag] header and line numbers for hashline anchors; ' +
 -            'the tool verifies anchors against that tagged content, applies atomically, and its own reads ' +
 +            'the tool verifies anchors against that tagged content and only then commits, and its own reads ' +
              'satisfy the fs-observation-policy guard in this session. ' +
 -            'The tool runs in a fixed mode (see its description); call it with the argument shape for that mode.',
-+            'The tool runs in a fixed mode (see its description); call it with the argument shape for that mode. ' +
++            (config.mode === 'auto'
++                ? 'The tool selects its mode from the argument shape: replace (old_string/new_string), patch (edits), or apply_patch / hashline (input; an input program carrying a [path#tag] header is hashline). '
++                : 'The tool runs in a fixed mode (see its description); call it with the argument shape for that mode. ') +
 +            'Committing is not one atomic step for the whole call: an MV is a two-step move (create the ' +
 +            'destination, then delete the source) and a multi-section edit commits section by section, so a ' +
 +            'failure can leave earlier work done. Read the error: it names what landed and what did not; ' +
 +            'verify both endpoints / the already-written sections before retrying.',
      });
++    if (policy !== undefined) {
++        // The policy statement is a SEPARATE section, not a rewrite of `tool:edit`:
++        // it must stay visible when a child overrides the persona, and a
++        // registration without a policy must not carry instructions it does not
++        // enforce. Its name is not `deployment:persona-*`, so persona shadowing
++        // cannot erase it.
++        ctx.systemPrompt.section({
++            name: 'tool:edit-policy',
++            order: ctx.systemPrompt.getSectionOrder('TOOL_EDIT') + 10,
++            text: 'Default edit policy: an existing non-empty text file is changed with Hashline. ' +
++                'Read it first, then send an `input` program whose section header carries that read\'s [path#tag]. ' +
++                'replace / patch / apply_patch are REFUSED for an ordinary content update unless the call declares a fallback ' +
++                '(snapshot-limit, window-limit, user-override) with its evidence in `fallbacks`; a Hashline call must not declare one. ' +
++                'A refusal is not permission to degrade: verify what happened, re-read what you need, and only then choose again. ' +
++                'Creating a missing file, filling a zero-byte file, and pure delete/move stay on their existing tools. ' +
++                'A failure is not a rollback: check the disk and both endpoints of a move before retrying, and never undo work the user asked for.',
++        });
++    }
      ctx.tools.register(defineTool({
          name: 'edit',
+         description,
+@@ -262,6 +296,47 @@ function registerEditTool(ctx, config, provider) {
+             replace_all: { type: 'boolean', description: REPLACE_SCHEMA_DESCRIPTIONS.replace_all },
+             edits: { type: 'array', description: PATCH_SCHEMA_DESCRIPTIONS.edits },
+             input: { type: 'string', description: `${APPLY_PATCH_SCHEMA_DESCRIPTIONS.input}. ${HASHLINE_SCHEMA_DESCRIPTIONS.input}` },
++            ...policy === undefined ? {} : { fallbacks: {
++                type: 'array',
++                description: FALLBACK_SCHEMA_DESCRIPTION,
++                items: {
++                    type: 'object',
++                    additionalProperties: false,
++                    properties: {
++                        path: { type: 'string', required: true, description: 'The target this fallback covers; it must match a target the request actually updates.' },
++                        reason: { type: 'string', required: true, enum: ['snapshot-limit', 'window-limit', 'user-override'], description: 'Why this target cannot be edited with Hashline. Only these three reasons exist.' },
++                        readCallId: { type: 'string', description: 'Required for snapshot-limit and window-limit: the callId of the successful read whose evidence you are citing (it is printed in that read\u2019s nextAction).' },
++                        ranges: {
++                            type: 'array',
++                            description: 'Required for window-limit: the 1-based, inclusive line ranges the update touches, in the cited read\u2019s numbering.',
++                            items: {
++                                type: 'object',
++                                additionalProperties: false,
++                                properties: {
++                                    startLine: { type: 'integer', required: true },
++                                    endLine: { type: 'integer', required: true },
++                                },
++                            },
++                        },
++                        userSource: {
++                            type: 'object',
++                            description: 'Required for user-override: which real user message asked for this, and where in it.',
++                            additionalProperties: false,
++                            properties: {
++                                sessionId: { type: 'string', required: true },
++                                eventSeq: { type: 'integer', required: true },
++                                start: { type: 'integer', required: true },
++                                end: { type: 'integer', required: true },
++                            },
++                        },
++                        modes: {
++                            type: 'array',
++                            description: 'Required for user-override: the non-Hashline modes the user allowed for this target.',
++                            items: { type: 'string', enum: ['replace', 'patch', 'apply_patch'] },
++                        },
++                    },
++                },
++            } },
+         },
+         output: {
+             schema: { type: 'string' },
+@@ -292,6 +367,12 @@ function registerEditTool(ctx, config, provider) {
+             try {
+                 const mode = dispatchMode(resolved, args);
+                 const record = args;
++                // The default-edit policy decides BEFORE the real branch runs, so a
++                // refusal cannot leave a partial write: nothing below has touched the
++                // disk yet. A registration without a policy module keeps the upstream
++                // behavior exactly (no field, no check, no extra I/O).
++                if (policy !== undefined)
++                    await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx) });
+                 const run = () => {
+                     switch (mode) {
+                         case 'replace':
+@@ -307,9 +388,12 @@ function registerEditTool(ctx, config, provider) {
+                     }
+                 };
+                 try {
+-                    return await run();
++                    const value = await run();
++                    policy?.settle({ exec, mode, result: 'completed' });
++                    return value;
+                 }
+                 catch (error) {
++                    policy?.settle({ exec, mode, result: isPolicyRefusal(error) ? 'refused' : 'failed', code: typeof error?.code === 'string' ? error.code : undefined });
+                     // A concurrent mutation between the executor's read and its guarded
+                     // write aborts the WHOLE edit before anything lands (the write is
+                     // the single side effect), so re-running once is safe for replace
+@@ -341,12 +425,78 @@ function registerEditTool(ctx, config, provider) {
+         presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
+     }));
+ }
++/**
++ * Load the configured default-edit policy module for THIS registration.
++ *
++ * The module address comes from the preset (resolved through the bundle's
++ * own install root), so a packed install loads it without a checkout. A load
++ * or factory failure is NOT a mount failure: it leaves a named unavailable
++ * state, which refuses ordinary non-Hashline updates while keeping the
++ * Hashline path that never needed the policy executable.
++ * @param ctx - plugin context owning the policy instance's lifetime.
++ * @param resolved - resolved editor config carrying the module address.
++ * @returns the policy instance, an unavailable stand-in, or undefined when unmounted.
++ */
++async function createPolicyInstance(ctx, resolved) {
++    const address = resolved.contentPolicyModule;
++    if (address === undefined)
++        return undefined;
++    const url = /^[a-zA-Z][a-zA-Z0-9+.-]*:/u.test(address) ? address : pathToFileURL(address).href;
++    let module;
++    try {
++        module = await import(url);
++    }
++    catch (error) {
++        return unavailablePolicy(`the default-edit policy module at "${address}" could not be loaded: ${errorMessage(error)}`);
++    }
++    if (typeof module?.createPolicy !== 'function')
++        return unavailablePolicy(`the default-edit policy module at "${address}" does not export createPolicy()`);
++    let instance;
++    try {
++        instance = await module.createPolicy({ ctx, config: resolved });
++    }
++    catch (error) {
++        return unavailablePolicy(`the default-edit policy at "${address}" failed to initialize: ${errorMessage(error)}`);
++    }
++    const missing = ['preflight', 'beforeMutation', 'settle'].filter(name => typeof instance?.[name] !== 'function');
++    if (missing.length > 0)
++        return unavailablePolicy(`the default-edit policy at "${address}" is missing ${missing.join(', ')}`);
++    ctx.effect(() => () => { instance.dispose?.(); });
++    return instance;
++}
++/**
++ * Stand-in for a configured-but-unusable policy.
++ *
++ * It is deliberately not a silent pass: an ordinary non-Hashline update is
++ * refused with the concrete load/verify gap, while a Hashline request still
++ * runs (its own engine checks never depended on the policy module).
++ * @param reason - the concrete load/initialization gap.
++ * @returns the policy-shaped stand-in.
++ */
++function unavailablePolicy(reason) {
++    return {
++        version: 'unavailable',
++        unavailable: reason,
++        async preflight(request) {
++            if (request.mode === 'hashline')
++                return;
++            throw new Error(`[EDIT_POLICY_UNAVAILABLE] the default-edit policy cannot verify this ${request.mode} update: ${reason}. Hashline edits still work; nothing was written.`);
++        },
++        async beforeMutation() { },
++        settle() { },
++        dispose() { },
++    };
++}
++/** Whether an error is a policy refusal (as opposed to a host or engine failure). */
++function isPolicyRefusal(error) {
++    return typeof error?.code === 'string' && error.code.startsWith('EDIT_POLICY');
++}
+ /** Summarize errors into stable model-facing messages. */
+ function errorMessage(error) {
+     return error instanceof Error ? error.message : String(error);
+ }
+ /** Mount the plugin: config validation, system prompt, and the single tool. */
+-export function apply(ctx, config) {
++export async function apply(ctx, config) {
+     const resolved = resolveConfig(config);
+     if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
+         throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
+@@ -359,6 +509,10 @@ export function apply(ctx, config) {
+         ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
+     });
+     ctx.effect(() => () => { void provider.dispose(); });
+-    registerEditTool(ctx, resolved, provider);
++    // One policy instance per mounted registration: its state is scoped to this
++    // fiber (and to Session objects inside it), never to the process, so two
++    // sessions cannot share an unlock and unloading drops everything.
++    const policy = await createPolicyInstance(ctx, resolved);
++    registerEditTool(ctx, resolved, provider, policy);
+ }
+ //# sourceMappingURL=index.js.map
+\ No newline at end of file
 diff --git a/dist/session.d.ts b/dist/session.d.ts
-index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..d318c0e1b3722f7a779a530d4bdb39daa7dfecd4 100644
---- a/dist/session.d.ts
+index fcebfcc..15177fe 100644
+--- a/a/dist/session.d.ts
 +++ b/dist/session.d.ts
-@@ -29,6 +29,14 @@ export interface FileReader {
+@@ -20,6 +20,14 @@ export interface ResolvedConfig {
+     /** Present when the deployment opts into TypeScript 7 native-LSP selection. */
+     typescriptNative?: TypeScriptNativeConfig;
+     description?: string;
++    /**
++     * Address of the optional default-edit policy module (SRS FR-06).
++     *
++     * Absent = the upstream behavior: no fallbacks field, no policy checks, no
++     * policy I/O. Present but unusable = a named unavailable state that refuses
++     * ordinary non-Hashline updates and still runs Hashline.
++     */
++    contentPolicyModule?: string;
+ }
+ /** File reads through `ctx.fs`. */
+ export interface FileReader {
+@@ -29,6 +37,14 @@ export interface FileReader {
      stat(target: FsTarget, signal?: AbortSignal): Promise<FsInfo | undefined>;
      /** Full text of the target. Throws when absent. */
      readText(target: FsTarget, signal?: AbortSignal): Promise<string>;
@@ -123,7 +398,42 @@ index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..d318c0e1b3722f7a779a530d4bdb39da
  }
  /** File mutations through `ctx.fs` (delete/move restricted to the cwd). */
  export interface FileWriter {
-@@ -66,10 +74,13 @@ export interface CreateEditSessionArgs {
+@@ -62,14 +78,48 @@ export interface CreateEditSessionArgs {
+     provider: EditLspProvider | undefined;
+     config: ResolvedConfig;
+     exec: ToolRunContext;
++    /** Optional default-edit policy: its pre-mutation hook runs before each side effect. */
++    policy?: EditPolicyHooks;
++}
++
++/** The pre-mutation edge of the default-edit policy (see the policy module). */
++export interface EditPolicyHooks {
++    preflight(request: EditPolicyRequest): Promise<void>;
++    beforeMutation(request: EditPolicyMutation): Promise<void>;
++    settle(outcome: EditPolicyOutcome): void;
++    dispose?(): void;
++}
++/** One call as the policy sees it at preflight. */
++export interface EditPolicyRequest {
++    exec: ToolRunContext;
++    args: Record<string, unknown>;
++    mode: EditMode;
++    resolved: ResolvedConfig;
++    cwd: string;
++}
++/** One target about to receive a side effect. */
++export interface EditPolicyMutation {
++    exec: ToolRunContext;
++    cwd: string;
++    target: FsTarget;
++}
++/** The known outcome of one call. */
++export interface EditPolicyOutcome {
++    exec: ToolRunContext;
++    mode: EditMode;
++    result: 'completed' | 'refused' | 'failed' | 'partial';
++    code?: string;
+ }
  /** Path containment check used for delete/move — strictly inside `cwd`. */
  export declare function isPathInsideCwd(candidate: string, cwd: string): boolean;
  /**
@@ -141,8 +451,8 @@ index fcebfcce283ec31625d3a3125e1ea3aef1c55a3b..d318c0e1b3722f7a779a530d4bdb39da
   * Build the {@link EditSession} closing over one tool call's execution
   * context. `exec` and `ctx` capture everything the harness owns (signal,
 diff --git a/dist/session.js b/dist/session.js
-index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412bd0fb620 100644
---- a/dist/session.js
+index 710d873..32da82a 100644
+--- a/a/dist/session.js
 +++ b/dist/session.js
 @@ -13,6 +13,7 @@
   */
@@ -186,16 +496,26 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412
      return process.cwd();
  }
  /**
-@@ -36,7 +51,7 @@ export function toolCwdFromExec(exec) {
+@@ -35,8 +50,16 @@ export function toolCwdFromExec(exec) {
+  * sandbox policy resolution, waterfall, emissions) per call.
   */
  export function createEditSession(args) {
-     const { ctx, fs, provider, config, exec } = args;
+-    const { ctx, fs, provider, config, exec } = args;
 -    const cwd = toolCwdFromExec(exec);
++    const { ctx, fs, provider, config, exec, policy } = args;
++    // The policy pre-mutation hook runs inside the writer, immediately before a
++    // side effect, with the SAME call identity preflight saw. A registration
++    // without a policy passes nothing and pays nothing.
++    const beforeMutation = async target => {
++        if (policy === undefined)
++            return;
++        await policy.beforeMutation({ exec, cwd, target });
++    };
 +    const cwd = toolCwdFromExec(exec, ctx);
      const sandboxPolicy = ctx.fs.sandboxMode === undefined ? undefined : ctx.get('sandboxPolicy');
      const resolveSandbox = () => sandboxPolicy?.resolve({
          ...(exec.agent === undefined ? {} : { session: exec.agent.session }),
-@@ -62,6 +77,64 @@ export function createEditSession(args) {
+@@ -62,9 +85,68 @@ export function createEditSession(args) {
                  ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec);
              return content;
          },
@@ -260,7 +580,15 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412
      };
      const writer = {
          async write(target, content, signal) {
-@@ -88,19 +161,70 @@ export function createEditSession(args) {
++            await beforeMutation(target);
+             // Single-slot decision: the fs-observation-policy plugin returns
+             // { version: vObserved } for a read-and-confirmed target and throws
+             // FS_NOT_OBSERVED / FS_NOT_FOUND otherwise; the bare default (no policy
+@@ -85,22 +167,75 @@ export function createEditSession(args) {
+             if (!isPathInsideCwd(target.displayPath, cwd)) {
+                 throw new Error(`Cannot delete ${target.displayPath}: outside the working directory ${cwd}`);
+             }
++            await beforeMutation(target);
              await fsp.rm(target.displayPath, { force: false });
          },
          async move(from, to, content, signal) {
@@ -271,6 +599,7 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412
 +            }
 +            // Creation is a side effect: a call cancelled before it must not land the target.
 +            signal?.throwIfAborted();
++            await beforeMutation(to);
              // Write-through move: probe existence at destination first (non-overwriting).
 +            // This stat is also the authoritative absence the create is authorized by.
              const destInfo = await fs.stat(to, signal);
@@ -336,7 +665,7 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412
              await fsp.rename(from.displayPath, to.displayPath);
          },
      };
-@@ -121,4 +245,55 @@ export function createEditSession(args) {
+@@ -121,4 +256,55 @@ export function createEditSession(args) {
          writer,
      };
  }
@@ -392,3 +721,4 @@ index 710d8737909b89879e6844b49a79c7c408c9002a..a0d40a1dff0ee0b6d8fbf3f4c75c0412
 +    return failure;
 +}
  //# sourceMappingURL=session.js.map
+\ No newline at end of file

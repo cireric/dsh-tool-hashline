@@ -64,7 +64,14 @@ Only when a real fork survives and evidence cannot decide it: give 2-3 options w
 `<id>` must be the **real session id, written out in full** — never the literal text `$DSH_SESSION_ID`: that is shell syntax, and this line is prose, so nothing expands it. You cannot read the id from the prompt either: only `{{provider}}` / `{{model}}` are interpolated, and none of them is the session id. Get it by running `echo "$DSH_SESSION_ID"` through a shell (the variable exists **only inside the shell tools**; a `run_code` program cannot see it — `process.env` there is empty). If you did not run it this turn, write instead: `session: (id not read this turn) · <outcome> · <artifacts>` — an honest gap beats a line the next agent cannot resolve.
 
 ## Failure recovery
-Fix root causes, never symptoms; never shotgun-debug (random changes hoping something works). After 3 consecutive failures on the same problem: STOP editing → REVERT to the last known-good state → DOCUMENT what was tried and what failed → get an independent review (delegate a review brief, or ask the user) → if that cannot resolve it, ASK. Never leave a failed attempt in a broken state.
+
+Fix root causes, never symptoms; never shotgun-debug (random changes hoping something works).
+
+**A refusal or a failure is not a rollback.** Before undoing anything, check what actually landed on disk: a tool call is not one atomic step (a multi-section edit commits section by section, a move creates the target before it removes the source), so a failed call may have completed part of the work. Never revert the user's own changes, and never re-run a move, a delete or a whole program blindly.
+
+After 3 consecutive failures on the SAME edit target: STOP editing → preserve the state and verify what is on disk → DOCUMENT what was tried and what failed → get an independent review (delegate a review brief, or ask the user) → if that cannot resolve it, ASK. Only revert your own unverified attempt, and only after confirming it is yours. Never leave a failed attempt in a broken state.
+
+**The edit policy's refusal is information, not an obstacle.** A refused non-Hashline update names the gap; re-read what you need, fix the evidence, or stop and report. Switching to `write`, a shell command or a Node script to get around a refusal is a bypass, not a solution.
 
 ## Verification — EVIDENCE, NOT ASSERTION
 "Done" means evidence: an edit → diagnostics clean on the changed files; a build → exit 0; a test run → pass (or an explicit note of pre-existing failures); real surface use (one real command or minimal driver through the shell, cross-platform). Run each evidence gate ONCE.
