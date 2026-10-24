@@ -25,6 +25,26 @@ import { snapshotKeys } from './session.ts'
 import { buildReadWindow, parseReadArgs } from './window.ts'
 
 export const name = 'tool-read-hashline'
+
+/**
+ * The file lines a byte-capped window returned no text for.
+ *
+ * The window stops at the first line that does not fit the remaining budget, so
+ * every later line of the file is omitted — not only the ones past `limit`. A
+ * window that reached EOF omits nothing, which is what keeps an ordinary
+ * partial page (offset/limit) from looking like a degradation.
+ * @param window - the built window
+ * @param offset - 1-based first line requested
+ * @param totalLines - exact file line count
+ * @returns the omitted 1-based line numbers
+ */
+function omittedLines(window: { truncatedByBytes: boolean; lines: { number: number }[] }, offset: number, totalLines: number): number[] {
+  if (!window.truncatedByBytes) return []
+  const last = window.lines.at(-1)?.number ?? Math.max(0, offset - 1)
+  const omitted: number[] = []
+  for (let line = last + 1; line <= totalLines; line += 1) omitted.push(line)
+  return omitted
+}
 export const inject = ['tools', 'fs', 'systemPrompt', 'workingDirectory'] as const
 export type { Config }
 
@@ -230,6 +250,10 @@ export function apply(ctx: Context, config: Config = {}): void {
           truncatedLines: window.lines.some(line => !line.complete),
           byteCapped: window.truncatedByBytes,
           zeroLines: window.lines.length === 0,
+          truncatedLineNumbers: window.lines.filter(line => !line.complete).map(line => line.number),
+          // The byte cap stops the window at the first line that does not fit, so
+          // every line from that point to the end of the file was returned no text.
+          omittedLineNumbers: omittedLines(window, input.offset, window.totalLines),
         },
         tagged: tag !== null,
       }

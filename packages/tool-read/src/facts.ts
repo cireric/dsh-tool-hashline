@@ -49,6 +49,20 @@ export interface ReadFactWindow {
   byteCapped: boolean
   /** Whether the window returned no line at all. */
   zeroLines: boolean
+  /**
+   * File line numbers that were COLUMN-TRUNCATED in this window.
+   *
+   * These are the lines whose returned text is not the file's text. A
+   * degradation must name at least one of them: a target whose anchors were
+   * fully returned is editable with Hashline and needs no fallback.
+   */
+  truncatedLineNumbers: number[]
+  /**
+   * File line numbers this window returned NO text for, because the byte cap
+   * stopped the window before them (empty when the window reached EOF or its
+   * line limit).
+   */
+  omittedLineNumbers: number[]
 }
 
 /** Everything a degraded edit may cite about one read, and nothing more. */

@@ -290,10 +290,70 @@ export function createPolicy({ ctx, config }) {
     verified.set(target.targetKey, { fact, version: info.version })
   }
 
+  /**
+   * Verify a `window-limit` fallback against the read it cites.
+   *
+   * The declared ranges must overlap content the cited read could NOT deliver as
+   * complete text: a column-truncated line, or a line the byte cap omitted. A
+   * range that only covers fully returned lines is not a window limit — the model
+   * could edit it with Hashline and is asking to skip that.
+   * @param {object} context verification context
+   * @returns {Promise<void>} resolves when the reason is true for these ranges
+   */
+  const verifyWindowLimit = async context => {
+    const { session, cwd, fallback, targetPath, signal } = context
+    const fact = facts.get(fallback.readCallId)
+    if (fact === undefined) {
+      throw new EditPolicyError(
+        'EDIT_POLICY_READ_UNKNOWN',
+        'the citation readCallId "' + fallback.readCallId + '" does not name a successful read of this registration. Read the target again and use the citation printed in its nextAction.',
+      )
+    }
+    if (fact.session !== session) {
+      throw new EditPolicyError('EDIT_POLICY_READ_CROSS_SESSION', 'the cited read belongs to another session. Read evidence is per session and cannot be borrowed, forwarded or replayed; read the target in this session.')
+    }
+    if (fact.cwd !== cwd) {
+      throw new EditPolicyError('EDIT_POLICY_READ_CWD', 'the cited read resolved against ' + fact.cwd + ', but this call runs in ' + cwd + '. A working-directory change invalidates the citation; read the target again.')
+    }
+    const limited = new Set([...fact.window.truncatedLineNumbers, ...fact.window.omittedLineNumbers])
+    if (limited.size === 0) {
+      throw new EditPolicyError(
+        'EDIT_POLICY_REASON_FALSE',
+        'the cited read returned every requested line as complete text (a plain offset/limit page is not a window limit), so "window-limit" is not true for it. Use Hashline, or page to the content you need.',
+      )
+    }
+    const outside = []
+    for (const range of fallback.ranges) {
+      let touches = false
+      for (let line = range.startLine; line <= range.endLine; line += 1) {
+        if (limited.has(line)) touches = true
+      }
+      if (!touches) outside.push(range.startLine + '..' + range.endLine)
+    }
+    if (outside.length > 0) {
+      throw new EditPolicyError(
+        'EDIT_POLICY_REASON_FALSE',
+        'declared range(s) ' + outside.join(', ') + ' cover only lines the cited read returned in full; the limited lines are ' + [...limited].sort((a, b) => a - b).join(', ') + '. A window limit only supports the lines it actually withheld — everything else must be edited with Hashline.',
+      )
+    }
+    const { target, info } = await probe(targetPath, cwd, signal)
+    if (info === undefined) {
+      throw new EditPolicyError('EDIT_POLICY_TARGET_MISSING', 'the declared target "' + targetPath + '" does not exist, so this is a creation case rather than a degraded update.')
+    }
+    if (target.targetKey !== fact.targetKey || target.displayPath !== fact.displayPath) {
+      throw new EditPolicyError('EDIT_POLICY_READ_TARGET', 'the cited read resolved "' + fallback.path + '" to ' + fact.displayPath + ', but this request updates ' + target.displayPath + '. A citation only supports the target it read.')
+    }
+    if (info.version !== fact.version) {
+      throw new EditPolicyError('EDIT_POLICY_EVIDENCE_STALE', 'the target changed since the cited read (' + fact.version + ' -> ' + info.version + '). The evidence no longer describes what would be overwritten; read the target again.')
+    }
+    verified.set(target.targetKey, { fact, version: info.version })
+  }
+
   /** Verify one declared reason against measured facts. */
   const verifyReason = async context => {
     const { fallback } = context
     if (fallback.reason === 'snapshot-limit') return verifySnapshotLimit(context)
+    if (fallback.reason === 'window-limit') return verifyWindowLimit(context)
     throw new EditPolicyError(
       'EDIT_POLICY_REASON_UNAVAILABLE',
       'fallback reason "' + fallback.reason + '" for "' + fallback.path + '" is a legal reason but its verification is not available in this build, so the request cannot be authorized. Use Hashline, or wait for the reason check. Nothing was written.',

@@ -196,18 +196,23 @@ describe('POLICY-11/POLICY-18: an ordinary non-Hashline update is refused before
     onTestFinished(() => harness.cleanup())
     await writeFixture(harness.dir, 'gap.txt', 'g\n')
 
-    // `window-limit` is a legal reason whose verification this build does not
-    // implement: it must surface as a gap, not as a silent allow.
+    // `user-override` is a legal reason whose verification this build does not
+    // implement yet: it must surface as a gap, not as a silent allow.
     const result = await harness.callTool('edit', {
       path: 'gap.txt',
       old_string: 'g',
       new_string: 'G',
-      fallbacks: [{ path: 'gap.txt', reason: 'window-limit', readCallId: 'read-1', ranges: [{ startLine: 1, endLine: 1 }] }],
+      fallbacks: [{
+        path: 'gap.txt',
+        reason: 'user-override',
+        userSource: { sessionId: 'session-of-this-test', eventSeq: 0, start: 0, end: 4 },
+        modes: ['replace'],
+      }],
     })
 
     expect(result.isError).toBe(true)
     expect(errorText(result)).toContain('EDIT_POLICY_REASON_UNAVAILABLE')
-    expect(errorText(result)).toContain('window-limit')
+    expect(errorText(result)).toContain('user-override')
     expect(harness.writes).toHaveLength(0)
   })
 })
