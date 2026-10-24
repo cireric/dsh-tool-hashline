@@ -19,7 +19,9 @@
     "test:ptc": "vitest run --config vitest.ptc.config.ts",
     "check:tests": "tsc -p tsconfig.tests.json",
     "install:profile": "node scripts/install-profile.mjs",
-    "test:delivery": "node scripts/delivery-acceptance-cli.mjs"
+    "test:delivery": "node scripts/delivery-acceptance-cli.mjs",
+    "eval:freeze": "node scripts/evaluation/driver.mjs freeze",
+    "eval:check": "node scripts/evaluation/driver.mjs check"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5-alpha.2",
