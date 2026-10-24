@@ -45,7 +45,7 @@ pnpm test:delivery
 ## 文档入口
 
 - [需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)
-- [默认编辑策略 SRS](docs/specs/2026-10-24-hashline-default-editing.md)：默认 Hashline、受控降级与验收规则；需求已确认，待实施
+- [默认编辑策略 SRS](docs/specs/2026-10-24-hashline-default-editing.md)与[实施计划](docs/plans/2026-10-24-hashline-default-editing-implementation-plan.md)：默认 Hashline、受控降级与验收规则；需求已确认，实施计划已形成、测试 seam 待确认，待实施
 - [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)
 - [上游功能分析](docs/background/2026-10-23-dsh-hashline-feature-analysis.md)：版本化研究快照，其中建议不代表已批准需求
 - [运维 skills 需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)：incident、升级评估/方案/同意、获准后的隔离候选验证，以及获第二阶段同意后的目标切换与失败回退/交接已实现；真实宿主交付验收见[报告](docs/acceptance/2026-10-24-delivery-acceptance-report.md)（`pnpm test:delivery`）
