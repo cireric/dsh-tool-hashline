@@ -7,7 +7,7 @@
  * does not cover, a seq gap with no bounds given, a start without a settle —
  * each must produce INCOMPLETE/GAP, never a PASS.
  */
-import { execFileSync } from 'node:child_process'
+import { execFileSync, spawnSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
 import { mkdtemp, readFile, rm, writeFile } from 'node:fs/promises'
 import * as os from 'node:os'
@@ -354,5 +354,64 @@ describe('extract-runtime-evidence: the evidence it must not manufacture', () =>
     const report = JSON.parse(stdout) as ExtractedReport
     const bytes = await readFile(source)
     expect(report.source.sha256).toBe(createHash('sha256').update(bytes).digest('hex'))
+  })
+})
+
+/**
+ * R4: the cost of a gap report depends on how many records the log HAS, never on
+ * how wide the requested range is.
+ *
+ * The old implementation stepped `for (seq = min; seq <= max; seq += 1)`, so
+ * `--seq-max 1e12` walked a trillion integers and had to be killed. The bound
+ * below is deliberately generous — the clamp is "it finishes at all", and the
+ * exact milliseconds are not a performance contract.
+ */
+describe('extract-runtime-evidence: a huge seq bound is answered, not walked', () => {
+  it('answers a 1e12 seq-max promptly with an interval-shaped gap, and exits 2', async () => {
+    const source = await writeRaw('session.v4.jsonl', base('Intent: fix — repair the parser'))
+    const started = Date.now()
+    const child = spawnSync(process.execPath, [SCRIPT, '--source', source, '--session', SESSION, '--seq-min', '0', '--seq-max', '1000000000000'], {
+      encoding: 'utf8',
+      timeout: 20_000,
+      killSignal: 'SIGKILL',
+    })
+    const elapsed = Date.now() - started
+
+    // A timeout leaves `error` set and no output; a real answer is a real one.
+    expect(child.error).toBeUndefined()
+    expect(child.status).toBe(2)
+    const json = JSON.parse(child.stdout) as ExtractedReport
+    expect(json.evidence.status).toBe('incomplete')
+
+    // The hole is reported as an INTERVAL, so the message cannot grow with the
+    // range — which is what makes a wide bound cheap to report.
+    const gapIssue = json.evidence.issues.find((issue) => issue.includes('missing seq values inside the effective range'))
+    expect(gapIssue).toBeDefined()
+    expect(String(gapIssue)).toContain('1000000000000')
+    expect(String(gapIssue).length).toBeLessThan(260)
+    // A full, dense range stays complete: the bound must not turn a good log bad.
+    const dense = runFile(source, ALL)
+    expect(dense.status).toBe(0)
+    expect(dense.json?.evidence.status).toBe('complete')
+    expect(elapsed).toBeLessThan(20_000)
+  })
+})
+
+/**
+ * F10: the ordinary rendering of a gap is pinned exactly.
+ *
+ * The bound changed the message SHAPE (enumeration -> intervals), and every other
+ * assertion in this file only checks `toContain('missing seq values')`: an
+ * off-by-one in the interval ends for a one-value gap would pass the whole suite.
+ */
+describe('extract-runtime-evidence: the gap message is an interval list, pinned exactly', () => {
+  it('prints single holes as numbers and runs as from..to', async () => {
+    const holed = [header(), seqZero, preset, user, assistant(3, 'Intent: fix — repair the parser'), startEvent(5, 'edit'), result(7, 'done')]
+    const source = await writeRaw('session.v4.jsonl', holed)
+    const inside = runFile(source, ['--seq-min', '0', '--seq-max', '7'])
+    expect(inside.json?.evidence.issues).toContain('missing seq values inside the effective range: 4,6')
+    // A run at the END of the range is one interval, not a list that grows with it.
+    const throughTail = runFile(source, ['--seq-min', '0', '--seq-max', '9'])
+    expect(throughTail.json?.evidence.issues).toContain('missing seq values inside the effective range: 4,6,8..9')
   })
 })

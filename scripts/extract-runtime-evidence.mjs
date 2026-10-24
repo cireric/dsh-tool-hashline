@@ -173,10 +173,20 @@ export function extractSession(options) {
   }
   if (effective !== undefined && inScope.length === 0) issues.push('no records inside the effective range ' + effective.min + '..' + effective.max)
   if (effective !== undefined && inScope.length > 0) {
-    const seen = new Set(inScope.map(record => record.seq))
+    // The cost must depend on how many records the log HAS, never on how wide the
+    // requested range is: a seq-max of 1e12 used to walk a trillion integers and
+    // hang for a second before the parent killed it (R4). `inScope` is already
+    // sorted, so the holes are the intervals between consecutive records plus the
+    // range's own ends, and they are reported as intervals rather than an
+    // enumeration that grows with the range.
     const gaps = []
-    for (let seq = effective.min; seq <= effective.max; seq += 1) if (!seen.has(seq)) gaps.push(seq)
-    if (gaps.length > 0) issues.push('missing seq values inside the effective range: ' + clip(gaps.join(','), 200))
+    let cursor = effective.min
+    for (const record of inScope) {
+      if (record.seq > cursor) gaps.push([cursor, record.seq - 1])
+      if (record.seq >= cursor) cursor = record.seq + 1
+    }
+    if (cursor <= effective.max) gaps.push([cursor, effective.max])
+    if (gaps.length > 0) issues.push('missing seq values inside the effective range: ' + clip(gaps.map(([from, to]) => from === to ? String(from) : from + '..' + to).join(','), 200))
   }
 
   const selection = inScope.find(record => record.type === 'agent-preset/selected')
