@@ -58,11 +58,13 @@ export interface ReadFactWindow {
    */
   truncatedLineNumbers: number[]
   /**
-   * File line numbers this window returned NO text for, because the byte cap
-   * stopped the window before them (empty when the window reached EOF or its
-   * line limit).
+   * The first file line this window returned NO text for, or `null`.
+   *
+   * The byte cap stops the window at one line, so every later line of the file is
+   * omitted: one start line describes the whole omission, and a huge file cannot
+   * turn this fact into an array of millions of numbers.
    */
-  omittedLineNumbers: number[]
+  omittedFrom: number | null
 }
 
 /** Everything a degraded edit may cite about one read, and nothing more. */

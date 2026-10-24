@@ -396,8 +396,14 @@ export function createPolicy({ ctx, config }) {
     if (fact.cwd !== cwd) {
       throw new EditPolicyError('EDIT_POLICY_READ_CWD', 'the cited read resolved against ' + fact.cwd + ', but this call runs in ' + cwd + '. A working-directory change invalidates the citation; read the target again.')
     }
-    const limited = new Set([...fact.window.truncatedLineNumbers, ...fact.window.omittedLineNumbers])
-    if (limited.size === 0) {
+    // A line is limited when the read could not deliver it in full: a column
+    // truncated line, or any line at or after the byte cap's stop line.
+    const isLimited = line =>
+      fact.window.truncatedLineNumbers.includes(line) ||
+      (typeof fact.window.omittedFrom === 'number' && line >= fact.window.omittedFrom)
+    const limitedCount = fact.window.truncatedLineNumbers.length +
+      (typeof fact.window.omittedFrom === 'number' ? Math.max(0, fact.totalLines - fact.window.omittedFrom + 1) : 0)
+    if (limitedCount === 0) {
       throw new EditPolicyError(
         'EDIT_POLICY_REASON_FALSE',
         'the cited read returned every requested line as complete text (a plain offset/limit page is not a window limit), so "window-limit" is not true for it. Use Hashline, or page to the content you need.',
@@ -407,14 +413,14 @@ export function createPolicy({ ctx, config }) {
     for (const range of fallback.ranges) {
       let touches = false
       for (let line = range.startLine; line <= range.endLine; line += 1) {
-        if (limited.has(line)) touches = true
+        if (isLimited(line)) touches = true
       }
       if (!touches) outside.push(range.startLine + '..' + range.endLine)
     }
     if (outside.length > 0) {
       throw new EditPolicyError(
         'EDIT_POLICY_REASON_FALSE',
-        'declared range(s) ' + outside.join(', ') + ' cover only lines the cited read returned in full; the limited lines are ' + [...limited].sort((a, b) => a - b).join(', ') + '. A window limit only supports the lines it actually withheld — everything else must be edited with Hashline.',
+        'declared range(s) ' + outside.join(', ') + ' cover only lines the cited read returned in full; the limited lines are ' + (fact.window.truncatedLineNumbers.length > 0 ? 'truncated: ' + fact.window.truncatedLineNumbers.join(', ') : '') + (typeof fact.window.omittedFrom === 'number' ? (fact.window.truncatedLineNumbers.length > 0 ? '; ' : '') + 'omitted from line ' + fact.window.omittedFrom + ' to the end of the file' : '') + '. A window limit only supports the lines it actually withheld — everything else must be edited with Hashline.',
       )
     }
     const { target, info } = await probe(targetPath, cwd, signal)
