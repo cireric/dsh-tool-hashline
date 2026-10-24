@@ -37,6 +37,9 @@ export const POLICY_MODES = ['replace', 'patch', 'apply_patch']
 /** The read tool's provisional-fact event (see its `facts` module). */
 const READ_FACT_EVENT = 'tool-read/read-fact'
 
+/** The event one settled call's decision receipt is published on. */
+export const RECEIPT_EVENT = 'tool-edit/policy-receipt'
+
 /** How many promoted read facts one registration keeps before evicting the oldest. */
 const FACT_CAPACITY = 64
 /** The payload groups that make a replace/patch/apply_patch request. */
@@ -205,6 +208,8 @@ export function createPolicy({ ctx, config }) {
   let verified = new Map()
   /** The known outcome of each recent call, for the receipt layer. */
   const receipts = new Map()
+  /** What the CURRENT call decided, attached to its receipt when it settles. */
+  let lastDecision
 
   /** Promote only a read whose registry outcome was a success. */
   ctx.on('tools/result', (exec, result) => {
@@ -617,6 +622,20 @@ export function createPolicy({ ctx, config }) {
         const key = entry.path
         byPath.set(key, (byPath.get(key) ?? 0) + 1)
       }
+      /** The decision this call reached, recorded for its receipt. */
+      const decided = {
+        callId: exec.callId,
+        rootCallId: exec.rootCallId,
+        mode,
+        payload: groups[0] ?? 'input',
+        targets: plan.map(entry => ({ path: entry.path, op: entry.op ?? 'update', kind: entry.hasDiff === false ? 'no-content' : 'content' })),
+        constrained: [...byPath.keys()],
+        fallbacks: fallbacks.map(fallback => ({ path: fallback.path, reason: fallback.reason })),
+        retry: request.retry === 1 ? 1 : 0,
+      }
+      // Recorded BEFORE the reasons are verified: a refusal inside this loop is still
+      // this call's decision, and its receipt has to show what was declared.
+      lastDecision = decided
       for (const [path, count] of byPath) {
         const matching = fallbacks.filter(fallback => fallback.path === path)
         if (matching.length === 0) {
@@ -666,14 +685,41 @@ export function createPolicy({ ctx, config }) {
     },
     /**
      * Record the known outcome of this call.
+     *
+     * The receipt keeps only what a reader needs to reconstruct the DECISION: the
+     * call identity, the payload class and the resolved mode, which reasons were
+     * declared and which were verified, and the outcome. It never copies file
+     * bodies, user messages or the environment.
      * @param {{exec: object, mode: string, result: string, code?: string}} outcome settled outcome
      */
     settle(outcome) {
+      const decision = lastDecision
       verified = new Map()
+      lastDecision = undefined
       const key = outcome?.exec?.callId
       if (typeof key !== 'string') return
-      receipts.set(key, { version: POLICY_VERSION, ...outcome })
+      const receipt = {
+        version: POLICY_VERSION,
+        ...outcome,
+        ...decision === undefined ? {} : { decision },
+      }
+      receipts.set(key, receipt)
       while (receipts.size > 32) receipts.delete(receipts.keys().next().value)
+      // Published on the mount's own context, so a diagnostic reader (the
+      // operations skills, a test) sees the SAME record the model's call produced,
+      // without the policy inventing a second log format or copying payloads.
+      ctx.emit(RECEIPT_EVENT, receipt)
+    },
+    /**
+     * The receipts this registration still holds, for a diagnostic reader.
+     *
+     * Not part of the model-facing surface: a caller that wants the record listens
+     * for `tool-edit/policy-receipt` or asks the instance, exactly as the operations
+     * skills read a session log.
+     * @returns {object[]} one receipt per remembered call, oldest first.
+     */
+    receipts() {
+      return [...receipts.values()]
     },
     /** Drop every record owned by this mount. */
     dispose() {

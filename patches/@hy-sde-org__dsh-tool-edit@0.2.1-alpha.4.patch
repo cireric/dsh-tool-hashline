@@ -98,7 +98,7 @@ index 6894eea..be28691 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e49..cd44568 100644
+index 64c9e49..04dd82e 100644
 --- a/a/dist/index.js
 +++ b/dist/index.js
 @@ -1,5 +1,6 @@
@@ -291,7 +291,7 @@ index 64c9e49..cd44568 100644
          },
          output: {
              schema: { type: 'string' },
-@@ -292,6 +414,12 @@ function registerEditTool(ctx, config, provider) {
+@@ -292,6 +414,21 @@ function registerEditTool(ctx, config, provider) {
              try {
                  const mode = dispatchMode(resolved, args);
                  const record = args;
@@ -299,12 +299,21 @@ index 64c9e49..cd44568 100644
 +                // refusal cannot leave a partial write: nothing below has touched the
 +                // disk yet. A registration without a policy module keeps the upstream
 +                // behavior exactly (no field, no check, no extra I/O).
-+                if (policy !== undefined)
-+                    await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx), plan: describeRequest(mode, record) });
++                if (policy !== undefined) {
++                    // A refusal here is a DECISION too: it must reach the record with its
++                    // code, or a maintainer sees an edit that failed for no stated reason.
++                    try {
++                        await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx), plan: describeRequest(mode, record) });
++                    }
++                    catch (refusal) {
++                        policy.settle({ exec, mode, result: isPolicyRefusal(refusal) ? 'refused' : 'failed', code: typeof refusal?.code === 'string' ? refusal.code : undefined });
++                        throw refusal;
++                    }
++                }
                  const run = () => {
                      switch (mode) {
                          case 'replace':
-@@ -307,17 +435,29 @@ function registerEditTool(ctx, config, provider) {
+@@ -307,17 +444,29 @@ function registerEditTool(ctx, config, provider) {
                      }
                  };
                  try {
@@ -337,7 +346,7 @@ index 64c9e49..cd44568 100644
                      throw error;
                  }
              }
-@@ -341,12 +481,78 @@ function registerEditTool(ctx, config, provider) {
+@@ -341,12 +490,78 @@ function registerEditTool(ctx, config, provider) {
          presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
      }));
  }
@@ -417,7 +426,7 @@ index 64c9e49..cd44568 100644
      const resolved = resolveConfig(config);
      if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
          throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
-@@ -359,6 +565,10 @@ export function apply(ctx, config) {
+@@ -359,6 +574,10 @@ export function apply(ctx, config) {
          ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
      });
      ctx.effect(() => () => { void provider.dispose(); });

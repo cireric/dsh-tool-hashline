@@ -157,6 +157,13 @@ export interface PolicyHarness {
   appendUserMessage(text: string): number
   /** Append one NON-user event (a tool result, an assistant message) to this session. */
   appendEvent(type: string, data: unknown): number
+  /**
+   * The receipts the mounted policy instance holds, oldest first.
+   *
+   * Empty when no policy is mounted. This is the same record a maintainer reads
+   * through the operations skills; it is not a model-facing field.
+   */
+  policyReceipts(): Record<string, unknown>[]
   callTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
   /** `read` through the registry. */
   read(file_path: string): Promise<ToolExecutionResult>
@@ -297,6 +304,10 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
   let otherCalls = 0
   let userMessages = 0
   let calls = 0
+  /** Every receipt the mounted policy published, in call order. */
+  const policyReceipts: Record<string, unknown>[] = []
+  ;(root as unknown as { on: (name: string, listener: (receipt: unknown) => void) => void })
+    .on('tool-edit/policy-receipt', receipt => { policyReceipts.push(receipt as Record<string, unknown>) })
   const callTool = (name: string, args: Record<string, unknown>) => runtime.execute({
     callId: `policy-${(calls += 1)}` as never,
     name,
@@ -359,6 +370,12 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
         source: { kind: 'user' },
         content: [{ type: 'text', text }],
       })
+    },
+    policyReceipts() {
+      // The policy publishes each settled call's decision on the preset scope's
+      // own context, so the fixture reads the record the call actually produced
+      // instead of reaching into the module.
+      return policyReceipts
     },
     callTool,
     read: file_path => callTool('read', { file_path }),
