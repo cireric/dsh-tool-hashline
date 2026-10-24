@@ -162,3 +162,34 @@ describe('POLICY-04/POLICY-14: no-op and stale-evidence regressions stay intact'
     expect(await readFixture(file)).toBe('small\n')
   })
 })
+
+describe('POLICY-17/POLICY-19: a refusal ON THE RETRY is recorded as the final decision', () => {
+  it('records retry=1 and refused when the retry no longer holds', async () => {
+    // The competitor rewrites the file, so after the stale-version rejection the
+    // retry's own preflight refuses: the citation no longer describes the bytes.
+    const harness = await managed({ read: { snapshotMaxBytes: CEILING }, race: true, raceOn: 'retry-refusal.txt' })
+    onTestFinished(() => harness.cleanup())
+    const file = await writeFixture(harness.dir, 'retry-refusal.txt', textOfBytes(CEILING))
+    const read = await harness.read('retry-refusal.txt')
+    const citation = citationOf((read as unknown as { value: { nextAction: string | null } }).value.nextAction)
+    expect(citation).toBeTypeOf('string')
+
+    const result = await harness.callTool('edit', {
+      path: 'retry-refusal.txt',
+      old_string: 'x'.repeat(8),
+      new_string: 'Y'.repeat(8),
+      fallbacks: [{ path: 'retry-refusal.txt', reason: 'snapshot-limit', readCallId: citation }],
+    })
+
+    // The competitor wrote a small file, so the retry's own preflight refuses.
+    expect(result.isError).toBe(true)
+    expect(errorText(result)).toContain('EDIT_POLICY_EVIDENCE_STALE')
+    const receipts = harness.policyReceipts() as unknown as { result: string; retry?: number; decision?: { retry: number }; code?: string }[]
+    const last = receipts[receipts.length - 1]!
+    expect(last.result).toBe('refused')
+    expect(last.retry).toBe(1)
+    expect(last.code).toBe('EDIT_POLICY_EVIDENCE_STALE')
+    expect(await readFixture(file)).toBe(harness.race!.competitorContent)
+  })
+})
+

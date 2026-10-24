@@ -98,7 +98,7 @@ index 6894eea..be28691 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e49..04dd82e 100644
+index 64c9e49..4faf43a 100644
 --- a/a/dist/index.js
 +++ b/dist/index.js
 @@ -1,5 +1,6 @@
@@ -313,7 +313,7 @@ index 64c9e49..04dd82e 100644
                  const run = () => {
                      switch (mode) {
                          case 'replace':
-@@ -307,17 +444,29 @@ function registerEditTool(ctx, config, provider) {
+@@ -307,17 +444,38 @@ function registerEditTool(ctx, config, provider) {
                      }
                  };
                  try {
@@ -337,8 +337,17 @@ index 64c9e49..04dd82e 100644
 +                        // policy re-decides from fresh facts: a degradation that the first
 +                        // attempt justified may no longer be true (or the target may have
 +                        // become editable with Hashline). An allow is never carried over.
-+                        if (policy !== undefined)
-+                            await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx), plan: describeRequest(mode, record), retry: 1 });
++                        if (policy !== undefined) {
++                            // A refusal HERE is the call's final decision, not the stale-version
++                            // failure that triggered the retry: record it as such before it surfaces.
++                            try {
++                                await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx), plan: describeRequest(mode, record), retry: 1 });
++                            }
++                            catch (refusal) {
++                                policy.settle({ exec, mode, result: isPolicyRefusal(refusal) ? 'refused' : 'failed', code: typeof refusal?.code === 'string' ? refusal.code : undefined, retry: 1 });
++                                throw refusal;
++                            }
++                        }
 +                        const retried = await run();
 +                        policy?.settle({ exec, mode, result: 'completed', retry: 1 });
 +                        return retried;
@@ -346,7 +355,7 @@ index 64c9e49..04dd82e 100644
                      throw error;
                  }
              }
-@@ -341,12 +490,78 @@ function registerEditTool(ctx, config, provider) {
+@@ -341,12 +499,78 @@ function registerEditTool(ctx, config, provider) {
          presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
      }));
  }
@@ -426,7 +435,7 @@ index 64c9e49..04dd82e 100644
      const resolved = resolveConfig(config);
      if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
          throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
-@@ -359,6 +574,10 @@ export function apply(ctx, config) {
+@@ -359,6 +583,10 @@ export function apply(ctx, config) {
          ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
      });
      ctx.effect(() => () => { void provider.dispose(); });
