@@ -248,30 +248,61 @@ export function createPolicy({ ctx, config }) {
    * @returns {Promise<string>} 'content-update' | 'exception' | 'unknown'
    */
   const classifyEntry = async context => {
-    const { cwd, entry, signal } = context
+    const { cwd, entry, signal, view } = context
     const op = entry?.op
     if (typeof entry?.path !== 'string' || entry.path.trim() === '') return 'unknown'
-    if (op === 'delete' || op === 'rename') return 'exception'
+    const target = await ctx.fs.resolve(entry.path, signal === undefined ? { cwd } : { cwd, signal })
+    // A pure delete or move touches no content. It still updates the request-scoped
+    // view, so a later entry sees the file gone (or moved) — never the disk state
+    // from before this request.
+    if (op === 'delete' || op === 'rename') {
+      if (op === 'delete') view.set(target.targetKey, { kind: 'absent' })
+      else if (typeof entry.rename === 'string') {
+        const moved = await ctx.fs.resolve(entry.rename, signal === undefined ? { cwd } : { cwd, signal })
+        const prior = await readState(target, signal, view)
+        view.set(target.targetKey, { kind: 'absent' })
+        view.set(moved.targetKey, prior)
+      }
+      return 'exception'
+    }
     // A patch entry with no diff is not an update of any content.
     if (entry.hasDiff === false) return 'exception'
-    const target = await ctx.fs.resolve(entry.path, signal === undefined ? { cwd } : { cwd, signal })
-    const info = await ctx.fs.stat(target, signal)
-    const missing = info === undefined
+    const state = await readState(target, signal, view)
+    if (state.kind === 'unknown') return 'unknown'
+    // Every content-shaped entry leaves its target holding content, so a later entry
+    // in the SAME request sees that (this is how delete-then-recreate and
+    // move-then-overwrite are recognized instead of being misread as exceptions).
+    view.set(target.targetKey, { kind: 'content' })
     if (op === 'create') {
-      if (missing) return 'exception'
-      if (info.type !== 'file') return 'unknown'
-      const text = await ctx.fs.readText(target, signal)
       // `create` over existing NON-EMPTY content is an overwrite, i.e. a content
-      // update; over an empty file it is the creation exception.
-      return text.length === 0 ? 'exception' : 'content-update'
+      // update; over an absent or empty target it is the creation exception.
+      return state.kind === 'content' ? 'content-update' : 'exception'
     }
     if (op === 'update' || op === undefined) {
-      if (missing) return 'exception'
-      if (info.type !== 'file') return 'unknown'
-      const text = await ctx.fs.readText(target, signal)
-      return text.length === 0 ? 'exception' : 'content-update'
+      return state.kind === 'content' ? 'content-update' : 'exception'
     }
     return 'unknown'
+  }
+
+  /**
+   * The state one target will hold when this entry runs.
+   *
+   * The request-scoped view wins: an earlier entry in the same request already
+   * decided what this path holds, and re-reading the disk would answer a question
+   * about a state that no longer applies. Only an unseen target is probed.
+   * @param {object} target resolved target
+   * @param {AbortSignal | undefined} signal caller cancellation
+   * @param {Map<string, object>} view request-scoped states so far
+   * @returns {Promise<{kind: string}>} 'absent' | 'empty' | 'content' | 'unknown'
+   */
+  const readState = async (target, signal, view) => {
+    const planned = view.get(target.targetKey)
+    if (planned !== undefined) return planned
+    const info = await ctx.fs.stat(target, signal)
+    if (info === undefined) return { kind: 'absent' }
+    if (info.type !== 'file') return { kind: 'unknown' }
+    const text = await ctx.fs.readText(target, signal)
+    return { kind: text.length === 0 ? 'empty' : 'content' }
   }
   /**
    * Verify a `snapshot-limit` fallback against the read it cites.
@@ -567,8 +598,12 @@ export function createPolicy({ ctx, config }) {
       // BEFORE the first write. One exception never unlocks the rest, and a single
       // refusal stops the whole request while nothing has landed yet.
       const constrained = []
+      // One request-scoped view of the targets, applied in the order the executor will
+      // use. It is a SHORT-LIVED classification aid: it never replaces the executor's
+      // own reads, and preflight performs no write, mkdir, delete or move.
+      const view = new Map()
       for (const entry of plan) {
-        const kind = await classifyEntry({ cwd, entry, signal: exec.signal })
+        const kind = await classifyEntry({ cwd, entry, signal: exec.signal, view })
         if (kind === 'content-update') constrained.push(entry)
         else if (kind === 'unknown') {
           throw new EditPolicyError(
