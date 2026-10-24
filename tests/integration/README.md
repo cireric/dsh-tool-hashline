@@ -116,6 +116,15 @@ standing in for the registry.
 - `operations-cli.spec.ts` — the CLI contract the skill bodies call: exit
   codes, host-managed environment facts, and baseline output that names every
   gap instead of guessing.
+- `operations-incidents.spec.ts` — INC-01..06: incident evidence from one
+  explicit session and seq range. An inner edit failure is preserved even
+  when the program caught it and the outer `run_code` succeeded; kind and
+  severity stay separate axes; a user-reported mismatch never fabricates
+  `isError`; torn frames, seq gaps, duplicate seqs and a start without a
+  settle all report `incomplete`; secrets in arguments, first lines and
+  paths never reach an exported file; and only suspected anomalies are
+  auto-registered as `needs-triage` issues (expected refusals and
+  cancellations stay in the summary).
 - `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
   install into an unrelated project, and resolution + execution from a foreign
   working directory. An engine the install does not carry reports `unknown`,
@@ -125,3 +134,14 @@ standing in for the registry.
 from `presets/ptc-hashline/preset.patch.yml` with the loader's own YAML
 dialect, so a row that disappears or a frontmatter policy that flips fails a
 test rather than passing on a copy.
+## Shebangs in imported `.mjs` modules
+
+A `.mjs` module that is *imported by a test* must not carry a `#!` line: Vite 7's
+SSR transform keeps the shebang in its output, and Node 24 then fails to parse
+the module (`Invalid or unexpected token`), which shows up as a load failure of
+the importing spec. The three modules this tier imports
+(`presets/ptc-hashline/operations/cli.mjs`, `.../session-log.mjs` and
+`scripts/extract-runtime-evidence.mjs`) are always invoked as `node <path>`, so
+they carry no shebang; the other scripts keep theirs because only the shell
+runs them.
+

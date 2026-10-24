@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Read-only extractor for the evidence a HOST-11-style claim needs: which preset
  * the session selected, which assistant message carried each behavior-changing
@@ -43,6 +42,7 @@ import { pathToFileURL } from 'node:url'
 // serves both this offline extractor and the two operations skills; the
 // re-export below keeps this module's public surface exactly as it was.
 import { decodeArtifact, parseRecords, scanZstdFrames } from '../presets/ptc-hashline/operations/session-log.mjs'
+import { clip, firstLineOf, textOfBlocks } from '../presets/ptc-hashline/operations/text.mjs'
 
 export { decodeArtifact, parseRecords, scanZstdFrames }
 
@@ -100,10 +100,6 @@ export function validateBounds(seqMin, seqMax) {
   if (seqMin > seqMax) throw new UsageError('--seq-min must not exceed --seq-max')
   return { min: seqMin, max: seqMax }
 }
-
-const firstLineOf = (text) => text.split('\n')[0] ?? ''
-const clip = (value, limit) => typeof value !== 'string' ? value : value.length <= limit ? value : value.slice(0, limit) + '…'
-const textOfBlocks = (blocks) => Array.isArray(blocks) ? blocks.filter(block => block?.type === 'text').map(block => block.text ?? '').join('\n') : ''
 
 /**
  * Pair PTC sub-dispatch start/settle events into one call per subCallId.

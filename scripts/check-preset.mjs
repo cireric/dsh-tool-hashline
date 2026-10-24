@@ -143,7 +143,9 @@ else {
 for (const skill of OPERATIONS_SKILLS) {
   const file = join('presets/ptc-hashline/skills', skill, 'SKILL.md')
   if (!existsSync(join(repo, file))) { fail('missing shipped skill body: ' + file); continue }
-  const text = read(file)
+  // Normalize line endings: a Windows checkout hands back CRLF and the
+  // frontmatter assertions below are anchored on \n like the digest helper.
+  const text = read(file).replace(/\r\n/gu, '\n')
   if (!/^---\n/u.test(text)) fail(file + ' must start with YAML frontmatter')
   if (!/^disable-model-invocation:\s*true$/mu.test(text)) fail(file + ' must set disable-model-invocation: true')
   if (!/^user-invocable:\s*true$/mu.test(text)) fail(file + ' must set user-invocable: true')
@@ -153,7 +155,7 @@ for (const skill of OPERATIONS_SKILLS) {
 // The operations runtime ships inside the bundle, so a packed install resolves
 // it without a checkout: every module the skills reference must exist and use
 // only Node builtins plus its own siblings.
-for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 'session-log.mjs']) {
+for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 'session-log.mjs', 'incidents.mjs', 'text.mjs']) {
   const file = join('presets/ptc-hashline/operations', module)
   if (!existsSync(join(repo, file))) { fail('missing operations module: ' + file); continue }
   const text = read(file)

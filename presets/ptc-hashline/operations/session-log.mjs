@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Session-artifact decoding for the operations skills.
  *

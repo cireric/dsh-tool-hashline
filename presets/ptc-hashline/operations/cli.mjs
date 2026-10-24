@@ -1,4 +1,3 @@
-#!/usr/bin/env node
 /**
  * Operations CLI: the entry point the two skills call (D1, D9, SCOPE-04/05,
  * CONFIG-01, and the baseline slice of the ticket).
@@ -11,6 +10,8 @@
  *             the target preset — the workflow must then stop)
  *   config    read or save the maintenance repository and evidence directory
  *   baseline  report the actual running combination
+ *   incident  assemble a redacted evidence bundle for one session/seq range
+ *             and register suspected anomalies for triage (INC-01..06)
  *
  * Only Node builtins: the shipped bundle must run from any working directory
  * with no checkout, no `.scratch` and no root `scripts/` beside it.
@@ -23,6 +24,8 @@ import { fileURLToPath, pathToFileURL } from 'node:url'
 import { collectBaseline } from './baseline.mjs'
 import { describeConfig, requireRole, saveConfig, stateDirectory } from './config.mjs'
 import { verifyInvocationContext } from './context.mjs'
+import { buildIncident, DEFAULT_FEATURE, incidentDirectory, registerNeedsTriageIssues, validateSeqBounds, writeIncidentBundle } from './incidents.mjs'
+import { readSessionArtifact } from './session-log.mjs'
 
 /** Exit codes: 0 answered, 2 stopped by the workflow guard, 3 refused usage. */
 export const EXIT = { ok: 0, stopped: 2, refused: 3 }
@@ -92,6 +95,15 @@ export async function run(argv, environment = { env: {} }) {
   const [command, ...rest] = argv
   const facts = resolveEnvironment(environment)
   const flags = parseFlags(rest)
+  /** A numeric flag, or a usage refusal (never a silent NaN). */
+  const numberFlag = (name) => {
+    const raw = flags[name]
+    if (raw === undefined) return undefined
+    if (raw === true) throw new UsageError('--' + name + ' needs a value')
+    const number = Number(raw)
+    if (Number.isNaN(number)) throw new UsageError('--' + name + ' must be a number')
+    return number
+  }
   // ELIGIBILITY comes from the INVOKING session only — the host-managed
   // DSH_SESSION_ID. No flag can substitute for it (SCOPE-05): a caller naming
   // a historical ptc-hashline session must not thereby authorize this one.
@@ -173,7 +185,118 @@ export async function run(argv, environment = { env: {} }) {
     }
     return { code: EXIT.ok, value }
   }
-  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config or baseline')
+  if (command === 'incident') {
+    const verdict = await verdictFor()
+    const context = { eligible: verdict.eligible, status: verdict.status, ...verdict.reason === undefined ? {} : { reason: verdict.reason } }
+    // A wrong or unverifiable mode stops before any file or network action
+    // (SCOPE-04/05): the analyzed session never authorizes this one.
+    if (!verdict.eligible) {
+      return { code: EXIT.stopped, value: { command: 'incident', status: 'stopped', reason: verdict.reason, context } }
+    }
+    const described = await describeConfig(facts.stateDir)
+    let evidenceDirectory
+    let evidenceProblem
+    try {
+      evidenceDirectory = requireRole(described, 'evidenceDirectory')
+    } catch (error) {
+      // D9: a role that is unconfigured or unusable stops ITS write and names
+      // the fix. The read-only analysis below still runs, so the user sees
+      // counts and gaps instead of nothing.
+      evidenceProblem = error instanceof Error ? error.message : String(error)
+    }
+    let maintenance
+    try {
+      maintenance = { path: requireRole(described, 'maintenanceRepository') }
+    } catch (error) {
+      maintenance = { reason: error instanceof Error ? error.message : String(error) }
+    }
+    const targetSession = typeof flags['target-session'] === 'string' ? flags['target-session']
+      : typeof flags.session === 'string' ? flags.session : facts.sessionId
+    if (typeof targetSession !== 'string' || targetSession.trim() === '') {
+      throw new UsageError('the incident command needs a target session (--target-session) or a host-provided DSH_SESSION_ID')
+    }
+    const targetCwd = typeof flags['target-cwd'] === 'string' ? flags['target-cwd']
+      : typeof flags.cwd === 'string' ? flags.cwd : facts.cwd
+    const seq = validateSeqBounds(numberFlag('seq-min'), numberFlag('seq-max'))
+    const generatedAt = typeof flags.now === 'string' ? flags.now : new Date().toISOString()
+    if (Number.isNaN(Date.parse(generatedAt))) throw new UsageError('--now must be an ISO-8601 timestamp')
+    const feature = typeof flags.feature === 'string' ? flags.feature : DEFAULT_FEATURE
+    if (!/^[a-z0-9][a-z0-9-]*$/u.test(feature)) throw new UsageError('--feature must be a lowercase slug (a-z, 0-9 and -)')
+    // Scope narrowing: only the named session's own directory is read; the
+    // workflow never scans the sessions root for another session to analyze.
+    const artifact = await readSessionArtifact({ sessionsRoot: facts.sessionsRoot, cwd: targetCwd, sessionId: targetSession })
+    if (artifact.status !== 'read') {
+      return {
+        code: EXIT.stopped,
+        value: {
+          command: 'incident',
+          status: artifact.status,
+          reason: 'the target session\'s own log is ' + artifact.status + ' (' + artifact.detail + '); nothing was written',
+          context,
+          target: { session: targetSession, cwd: targetCwd },
+        },
+      }
+    }
+    const incident = buildIncident({
+      artifact,
+      targetSessionId: targetSession,
+      targetCwd,
+      seqMin: seq?.min,
+      seqMax: seq?.max,
+      userReport: typeof flags['user-report'] === 'string' ? flags['user-report'] : undefined,
+      userEvidence: typeof flags['user-evidence'] === 'string' ? flags['user-evidence'] : undefined,
+      generatedAt,
+      invocation: verdict,
+    })
+    if (evidenceProblem !== undefined) {
+      // D9 keeps the WRITE stopped, not the analysis: counts and gaps still come
+      // back so the user can act without a configured evidence directory.
+      return {
+        code: EXIT.stopped,
+        value: {
+          command: 'incident',
+          status: 'read-only',
+          reason: evidenceProblem,
+          counts: incident.counts,
+          gaps: incident.integrity.issues,
+          findings: incident.events.filter((event) => event.kind === 'suspected-implementation-defect' || event.kind === 'partial-success').map((event) => ({ kind: event.kind, name: event.name, seq: event.seq })),
+          context,
+          target: { session: targetSession, cwd: incident.target.cwd },
+        },
+      }
+    }
+    const directory = incidentDirectory(evidenceDirectory, targetSession, generatedAt)
+    const baseline = collectBaseline({
+      installationRoot: installationRoot(),
+      ...maintenance.path === undefined ? {} : { maintenanceRepository: maintenance.path },
+      ...incident.route.provider === undefined ? {} : { provider: incident.route.provider },
+      ...incident.route.model === undefined ? {} : { model: incident.route.model },
+      presetId: verdict.evidence?.effectivePreset ?? undefined,
+      presetSource: verdict.evidence?.source,
+    })
+    // The bundle is written BEFORE any issue: a triage ticket must never cite a
+    // package that does not exist (ADR-0004's partial-success lesson).
+    await writeIncidentBundle({ directory, incident, baseline })
+    incident.issues = maintenance.path === undefined
+      ? { configured: false, directory: null, written: [], skipped: [{ reason: maintenance.reason }] }
+      : await registerNeedsTriageIssues({ maintenanceRepository: maintenance.path, feature, incident, directory })
+    // Rewrite the two files that embed the registration record.
+    const files = await writeIncidentBundle({ directory, incident, baseline })
+    return {
+      code: incident.integrity.status === 'complete' ? EXIT.ok : EXIT.stopped,
+      value: {
+        command: 'incident',
+        status: incident.integrity.status,
+        counts: incident.counts,
+        gaps: incident.integrity.issues,
+        issues: incident.issues,
+        evidence: { directory, files },
+        context,
+        target: { session: targetSession, cwd: incident.target.cwd },
+      },
+    }
+  }
+  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline or incident')
 }
 
 /**
