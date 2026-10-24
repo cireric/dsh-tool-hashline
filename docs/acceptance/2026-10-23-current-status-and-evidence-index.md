@@ -16,7 +16,7 @@
 | Intent/PTC 取证 | v2 按 subCallId 配对；原会话 seq 0..973 得到 134 次完成行为调用、134 次同轮声明有效、无门拒绝；不使用 v1 的 268 次统计 |
 | 1807 审查修正 | 五项发现已在后续复核关闭；单独重跑受影响的 integration 32 项与 PTC 2 项通过 |
 | DSH 重启 | 用户已确认手动重启；不再要求进程启动取证，不据此声称重新跑过重启后的完整业务矩阵 |
-| 运维 skills | 两份 skill 仅在本 preset 的用户入口出现（真实 registry/loader 装配证据）、模型加载被拒、调用资格核验、CONFIG-01 配置与运行基线（ticket 01）；incident 取证与登记（ticket 02/03）；升级评估、方案、同意、隔离候选验证与获第二阶段同意后的目标切换/本轮回退或交接（ticket 04/05/06/07）均已实现，证据见下表。**真实宿主交付验收**（真实 DSH 会话显式调用、模式隔离、打包后装配）仍属 ticket 08，未完成 |
+| 运维 skills | 两份 skill 仅在本 preset 的用户入口出现（真实 registry/loader 装配证据）、模型加载被拒、调用资格核验、CONFIG-01 配置与运行基线（ticket 01）；incident 取证与登记（ticket 02/03）；升级评估、方案、同意、隔离候选验证与获第二阶段同意后的目标切换/本轮回退或交接（ticket 04/05/06/07）均已实现；真实宿主交付验收（PACK-01、SCOPE-01～07、UPG-13、REG-01）已按[交付验收报告](2026-10-24-delivery-acceptance-report.md)执行一次：打包安装、真实 launcher 装配出 ptc-hashline preset、装上的 preset registry/loader 装配出两份 skill、两条工作流走装好的 CLI。报告逐条记 PASS/GAP/FAIL/BLOCKED 与退出码，9 个不由本轮覆盖的规格 ID 显式列 BLOCKED 并注明归属；模拟候选、注入 runner、一次性 profile、以及「没有人工冒烟」的边界都写在报告里 |
 
 ## 最近已记录的门禁
 
@@ -50,6 +50,7 @@
 | 升级评估/方案/同意 | [operations-upgrade-assessment.spec.ts](../../tests/integration/operations-upgrade-assessment.spec.ts)、[operations-upgrade-proposal-consent.spec.ts](../../tests/integration/operations-upgrade-proposal-consent.spec.ts) |
 | 隔离候选验证 | [operations-candidate-validation.spec.ts](../../tests/integration/operations-candidate-validation.spec.ts) |
 | 目标切换与失败回退/交接 | [operations-target-switch.spec.ts](../../tests/integration/operations-target-switch.spec.ts) |
+| 真实宿主交付验收（打包安装 + 真实装配 + 两条工作流） | [交付验收报告](2026-10-24-delivery-acceptance-report.md)、[入口](../../scripts/delivery-acceptance-cli.mjs)、[自检](../../tests/integration/delivery-acceptance.spec.ts) |
 
 执行说明与环境输入见[根 README](../../README.md)及[测试说明](../../tests/integration/README.md)。用例数量是运行记录，不作为未来版本必须保持不变的常量。
 

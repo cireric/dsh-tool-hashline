@@ -37,16 +37,17 @@ pnpm test:ptc
 pnpm test:compat
 pnpm check:preset
 pnpm test:profile
+pnpm test:delivery
 ```
 
-`check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
+`check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。`test:delivery` 是真实宿主交付验收：它会 `pnpm pack` 四个交付包、装进一次性 DSH_HOME、用真实 launcher 装配 profile、跑门禁并把逐条证据写进 `docs/acceptance/<日期>-delivery-acceptance-report.md`（耗时数分钟；`--no-gates` 只跑装配与工作流）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
 
 ## 文档入口
 
 - [需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)
 - [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)
 - [上游功能分析](docs/background/2026-10-23-dsh-hashline-feature-analysis.md)：版本化研究快照，其中建议不代表已批准需求
-- [运维 skills 需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)：incident、升级评估/方案/同意、获准后的隔离候选验证，以及获第二阶段同意后的目标切换与失败回退/交接已实现（真实宿主交付验收仍属票据 08）
+- [运维 skills 需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)：incident、升级评估/方案/同意、获准后的隔离候选验证，以及获第二阶段同意后的目标切换与失败回退/交接已实现；真实宿主交付验收见[报告](docs/acceptance/2026-10-24-delivery-acceptance-report.md)（`pnpm test:delivery`）
 - 运维 skill 入口：`/ptc-hashline-incident`、`/ptc-hashline-upgrade`（仅 PTC Hashline Mode 的真实用户显式调用；模型目录不包含、`skill` 工具加载被拒）
 
 参与开发前阅读 [AGENTS.md](AGENTS.md)。

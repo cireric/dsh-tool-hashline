@@ -1,6 +1,6 @@
 ---
 name: ptc-hashline-incident
-description: PTC Hashline 异常取证入口（仅用户显式调用）。核验调用资格、确认维护仓库与证据目录、采集运行基线，并从指定会话/seq 范围生成脱敏摘要与 needs-triage 问题包；同类重复发生关联既有工单并记录恢复，upgrade 工作流尚未实现。
+description: PTC Hashline 异常取证入口（仅用户显式调用）。核验调用资格、确认维护仓库与证据目录、采集运行基线，并从指定会话/seq 范围生成脱敏摘要与 needs-triage 问题包；同类重复发生关联既有工单并记录恢复。升级检查是另一份 skill（/ptc-hashline-upgrade），本 skill 不触发它。
 disable-model-invocation: true
 user-invocable: true
 ---
@@ -81,11 +81,13 @@ node <base>/../../operations/cli.mjs incident --target-session "<会话 ID>" [--
 - 证据包 `incident.json` 的 `invocation.delegation` 记录本次由谁调用（`role`、`parentSession`、`delegationDepth`、`mayAssistAnalysis`、`mayApproveUpgrade`）；`mayApproveUpgrade` 为 `false` 时不得用它替代用户确认。
 - 子 agent 传入的 `--user-report` / `--user-evidence` 会记为 `userReport.source: "subagent"`、`standsForUser: false`，`summary.md` 里也标明“agent statement, not a user confirmation”。转述可以保留，但不得当成用户本人的确认，更不得据此推进任何写入或升级。
 
-## 6. 本版本尚未支持的动作
+## 6. 边界与不做的事
 
-以下能力**尚未实现**，遇到时直接告诉用户“当前版本未支持”，不要用替代手段假装完成：
+本 skill 覆盖取证与登记，**不含**升级动作：只读评估、方案、用户同意、候选验证、目标切换与回退都属 `/ptc-hashline-upgrade`，本 skill 不自行触发它，也不因 incident 的异常而联网检查或升级（D13）。
 
-- upgrade 的只读评估、方案、用户同意、候选验证、目标切换与回退（票据 04—07）。
-- 完整真实宿主交付验收；外发、自动清理、重放 `MV`/`REM`、现场修实现或自动升级（票据 08 与规格边界）。
+以下动作即使本 skill 已加载也不做，遇到时直接告诉用户：
 
-只读分析可以继续；写入类动作在对应能力交付前一律不做。
+- 外发证据、自动清理源日志或问题包、重放 `MV`/`REM`、现场修实现、自动升级、修改 gate 或自动重启 DSH。
+- 把本机操作者伪造的调用或回执当成用户确认：审批记录只用工作流追溯，不宣称能防住本机操作者。
+
+只读分析可以继续；写入类动作限于本工作流声明的证据包与问题包。

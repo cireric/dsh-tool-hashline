@@ -35,7 +35,9 @@ describe('PACK-01: the installed bundle carries the operations assets', () => {
     // 1) Pack exactly what the manifest ships.
     const packDir = path.join(work, 'pack')
     await mkdir(packDir, { recursive: true })
-    execFileSync(PNPM, ['pack', '--pack-destination', packDir], { cwd: repo, stdio: 'pipe', timeout: 180_000 })
+    // Windows cannot spawn a `.cmd` shim without a shell; the arguments here are
+    // fixed by this suite, never user input.
+    execFileSync(PNPM, ['pack', '--pack-destination', packDir], { cwd: repo, stdio: 'pipe', timeout: 180_000, shell: process.platform === 'win32' })
     const tarballs = (await readdir(packDir)).filter(name => name.endsWith('.tgz'))
     expect(tarballs).toHaveLength(1)
     const tarball = path.join(packDir, tarballs[0]!)
@@ -50,7 +52,7 @@ describe('PACK-01: the installed bundle carries the operations assets', () => {
     await mkdir(project, { recursive: true })
     await writeFile(path.join(project, 'package.json'), JSON.stringify({ name: 'pack-probe', private: true, type: 'module' }, null, 2) + '\n')
     await writeFile(path.join(project, 'pnpm-workspace.yaml'), 'packages:\n  - .\n\nnodeLinker: hoisted\nautoInstallPeers: false\n')
-    execFileSync(PNPM, ['add', tarball, '--ignore-workspace'], { cwd: project, stdio: 'pipe', timeout: 300_000 })
+    execFileSync(PNPM, ['add', tarball, '--ignore-workspace'], { cwd: project, stdio: 'pipe', timeout: 300_000, shell: process.platform === 'win32' })
 
     // 3) Resolve from that install, in a directory that is NOT this checkout.
     const unrelated = path.join(work, 'elsewhere')

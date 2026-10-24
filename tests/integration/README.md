@@ -261,6 +261,43 @@ standing in for the registry.
 from `presets/ptc-hashline/preset.patch.yml` with the loader's own YAML
 dialect, so a row that disappears or a frontmatter policy that flips fails a
 test rather than passing on a copy.
+
+## The real-host delivery run (ticket 08)
+
+`pnpm test:delivery` is not a spec in this tier: it installs. One run packs the
+four shipped packages, installs them into a throwaway DSH_HOME with its own
+store, composes that profile with the REAL launcher (`dsh --profile <p>
+--dump-config`), mounts the installed preset rows through the installed preset
+registry / loader / skill registry, then drives both workflows through the
+INSTALLED `operations/cli.mjs` from a business working directory that has
+nothing to do with this checkout. It writes
+`docs/acceptance/<date>-delivery-acceptance-report.md` (plus a JSON summary)
+keyed by the spec's acceptance IDs, runs the repository gates and records each
+exit code.
+
+What it measures beyond the assets: the profile installs the two engine anchors
+from `patches/` + `patchedDependencies` (so the build under test is the patched
+one, verified by reading the marker out of the installed `dist/`), the bundled
+install is a real copy rather than a `link:` back to the checkout, and every
+shipped artifact (patch, personas, skills, operations, watchdog) is scanned for
+this checkout's own path.
+
+Claim boundaries it states in its own report: **nobody typed the skill gesture in
+a real host during this run** — the automatable part is measured (packed install,
+real launcher composition, entry visibility and refusal through the real
+registry/loader, both workflows through the installed CLI) — the profile is not a
+replica of the daily web profile, `upgrade validate`/`switch` run in-process
+against an injected install runner (`runner.source: injected`), the switch
+targets a one-off profile, and the fixed candidate plus pinned metadata replace a
+live registry query (D16/UPG-13).
+
+`delivery-acceptance.spec.ts` pins only what a regression would silently break —
+the verdict rules, the report's required sections and boundaries, the date it
+takes from the run, and the workflow fixture writers. It never installs.
+
+`scripts/delivery-acceptance*.mjs` carry no shebang for the same reason the
+operations modules do (see below).
+
 ## Shebangs in imported `.mjs` modules
 
 A `.mjs` module that is *imported by a test* must not carry a `#!` line: Vite 7's

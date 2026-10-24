@@ -5,7 +5,7 @@
 - 开始修改前读 [README](README.md)、[术语](GLOSSARY.md)和[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
 - 修改 read/edit/preset：读[权威规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)及相关 [ADR](docs/adr/)。历史交接和研究报告只作背景，不覆盖现行规格。
 - 升级 hashline/tool-edit 或宿主：读[兼容矩阵与补丁维护规则](tests/compat/README.md)。
-- 开发运维 skills：读[需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)和[计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)；当前仅有设计，未授权开发或真实升级。
+- 开发运维 skills：读[需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)和[计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)；两份 skill 及其工作流已实现，最近一次真实宿主交付验收见[报告](docs/acceptance/2026-10-24-delivery-acceptance-report.md)。实现完成**不**等于获准真实升级：任何目标切换仍需用户当次明确同意。
 
 ## 实现边界
 
@@ -18,7 +18,7 @@
 
 ## 验证与交付
 
-按 README 运行受影响测试；依赖、preset 或运行契约变更需跑完整交付门禁。版本相同不能证明补丁生效，升级须核验实际解析路径、补丁与兼容矩阵。
+按 README 运行受影响测试；依赖、preset 或运行契约变更需跑完整交付门禁。版本相同不能证明补丁生效，升级须核验实际解析路径、补丁与兼容矩阵。交付类变更另跑 `pnpm test:delivery`：它打包安装、用真实 launcher 装配，并把逐条证据写进 `docs/acceptance/`；不要把注入 runner 或一次性 profile 的结果说成真实升级。
 
 保留用户已有工作树改动；不热改运行中宿主依赖，不自动重启或发布，目标 profile 切换需有用户明确授权。测试结果区分 PASS、FAIL、GAP 与 BLOCKED，不把 skipped、夹具或历史结果扩大为未执行的验收。
 

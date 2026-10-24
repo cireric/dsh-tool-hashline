@@ -18,7 +18,8 @@
     "test:profile": "node scripts/test-profile.mjs",
     "test:ptc": "vitest run --config vitest.ptc.config.ts",
     "check:tests": "tsc -p tsconfig.tests.json",
-    "install:profile": "node scripts/install-profile.mjs"
+    "install:profile": "node scripts/install-profile.mjs",
+    "test:delivery": "node scripts/delivery-acceptance-cli.mjs"
   },
   "devDependencies": {
     "@deepseek-ai/cordis": "4.0.5-alpha.2",

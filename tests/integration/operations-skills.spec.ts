@@ -252,10 +252,12 @@ describe('SCOPE-07: the skill bodies are user-invocation only', () => {
       expect(text).not.toContain('<base>/../operations/cli.mjs')
       const commands = [...text.matchAll(/operations\/cli\.mjs (\w+)/gu)].map(match => match[1])
       // Each body may only name commands this CLI implements. The incident body
-      // documents `incident` as well; the upgrade body does not touch evidence.
+      // documents `incident` as well, and the upgrade body documents the
+      // two-word `upgrade` verb (its subcommands are asserted by the suites that
+      // own them: assess / propose / consent / validate / switch).
       const documented = name === 'ptc-hashline-incident'
         ? ['context', 'config', 'baseline', 'incident']
-        : ['context', 'config', 'baseline']
+        : ['context', 'config', 'baseline', 'upgrade']
       expect(new Set(commands)).toEqual(new Set(documented))
       // Every path the body mentions must exist relative to its resource base.
       const operations = path.resolve(skillsDir, name, '..', '..', 'operations')
