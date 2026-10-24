@@ -98,7 +98,7 @@ index 6894eea..be28691 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e49..61fba9e 100644
+index 64c9e49..529fd3a 100644
 --- a/a/dist/index.js
 +++ b/dist/index.js
 @@ -1,5 +1,6 @@
@@ -196,7 +196,7 @@ index 64c9e49..61fba9e 100644
      ctx.tools.register(defineTool({
          name: 'edit',
          description,
-@@ -262,6 +296,47 @@ function registerEditTool(ctx, config, provider) {
+@@ -262,6 +296,48 @@ function registerEditTool(ctx, config, provider) {
              replace_all: { type: 'boolean', description: REPLACE_SCHEMA_DESCRIPTIONS.replace_all },
              edits: { type: 'array', description: PATCH_SCHEMA_DESCRIPTIONS.edits },
              input: { type: 'string', description: `${APPLY_PATCH_SCHEMA_DESCRIPTIONS.input}. ${HASHLINE_SCHEMA_DESCRIPTIONS.input}` },
@@ -224,13 +224,14 @@ index 64c9e49..61fba9e 100644
 +                        },
 +                        userSource: {
 +                            type: 'object',
-+                            description: 'Required for user-override: which real user message asked for this, and where in it.',
++                            description: 'Required for user-override: the exact words the user typed that ask for this target and mode. The policy locates them in this session; no session id or seq has to be guessed.',
 +                            additionalProperties: false,
 +                            properties: {
-+                                sessionId: { type: 'string', required: true },
-+                                eventSeq: { type: 'integer', required: true },
-+                                start: { type: 'integer', required: true },
-+                                end: { type: 'integer', required: true },
++                                quote: { type: 'string', required: true, description: 'The exact text of the user request you are citing, copied verbatim.' },
++                                sessionId: { type: 'string', description: 'Optional: this session, or the parent session this task was delegated from.' },
++                                eventSeq: { type: 'integer', description: 'Optional: the seq of that message when you know it.' },
++                                start: { type: 'integer', description: 'Optional: the character offset where the quote starts.' },
++                                end: { type: 'integer', description: 'Optional: the character offset where the quote ends.' },
 +                            },
 +                        },
 +                        modes: {
@@ -244,7 +245,7 @@ index 64c9e49..61fba9e 100644
          },
          output: {
              schema: { type: 'string' },
-@@ -292,6 +367,12 @@ function registerEditTool(ctx, config, provider) {
+@@ -292,6 +368,12 @@ function registerEditTool(ctx, config, provider) {
              try {
                  const mode = dispatchMode(resolved, args);
                  const record = args;
@@ -257,7 +258,7 @@ index 64c9e49..61fba9e 100644
                  const run = () => {
                      switch (mode) {
                          case 'replace':
-@@ -307,9 +388,12 @@ function registerEditTool(ctx, config, provider) {
+@@ -307,9 +389,12 @@ function registerEditTool(ctx, config, provider) {
                      }
                  };
                  try {
@@ -271,7 +272,7 @@ index 64c9e49..61fba9e 100644
                      // A concurrent mutation between the executor's read and its guarded
                      // write aborts the WHOLE edit before anything lands (the write is
                      // the single side effect), so re-running once is safe for replace
-@@ -341,12 +425,78 @@ function registerEditTool(ctx, config, provider) {
+@@ -341,12 +426,78 @@ function registerEditTool(ctx, config, provider) {
          presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
      }));
  }
@@ -351,7 +352,7 @@ index 64c9e49..61fba9e 100644
      const resolved = resolveConfig(config);
      if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
          throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
-@@ -359,6 +509,10 @@ export function apply(ctx, config) {
+@@ -359,6 +510,10 @@ export function apply(ctx, config) {
          ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
      });
      ctx.effect(() => () => { void provider.dispose(); });

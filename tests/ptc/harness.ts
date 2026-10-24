@@ -50,6 +50,8 @@ export interface PtcHarness {
   feed(event: { type: string; data: unknown }): void
   /** Run the pre-step waterfall then feed one turn's assistant message + root call. */
   beginTurn(options: { turn?: number; text: string; callId?: string }): Promise<void>
+  /** Append one USER message to this session, exactly as the agent loop does. */
+  appendUserMessage(text: string): number
   cleanup(): Promise<void>
 }
 
@@ -86,6 +88,7 @@ export async function createPtcHarness(options: PtcHarnessOptions = {}): Promise
   if (options.watch === true) await ctx.plugin(Watchdog as never, { gate: 'enforce' } as never)
 
   let calls = 0
+  let userMessages = 0
   const signal = new AbortController().signal
   const execute = (name: string, args: Record<string, unknown>, options: { agent?: Agent | null; callId?: string } = {}) => {
     const useAgent = options.agent === undefined ? agent : options.agent ?? undefined
@@ -105,6 +108,14 @@ export async function createPtcHarness(options: PtcHarnessOptions = {}): Promise
     agent,
     runCode: (code, options = {}) => execute('run_code', { code, description: 'acceptance program' }, options),
     direct: (name, args, options = {}) => execute(name, args, options),
+    appendUserMessage(text) {
+      return session.append('user/message', {
+        id: 'user-' + (userMessages += 1),
+        role: 'user',
+        source: { kind: 'user' },
+        content: [{ type: 'text', text }],
+      })
+    },
     feed: event => {
       ;(ctx as unknown as { emit: (name: string, ...args: unknown[]) => void }).emit('session/event', session, event)
     },

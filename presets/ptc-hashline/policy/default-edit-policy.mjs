@@ -118,18 +118,26 @@ export function validateFallback(entry, index) {
   if (entry.reason === 'user-override') {
     const source = entry.userSource
     if (!isObject(source)) throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource is required for reason "user-override".')
-    if (typeof source.sessionId !== 'string' || source.sessionId.trim() === '') {
-      throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.sessionId must name the session that holds the user message.')
+    // The model must NOT have to guess a session id or a seq: `quote` is the
+    // required field and the policy locates it. The identifiers stay optional so
+    // a caller that DOES know them can pin the citation precisely.
+    if (typeof source.quote !== 'string' || source.quote.trim() === '') {
+      throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.quote must be the exact text of the user request you are citing.')
     }
-    if (!Number.isInteger(source.eventSeq) || source.eventSeq < 0) {
-      throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.eventSeq must be the non-negative seq of that message.')
+    if (source.sessionId !== undefined && (typeof source.sessionId !== 'string' || source.sessionId.trim() === '')) {
+      throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.sessionId must be a non-empty string when present.')
+    }
+    if (source.eventSeq !== undefined && (!Number.isInteger(source.eventSeq) || source.eventSeq < 0)) {
+      throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.eventSeq must be the non-negative seq of that message when present.')
     }
     for (const key of ['start', 'end']) {
-      if (!Number.isInteger(source[key]) || source[key] < 0) {
-        throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.' + key + ' must be a non-negative character offset.')
+      if (source[key] !== undefined && (!Number.isInteger(source[key]) || source[key] < 0)) {
+        throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource.' + key + ' must be a non-negative character offset when present.')
       }
     }
-    if (source.start >= source.end) throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource range is empty (start must be before end).')
+    if (source.start !== undefined && source.end !== undefined && source.start >= source.end) {
+      throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.userSource range is empty (start must be before end).')
+    }
     if (!Array.isArray(entry.modes) || entry.modes.length === 0) {
       throw new EditPolicyError('EDIT_POLICY_FALLBACK_SHAPE', at + '.modes must be a non-empty array for reason "user-override".')
     }
@@ -349,11 +357,126 @@ export function createPolicy({ ctx, config }) {
     verified.set(target.targetKey, { fact, version: info.version })
   }
 
+  /**
+   * Verify a `user-override` fallback against the session's own user messages.
+   *
+   * The citation names a real event in a real session and a character range
+   * inside it. This check confirms the event exists, is a USER message (not a
+   * tool result, a subagent message or a model assertion), and that the quoted
+   * range is inside it. What the words MEAN — whether the user really asked for
+   * this target and this mode — stays a model and review responsibility; the
+   * policy never claims to have proven intent.
+   * @param {object} context verification context
+   * @returns {Promise<void>} resolves when the citation is a real user message
+   */
+  const verifyUserOverride = async context => {
+    const { session, cwd, fallback, targetPath, signal, mode } = context
+    const source = fallback.userSource
+    const events = typeof session.snapshotEvents === 'function' ? session.snapshotEvents() : undefined
+    if (events === undefined) {
+      throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'this session does not expose its own event log, so a user citation cannot be verified here. Ask the user to restate the override in this session, or use Hashline.')
+    }
+    /** The text a user-typed message carries, or undefined for any other event. */
+    const userTextOf = event => {
+      if (event?.type !== 'user/message' || event.data?.source?.kind !== 'user') return undefined
+      return (event.data?.content ?? [])
+        .filter(part => part?.type === 'text')
+        .map(part => part.text)
+        .join('')
+    }
+    /** The user message this citation resolves to. */
+    let event
+    /** The character range the quote occupies in that message (never mutated onto the args). */
+    let resolvedStart
+    let resolvedEnd
+    // A cited session id must be this session or its real delegating parent; an
+    // unrelated session's message is not the user's authorization for this task.
+    const ownId = session.id ?? session.header?.id
+    const parentSession = session.parentSession
+    if (source.sessionId !== undefined && source.sessionId !== ownId) {
+      if (parentSession === undefined || parentSession?.id !== source.sessionId) {
+        throw new EditPolicyError(
+          'EDIT_POLICY_USER_SOURCE',
+          'sessionId "' + source.sessionId + '" is neither this session nor its delegating parent. A user request from an unrelated session does not authorize this edit.',
+        )
+      }
+      const parentEvents = typeof parentSession.snapshotEvents === 'function' ? parentSession.snapshotEvents() : undefined
+      if (parentEvents === undefined) {
+        throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the parent session\'s messages cannot be read here, so a parent citation cannot be verified. Ask the user to restate the override in this session.')
+      }
+      const parentMatches = parentEvents.filter(entry => (userTextOf(entry) ?? '').includes(source.quote))
+      if (parentMatches.length !== 1) {
+        throw new EditPolicyError(
+          'EDIT_POLICY_USER_SOURCE',
+          'the quoted text matches ' + parentMatches.length + ' message(s) in the parent session; it must match exactly one user message that this task was delegated from.',
+        )
+      }
+      event = parentMatches[0]
+      // The registry deep-freezes the parsed arguments, so the resolved range is
+      // carried in locals instead of being written back onto the citation.
+      resolvedStart = (userTextOf(event) ?? '').indexOf(source.quote)
+      resolvedEnd = resolvedStart + source.quote.length
+    }
+    if (event === undefined && Number.isInteger(source.eventSeq)) {
+      event = events.find(entry => entry?.seq === source.eventSeq)
+      if (event === undefined) {
+        throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'eventSeq ' + source.eventSeq + ' does not name an event in this session.')
+      }
+      if (userTextOf(event) === undefined) {
+        throw new EditPolicyError(
+          'EDIT_POLICY_USER_SOURCE',
+          'eventSeq ' + source.eventSeq + ' is not a message the user typed (it is "' + String(event.type) + '" from "' + String(event.data?.source?.kind) + '"). Only the user can authorize an override; a tool result, a subagent message or your own text cannot.',
+        )
+      }
+    } else if (event === undefined) {
+      // The model need not know the session id or the seq: the policy locates the
+      // quote among THIS session's user messages and requires an exact hit.
+      const matches = events.filter(entry => (userTextOf(entry) ?? '').includes(source.quote))
+      if (matches.length === 0) {
+        throw new EditPolicyError(
+          'EDIT_POLICY_USER_SOURCE',
+          'no message the user typed in this session contains the quoted text. Quote the user request verbatim, or use Hashline.',
+        )
+      }
+      if (matches.length > 1) {
+        throw new EditPolicyError(
+          'EDIT_POLICY_USER_SOURCE',
+          'the quoted text appears in ' + matches.length + ' user messages of this session (' + matches.map(entry => entry.seq).join(', ') + '), so the citation is ambiguous. Quote a longer, unique fragment or pass eventSeq.',
+        )
+      }
+      event = matches[0]
+      resolvedStart = (userTextOf(event) ?? '').indexOf(source.quote)
+      resolvedEnd = resolvedStart + source.quote.length
+    }
+    const text = userTextOf(event) ?? ''
+    const start = resolvedStart ?? source.start ?? text.indexOf(source.quote)
+    const end = resolvedEnd ?? source.end ?? start + source.quote.length
+    if (start < 0 || end > text.length) {
+      throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the declared character range ' + start + '..' + end + ' runs outside eventSeq ' + event.seq + ' (' + text.length + ' characters).')
+    }
+    const quoted = text.slice(start, end)
+    if (quoted.trim() === '') {
+      throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the cited range of eventSeq ' + event.seq + ' is blank, so it quotes no request.')
+    }
+    if (!fallback.modes.includes(mode)) {
+      throw new EditPolicyError(
+        'EDIT_POLICY_USER_SOURCE',
+        'the user override declares modes ' + fallback.modes.join(', ') + ' but this request dispatches as "' + mode + '". Declare the mode you are actually using, or use Hashline.',
+      )
+    }
+    const { target, info } = await probe(targetPath, cwd, signal)
+    if (info === undefined) {
+      throw new EditPolicyError('EDIT_POLICY_TARGET_MISSING', 'the declared target "' + targetPath + '" does not exist, so this is a creation case rather than a degraded update.')
+    }
+    verified.set(target.targetKey, { version: info.version, userQuote: quoted })
+  }
+
   /** Verify one declared reason against measured facts. */
   const verifyReason = async context => {
     const { fallback } = context
     if (fallback.reason === 'snapshot-limit') return verifySnapshotLimit(context)
     if (fallback.reason === 'window-limit') return verifyWindowLimit(context)
+    if (fallback.reason === 'user-override') return verifyUserOverride(context)
     throw new EditPolicyError(
       'EDIT_POLICY_REASON_UNAVAILABLE',
       'fallback reason "' + fallback.reason + '" for "' + fallback.path + '" is a legal reason but its verification is not available in this build, so the request cannot be authorized. Use Hashline, or wait for the reason check. Nothing was written.',
@@ -421,7 +544,7 @@ export function createPolicy({ ctx, config }) {
           'the request updates "' + targetPath + '" but declares ' + matching.length + ' fallback(s) for it. Declare exactly one fallback per updated target, and none for targets the call does not touch. Nothing was written.',
         )
       }
-      await verifyReason({ session, cwd, fallback: matching[0], targetPath, signal: exec.signal })
+      await verifyReason({ session, cwd, fallback: matching[0], targetPath, signal: exec.signal, mode })
     },
     /**
      * Re-check one target right before its side effect.

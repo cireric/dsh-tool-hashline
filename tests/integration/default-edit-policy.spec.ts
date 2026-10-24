@@ -191,13 +191,13 @@ describe('POLICY-11/POLICY-18: an ordinary non-Hashline update is refused before
     expect(harness.writes).toHaveLength(0)
   })
 
-  it('reports a legal-but-unimplemented reason as a concrete gap, never as a pass', async () => {
+  it('reports a legal reason whose evidence is missing as a concrete gap, never as a pass', async () => {
     const harness = await managed()
     onTestFinished(() => harness.cleanup())
     await writeFixture(harness.dir, 'gap.txt', 'g\n')
 
-    // `user-override` is a legal reason whose verification this build does not
-    // implement yet: it must surface as a gap, not as a silent allow.
+    // A legal `user-override` that quotes text this session never received is a
+    // gap the model can fix, not an allow: the refusal names the missing evidence.
     const result = await harness.callTool('edit', {
       path: 'gap.txt',
       old_string: 'g',
@@ -205,14 +205,14 @@ describe('POLICY-11/POLICY-18: an ordinary non-Hashline update is refused before
       fallbacks: [{
         path: 'gap.txt',
         reason: 'user-override',
-        userSource: { sessionId: 'session-of-this-test', eventSeq: 0, start: 0, end: 4 },
+        userSource: { quote: 'use replace for this file' },
         modes: ['replace'],
       }],
     })
 
     expect(result.isError).toBe(true)
-    expect(errorText(result)).toContain('EDIT_POLICY_REASON_UNAVAILABLE')
-    expect(errorText(result)).toContain('user-override')
+    expect(errorText(result)).toContain('EDIT_POLICY_USER_SOURCE')
+    expect(errorText(result)).toContain('no message the user typed')
     expect(harness.writes).toHaveLength(0)
   })
 })

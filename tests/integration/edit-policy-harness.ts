@@ -146,6 +146,17 @@ export interface PolicyHarness {
   callAsOtherSession(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
   /** Change this session's effective working directory (the real waterfall). */
   changeWorkingDirectory(directory: string): Promise<void>
+  /**
+   * Append one USER message to this session, the way the agent loop does.
+   *
+   * It is appended through the session stub (which publishes `session/event`),
+   * so `snapshotEvents()` returns it exactly as a real session would.
+   * @param text the message body
+   * @returns the seq it landed at
+   */
+  appendUserMessage(text: string): number
+  /** Append one NON-user event (a tool result, an assistant message) to this session. */
+  appendEvent(type: string, data: unknown): number
   callTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
   /** `read` through the registry. */
   read(file_path: string): Promise<ToolExecutionResult>
@@ -279,6 +290,7 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
   const otherAgent = { session: { id: 'other-' + Math.random().toString(36).slice(2), cwd: dir, header: { cwd: dir }, append: () => 0, snapshotEvents: () => [] } } as unknown as Agent
   let otherScope: { ctx: Context; dispose: () => Promise<void> } | undefined
   let otherCalls = 0
+  let userMessages = 0
   let calls = 0
   const callTool = (name: string, args: Record<string, unknown>) => runtime.execute({
     callId: `policy-${(calls += 1)}` as never,
@@ -331,6 +343,17 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
     async changeWorkingDirectory(directory) {
       await (root as unknown as { waterfall: (name: string, ...args: unknown[]) => Promise<unknown> })
         .waterfall.call(root, 'working-directory/change', session, directory)
+    },
+    appendEvent(type, data) {
+      return session.append(type, data)
+    },
+    appendUserMessage(text) {
+      return session.append('user/message', {
+        id: 'user-' + (userMessages += 1),
+        role: 'user',
+        source: { kind: 'user' },
+        content: [{ type: 'text', text }],
+      })
     },
     callTool,
     read: file_path => callTool('read', { file_path }),
