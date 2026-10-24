@@ -98,7 +98,7 @@ index 6894eea..be28691 100644
  //# sourceMappingURL=index.d.ts.map
 \ No newline at end of file
 diff --git a/dist/index.js b/dist/index.js
-index 64c9e49..ad637b4 100644
+index 64c9e49..cd44568 100644
 --- a/a/dist/index.js
 +++ b/dist/index.js
 @@ -1,5 +1,6 @@
@@ -304,7 +304,7 @@ index 64c9e49..ad637b4 100644
                  const run = () => {
                      switch (mode) {
                          case 'replace':
-@@ -307,9 +435,12 @@ function registerEditTool(ctx, config, provider) {
+@@ -307,17 +435,29 @@ function registerEditTool(ctx, config, provider) {
                      }
                  };
                  try {
@@ -318,7 +318,26 @@ index 64c9e49..ad637b4 100644
                      // A concurrent mutation between the executor's read and its guarded
                      // write aborts the WHOLE edit before anything lands (the write is
                      // the single side effect), so re-running once is safe for replace
-@@ -341,12 +472,78 @@ function registerEditTool(ctx, config, provider) {
+                     // mode: the fresh session re-reads, re-observes the current version,
+                     // and re-applies the same anchored edit. Multi-entry patch / hashline
+                     // batches are NOT retried — an earlier entry may already be on disk.
+-                    if (mode === 'replace' && isStaleVersionError(error))
+-                        return await run();
++                    if (mode === 'replace' && isStaleVersionError(error)) {
++                        // The retry is a NEW attempt on possibly different content, so the
++                        // policy re-decides from fresh facts: a degradation that the first
++                        // attempt justified may no longer be true (or the target may have
++                        // become editable with Hashline). An allow is never carried over.
++                        if (policy !== undefined)
++                            await policy.preflight({ exec, args: record, mode, resolved, cwd: toolCwdFromExec(exec, ctx), plan: describeRequest(mode, record), retry: 1 });
++                        const retried = await run();
++                        policy?.settle({ exec, mode, result: 'completed', retry: 1 });
++                        return retried;
++                    }
+                     throw error;
+                 }
+             }
+@@ -341,12 +481,78 @@ function registerEditTool(ctx, config, provider) {
          presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
      }));
  }
@@ -398,7 +417,7 @@ index 64c9e49..ad637b4 100644
      const resolved = resolveConfig(config);
      if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
          throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
-@@ -359,6 +556,10 @@ export function apply(ctx, config) {
+@@ -359,6 +565,10 @@ export function apply(ctx, config) {
          ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
      });
      ctx.effect(() => () => { void provider.dispose(); });
