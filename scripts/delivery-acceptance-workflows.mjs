@@ -170,11 +170,17 @@ export async function writeMaintenanceRepository(repository, versions) {
 /**
  * A one-off profile install tree for the switch's target (a throwaway DSH_HOME,
  * never the daily profile).
+ *
+ * It starts INSTALLED at the baseline combination, because that is what an
+ * upgrade target is: the user's own profile already resolves something, and a
+ * restore claims it came back to that. An empty tree has no measurable baseline,
+ * so "restored" could never be claimed for it at all (D15/UPG-12, R2).
  * @param {string} home the fixture DSH home
  * @param {string} repository the maintenance worktree the profile links
+ * @param {{hashline: string, toolEdit: string}} versions the baseline engine pair
  * @returns {Promise<string>} the profile directory
  */
-export async function writeTargetProfile(home, repository) {
+export async function writeTargetProfile(home, repository, versions) {
   const profile = path.join(home, 'profiles', PROFILE_NAME)
   await mkdir(profile, { recursive: true })
   const link = (relative) => 'link:' + posix(path.join(repository, relative))
@@ -194,6 +200,7 @@ export async function writeTargetProfile(home, repository) {
     dsh: { profile: { bundles: ['@deepseek-ai/dsh-base', 'dsh-tool-hashline'] } },
   }, null, 2) + '\n', 'utf8')
   await writeFile(path.join(profile, 'pnpm-workspace.yaml'), ['packages:', '  - .', '', 'nodeLinker: hoisted', ''].join('\n'), 'utf8')
+  await materialize(profile, versions)
   return profile
 }
 
@@ -495,6 +502,7 @@ export async function runUpgradeChain(facts, incident, record, gap = () => undef
   'consent exit ' + consented.code + '; records ' + String(consentRecord.records?.length ?? 0) + '; scope ' + JSON.stringify(consentRecord.records?.[0]?.scope ?? null))
 
   // UPG-04/06: the approved candidate, isolated, with an injected install runner.
+  const targetBeforeCandidate = await snapshot(facts.targetProfile)
   const candidateFake = fakeCandidateRunner(candidate)
   const validated = await run(['upgrade', 'validate', '--proposal', proposalPath, '--now', VALIDATED_AT], inProcess({ runner: candidateFake.runner }))
   const resultPath = path.join(proposalDirectory, 'candidate', 'result.json')
@@ -508,8 +516,8 @@ export async function runUpgradeChain(facts, incident, record, gap = () => undef
     && candidateResult?.versions?.after?.toolEdit === candidate.toolEdit
     && candidateResult?.checks?.some((check) => check.name === 'candidate-versions-match' && check.status === 'pass'),
   'resolved ' + String(candidateResult?.versions?.after?.hashline) + '/' + String(candidateResult?.versions?.after?.toolEdit) + ' vs approved ' + candidate.hashline + '/' + candidate.toolEdit)
-  record('UPG-04', 'the candidate phase touched no target', (await snapshot(facts.targetProfile)).every(([relative]) => relative === 'package.json' || relative === 'pnpm-workspace.yaml'),
-    'the target profile still carries only its own manifest and workspace file')
+  record('UPG-04', 'the candidate phase touched no target', await snapshot(facts.targetProfile).then((after) => JSON.stringify(after) === JSON.stringify(targetBeforeCandidate)),
+    'the target profile is byte-identical to its pre-candidate snapshot')
 
   // UPG-06/12: the approved switch. The target install fails, so the round must
   // restore what it changed and prove it is back at the rollback baseline.

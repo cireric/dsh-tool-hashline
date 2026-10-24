@@ -744,5 +744,5 @@ export async function prepareTarget(home, versions) {
   const repository = path.join(home, 'maintenance')
   await mkdir(repository, { recursive: true })
   await workflows.writeMaintenanceRepository(repository, versions)
-  return await workflows.writeTargetProfile(home, repository)
+  return await workflows.writeTargetProfile(home, repository, versions)
 }

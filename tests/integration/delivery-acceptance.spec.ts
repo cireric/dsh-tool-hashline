@@ -210,10 +210,14 @@ describe('the workflow fixtures a real run stands on', () => {
     // The worktree gitignores its own evidence, so a ticket is never read back as
     // an uncommitted INPUT of the candidate.
     expect(await readFile(path.join(repository, '.gitignore'), 'utf8')).toContain('.scratch/')
-    const profile = await writeTargetProfile(home, repository)
+    const profile = await writeTargetProfile(home, repository, { hashline: '1.2.3', toolEdit: '1.2.3' })
     const manifest = JSON.parse(await readFile(path.join(profile, 'package.json'), 'utf8'))
     expect(manifest.dsh.profile.bundles).toContain('dsh-tool-hashline')
     expect(manifest.dependencies['dsh-tool-hashline']).toBe('link:' + repository.replaceAll('\\', '/'))
+    // The target starts INSTALLED: a profile with no node_modules has no measurable
+    // baseline, so a restore could never claim it came back to one (D15/UPG-12).
+    expect(JSON.parse(await readFile(path.join(profile, 'node_modules', '@hy-sde-org', 'dsh-hashline', 'package.json'), 'utf8')).version).toBe('1.2.3')
+    expect(await stat(path.join(profile, 'pnpm-lock.yaml'))).toBeTruthy()
     // Idempotent: a second call must not fail a gate with "nothing to commit".
     await expect(writeMaintenanceRepository(repository, { hashline: '1.2.3', toolEdit: '1.2.3' })).resolves.toBeUndefined()
   })

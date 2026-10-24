@@ -63,4 +63,9 @@ export function renderSummary(run: AcceptanceRun): AcceptanceSummary
 
 export function nextVersion(version: string): string
 export function writeMaintenanceRepository(repository: string, versions: { hashline: string; toolEdit: string }): Promise<void>
-export function writeTargetProfile(home: string, repository: string): Promise<string>
+/**
+ * The one-off target profile, started INSTALLED at the baseline engine pair: an
+ * empty profile has no measurable baseline, so a restore could never claim it
+ * came back to one (D15/UPG-12).
+ */
+export function writeTargetProfile(home: string, repository: string, versions: { hashline: string; toolEdit: string }): Promise<string>
