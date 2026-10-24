@@ -45,7 +45,7 @@ pnpm test:delivery
 ## 文档入口
 
 - [需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)
-- [默认编辑策略 SRS](docs/specs/2026-10-24-hashline-default-editing.md)、[实施计划](docs/plans/2026-10-24-hashline-default-editing-implementation-plan.md)与[工程验收报告](docs/acceptance/2026-10-24-default-edit-policy-engineering.md)：默认 Hashline、受控降级与验收规则；票据 01～08 的工程切片已实现并验收；[评测方案与驱动](docs/specs/2026-10-24-default-edit-policy-evaluation-protocol.md)已就绪（票据 10），[真实模型对照](docs/specs/2026-10-24-default-edit-policy-real-model-evaluation.md)因缺运行前输入而 BLOCKED（票据 11）
+- [默认编辑策略 SRS](docs/specs/2026-10-24-hashline-default-editing.md)、[实施计划](docs/plans/2026-10-24-hashline-default-editing-implementation-plan.md)与[工程验收报告](docs/acceptance/2026-10-24-default-edit-policy-engineering.md)：默认 Hashline、受控降级与验收规则；票据 01～08 的工程切片已实现并验收；[推广评测方案](docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)已定稿（三阶段：探针 → 正式对照 → 推广判定），真实模型对照因缺可用驱动与模型凭据而 BLOCKED（票据 11）
 - [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)
 - [上游功能分析](docs/background/2026-10-23-dsh-hashline-feature-analysis.md)：版本化研究快照，其中建议不代表已批准需求
 - [运维 skills 需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)：incident、升级评估/方案/同意、获准后的隔离候选验证，以及获第二阶段同意后的目标切换与失败回退/交接已实现；真实宿主交付验收见[报告](docs/acceptance/2026-10-24-delivery-acceptance-report.md)（`pnpm test:delivery`）

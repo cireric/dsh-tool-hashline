@@ -66,7 +66,7 @@ compat 层：`tests/compat/guard.spec.ts` 的 `REM has no line anchor`（1 项�
 | POLICY-19 | `default-edit-policy-revalidation.spec.ts`：预检与写入之间注入变化、证据失效后同调用被拒 | PASS（工程层） |
 | POLICY-20 | `default-edit-policy.spec.ts`：模块不可加载时普通更新被拒而 Hashline 可用；无 session 被注册层拒绝；未配置策略的行保持上游 schema | PASS（工程层） |
 | POLICY-21 | `default-edit-policy-user-override.spec.ts`：真实用户消息可追溯；工具/助手消息、无关 session、歧义引述、方式不符全部拒绝 | PASS（工程层；语义误解见 11） |
-| VALUE-01/02 | 方案与驱动：[评测方案](2026-10-24-default-edit-policy-evaluation-protocol.md)、[票据 11 状态](../specs/2026-10-24-default-edit-policy-real-model-evaluation.md)；驱动自检 10 项通过，**真实模型对照未执行**（缺模型/预算/重复数/阈值输入与运行授权） | BLOCKED |
+| VALUE-01/02 | 方案与驱动：[推广评测方案](../plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)（含三阶段、SRS §7.1 逐项对照与已知缺口）；驱动自检 10 项通过，**真实模型对照未执行**（缺可用驱动、provider 包与模型凭据；票据 11 状态卡为本地 `.scratch` 文件，不随仓库交付） | BLOCKED |
 
 ## 四、明确未覆盖（BLOCKED / GAP）
 
