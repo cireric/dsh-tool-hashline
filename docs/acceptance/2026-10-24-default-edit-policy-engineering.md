@@ -22,7 +22,7 @@
 |---|---|---|---|
 | `pnpm check` | exit 0 | PASS | 构建 + 三个包的 `tsc --noEmit` + 测试类型检查 |
 | `pnpm test:unit` | 45 passed | PASS | 含票据 02/03 新增的 citation 单测 |
-| `pnpm test:integration` | 37 failed / 369 passed / 9 skipped | FAIL（37 项均为先前存在） | main 基线：39 failed / 303 passed；失败集合比对后**没有新增失败文件**，worktree 多出的 66 个通过项全部来自本功能新增用例 |
+| `pnpm test:integration` | 37～39 failed / 367～369 passed / 9 skipped | FAIL（全部为先前存在） | 与 main **逐文件比对失败集合：完全相同（7 个文件），没有新增失败**。具体条数会在两次运行间浮动 2 项，原因是 `operations-baseline` / `operations-cli` 读取**维护工作树自身的 git 状态**，两个 checkout 各自脏/净时读数不同；稳定判据是集合比对，不是条数 |
 | `pnpm test:ptc` | 7 failed / 26 passed | FAIL（7 项均为先前存在） | main 基线同为 7 failed；失败集合逐条相同 |
 | `pnpm test:compat` | 1 failed / 20 passed | FAIL（1 项为先前存在） | main 基线同为 1 failed（`REM has no line anchor`） |
 | `pnpm check:preset` | OK | PASS | 断言 policy 模块地址、builtin-only 依赖面、persona 摘要 |
@@ -31,10 +31,11 @@
 
 ## 二、先前存在的失败清单（与 main 逐条相同）
 
-integration 层（5 个文件，37 项）：
+integration 层（7 个文件，条数随工作树状态浮动）：
 
 - `packages/tool-read/tests/integration/read-edit.spec.ts`、`window-read.spec.ts` —— macOS 临时目录 realpath 别名导致的路径字符串比较失败；
-- `tests/integration/operations-candidate-validation.spec.ts`、`operations-target-switch.spec.ts`、`operations-upgrade-assessment.spec.ts` —— 运维工作流的真实 runner/组装用例。
+- `tests/integration/operations-candidate-validation.spec.ts`、`operations-target-switch.spec.ts`、`operations-upgrade-assessment.spec.ts` —— 运维工作流的真实 runner/组装用例；
+- `tests/integration/operations-baseline.spec.ts`、`operations-cli.spec.ts` —— 读取维护工作树自身 commit/dirty/摘要的基线用例，在**两个 checkout 里都失败**，读数随各自工作树状态变化。
 
 ptc 层：`tests/ptc/mv-policy.spec.ts`（7 项，同一 realpath 别名根因）。
 
