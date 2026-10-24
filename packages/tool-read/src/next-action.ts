@@ -28,6 +28,26 @@ export interface NextActionInput {
   maxLineLength: number
   /** Configured window byte cap, for the message. */
   maxBytes: number
+  /**
+   * This read's own call id, printed as a citation a program can hand back.
+   *
+   * A degraded edit must cite the read it relies on; the policy verifies that
+   * read instead of trusting a model-authored byte count. `null` when the
+   * reason does not need a citation (empty file, session-less read).
+   */
+  readCallId: string | null
+}
+
+/**
+ * The stable citation a policy can parse out of the guidance.
+ *
+ * One spelling only: a program that copies the guidance verbatim hands back a
+ * token the policy recognizes, and the model never has to invent a byte count.
+ * @param callId - the read call this guidance belongs to.
+ * @returns the bracketed citation, or '' when there is nothing to cite.
+ */
+export function readCallCitation(callId: string | null): string {
+  return callId === null ? '' : ` (readCallId: ${callId})`
 }
 
 /**
@@ -48,13 +68,13 @@ export function nextActionFor(input: NextActionInput): string | null {
     return 'This file is empty, so there is no hashline content to tag. Use the write tool to create its contents.'
   }
   if (input.exceedsSnapshotLimit) {
-    return `This file\'s normalized text is ${input.snapshotMaxBytes} bytes or more, so it was not snapshotted and no tag was minted. Use the edit tool\'s replace or patch mode instead.`
+    return `This file\'s normalized text is ${input.snapshotMaxBytes} bytes or more, so it was not snapshotted and no tag was minted. Use the edit tool\'s replace or patch mode instead, declaring a "snapshot-limit" fallback for this target${readCallCitation(input.readCallId)}.`
   }
   if (input.truncatedLines) {
-    return `Some returned lines were column-truncated at ${input.maxLineLength} characters, so they are not usable as seen lines. Raise maxLineLength${input.byteCapped ? ' and maxBytes' : ''} in the tool-read config, remount, then read again; or use the edit tool\'s replace or patch mode. Repeating this read with the same config will not reveal the rest of those lines.`
+    return `Some returned lines were column-truncated at ${input.maxLineLength} characters, so they are not usable as seen lines. Read again with a larger maxLineLength${input.byteCapped ? ' and maxBytes' : ''} (a config change needs a remount); or use the edit tool\'s replace or patch mode for the truncated range, declaring a "window-limit" fallback with this read\'s citation and the ranges you are changing${readCallCitation(input.readCallId)}. Repeating this read with the same config will not reveal the rest of those lines.`
   }
   if (input.zeroLines && input.byteCapped) {
-    return `The output byte cap (${input.maxBytes}) is smaller than the next displayed line, so this window returned no lines. Raise maxBytes (and maxLineLength if lines are also truncated) in the tool-read config, remount, then read again at the same offset; or use the edit tool\'s replace or patch mode.`
+    return `The output byte cap (${input.maxBytes}) is smaller than the next displayed line, so this window returned no lines. Read again at the same offset with a larger maxBytes (and maxLineLength if lines are also truncated); or use the edit tool\'s replace or patch mode, declaring a "window-limit" fallback with this read\'s citation and the ranges you are changing${readCallCitation(input.readCallId)}.`
   }
   return null
 }

@@ -11,6 +11,7 @@ const base: NextActionInput = {
   snapshotMaxBytes: 4_194_304,
   maxLineLength: 2000,
   maxBytes: 51_200,
+  readCallId: 'call-7',
 }
 
 describe('nextActionFor', () => {
@@ -43,6 +44,22 @@ describe('nextActionFor', () => {
     const text = nextActionFor({ ...base, byteCapped: true, zeroLines: true })
     expect(text).toContain('51200')
     expect(text).toContain('same offset')
+  })
+
+  it('prints the read citation a program can hand back, and only where a reason needs one', () => {
+    const snapshot = nextActionFor({ ...base, exceedsSnapshotLimit: true })
+    expect(snapshot).toContain('snapshot-limit')
+    expect(snapshot).toContain('readCallId: call-7')
+    const window = nextActionFor({ ...base, truncatedLines: true })
+    expect(window).toContain('window-limit')
+    expect(window).toContain('readCallId: call-7')
+    // Nothing to cite: no citation is printed at all.
+    const empty = nextActionFor({ ...base, empty: true })
+    expect(empty).not.toContain('readCallId')
+    const sessionless = nextActionFor({ ...base, hasSession: false, readCallId: null })
+    expect(sessionless).not.toContain('readCallId')
+    // A complete window has no guidance at all.
+    expect(nextActionFor({ ...base, readCallId: null })).toBeNull()
   })
 
   it('leaves a byte-capped window with complete lines to the footer', () => {

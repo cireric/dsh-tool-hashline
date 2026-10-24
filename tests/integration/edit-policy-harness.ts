@@ -93,6 +93,8 @@ export interface PolicyHarnessOptions {
    * `contentPolicyModule` at a module address. Omitted = the upstream editor.
    */
   policyModule?: string
+  /** Config for the mounted `read` row (the snapshot ceiling lives here). */
+  read?: Record<string, unknown>
 }
 
 export interface PolicyHarness {
@@ -131,6 +133,19 @@ export interface PolicyHarness {
    * @returns the new scope's key, for `schemas()`.
    */
   remount(): Promise<object | undefined>
+  /**
+   * Run one tool call as ANOTHER agent session, against this same host plane.
+   *
+   * This is how a test proves evidence is per session: the other session is a
+   * real scope over the same `fs`, not a fabricated object, so a fact minted
+   * here is genuinely unreachable there.
+   * @param name tool name
+   * @param args call arguments
+   * @returns the tool result
+   */
+  callAsOtherSession(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
+  /** Change this session's effective working directory (the real waterfall). */
+  changeWorkingDirectory(directory: string): Promise<void>
   callTool(name: string, args: Record<string, unknown>): Promise<ToolExecutionResult>
   /** `read` through the registry. */
   read(file_path: string): Promise<ToolExecutionResult>
@@ -192,7 +207,7 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
   ;(agent as unknown as { ctx: Context }).ctx = scope.ctx
   /** Mount the preset's rows into one agent scope (also used by the remount case). */
   const mountRows = async (target: Context): Promise<void> => {
-    await target.plugin(ToolRead, {})
+    await target.plugin(ToolRead, options.read ?? {})
     await target.plugin(ToolEdit, {
       mode: 'auto',
       formatOnWrite: false,
@@ -259,6 +274,11 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
   }
 
   const signal = new AbortController().signal
+  // A second, real agent scope over the SAME host plane: the cross-session
+  // cases need a session whose own registrations are genuine.
+  const otherAgent = { session: { id: 'other-' + Math.random().toString(36).slice(2), cwd: dir, header: { cwd: dir }, append: () => 0, snapshotEvents: () => [] } } as unknown as Agent
+  let otherScope: { ctx: Context; dispose: () => Promise<void> } | undefined
+  let otherCalls = 0
   let calls = 0
   const callTool = (name: string, args: Record<string, unknown>) => runtime.execute({
     callId: `policy-${(calls += 1)}` as never,
@@ -295,6 +315,23 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
       scope = fresh
       return scopeOf(fresh.ctx)
     },
+    async callAsOtherSession(name, args) {
+      if (otherScope === undefined) {
+        otherScope = createScope(root, otherAgent)
+        await mountRows(otherScope.ctx)
+      }
+      return runtime.execute({
+        callId: 'other-' + (otherCalls += 1) as never,
+        name,
+        arguments: args,
+        signal,
+        agent: otherAgent,
+      })
+    },
+    async changeWorkingDirectory(directory) {
+      await (root as unknown as { waterfall: (name: string, ...args: unknown[]) => Promise<unknown> })
+        .waterfall.call(root, 'working-directory/change', session, directory)
+    },
     callTool,
     read: file_path => callTool('read', { file_path }),
     edit: input => callTool('edit', { input }),
@@ -302,6 +339,7 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
     write: (file_path, content) => callTool('write', { file_path, content }),
     runCode: code => callTool('run_code', { code, description: 'policy acceptance program' }),
     async cleanup() {
+      if (otherScope !== undefined) await otherScope.dispose()
       await scope.dispose()
       await (root as unknown as { dispose?: () => Promise<void> }).dispose?.()
       await rm(dir, { recursive: true, force: true })

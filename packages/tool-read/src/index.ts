@@ -16,6 +16,8 @@ import { FsError } from '@deepseek-ai/dsh-fs'
 import type {} from '@deepseek-ai/dsh-working-directory'
 import { computeFileHash, formatHashlineHeader, getSessionSnapshotStore, normalizeToLF, stripBom } from '@dsh-tool-hashline/hashline'
 import { resolveConfig, type Config, type ResolvedConfig } from './config.ts'
+import type { ReadFact } from './facts.ts'
+import { READ_FACT_EVENT } from './facts.ts'
 import { nextActionFor } from './next-action.ts'
 import { readLangHint } from './lang.ts'
 import { byteCappedFromValue, readBody, readMetaFromMeta, renderEnvelope } from './render.ts'
@@ -164,6 +166,9 @@ export function apply(ctx: Context, config: Config = {}): void {
         target.displayPath,
       )
       const showPath = ctx.fs.processPath(target)
+      // One key computation for the whole call: the snapshot record and the fact
+      // published below must describe the same keys, never two derivations.
+      const keys = snapshotKeys(cwd, input.filePath, showPath)
       const session = exec.agent?.session
       const empty = normalized.length === 0
       const bytes = Buffer.byteLength(normalized, 'utf8')
@@ -178,8 +183,9 @@ export function apply(ctx: Context, config: Config = {}): void {
         const complete = window.lines.filter(line => line.complete).map(line => line.number)
         const seen = complete.length > 0 ? complete : [0]
         const store = getSessionSnapshotStore(session)
-        for (const key of snapshotKeys(cwd, input.filePath, showPath)) store.record(key, normalized, seen)
+        for (const key of keys) store.record(key, normalized, seen)
       }
+      const completeLines = window.lines.filter(line => line.complete).length
       const nextAction = nextActionFor({
         hasSession: session !== undefined,
         empty,
@@ -190,7 +196,44 @@ export function apply(ctx: Context, config: Config = {}): void {
         snapshotMaxBytes: caps.snapshotMaxBytes,
         maxLineLength: caps.maxLineLength,
         maxBytes: caps.maxBytes,
+        // The citation a program can hand back in an edit's `fallbacks`. It is
+        // this call's own registry id, so the policy can look the fact up rather
+        // than trusting a model-authored byte count.
+        readCallId: session === undefined || empty ? null : exec.callId,
       })
+      // The provisional fact is published BEFORE the result settles; the registry
+      // reports the authoritative outcome afterwards, and only a SUCCESSFUL one
+      // (see the `tools/result` listener below) promotes it to usable evidence.
+      const fact: ReadFact = {
+        callId: exec.callId,
+        rootCallId: exec.rootCallId,
+        // Only a session-owned read can be cited; the caller checked that above.
+        session: session as object,
+        cwd,
+        targetKey: target.targetKey,
+        displayPath: target.displayPath,
+        keys,
+        version: info.version,
+        bytes,
+        empty,
+        totalLines: window.totalLines,
+        caps: {
+          limit: caps.limit,
+          maxLineLength: caps.maxLineLength,
+          maxBytes: caps.maxBytes,
+          snapshotMaxBytes: caps.snapshotMaxBytes,
+        },
+        window: {
+          offset: input.offset,
+          returnedLines: window.lines.length,
+          completeLines,
+          truncatedLines: window.lines.some(line => !line.complete),
+          byteCapped: window.truncatedByBytes,
+          zeroLines: window.lines.length === 0,
+        },
+        tagged: tag !== null,
+      }
+      ctx.emit(READ_FACT_EVENT, fact, exec)
       // Observation is recorded after the read succeeded; the version is the
       // single stat's, so a guarded stock write can consume it.
       ctx.emit('fs/observed', target, { kind: 'present', version: info.version }, exec)

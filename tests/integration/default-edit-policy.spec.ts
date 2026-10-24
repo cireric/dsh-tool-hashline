@@ -194,18 +194,20 @@ describe('POLICY-11/POLICY-18: an ordinary non-Hashline update is refused before
   it('reports a legal-but-unimplemented reason as a concrete gap, never as a pass', async () => {
     const harness = await managed()
     onTestFinished(() => harness.cleanup())
-    const file = await writeFixture(harness.dir, 'gap.txt', 'g\n')
+    await writeFixture(harness.dir, 'gap.txt', 'g\n')
 
+    // `window-limit` is a legal reason whose verification this build does not
+    // implement: it must surface as a gap, not as a silent allow.
     const result = await harness.callTool('edit', {
       path: 'gap.txt',
       old_string: 'g',
       new_string: 'G',
-      fallbacks: [{ path: file, reason: 'snapshot-limit', readCallId: 'read-1' }],
+      fallbacks: [{ path: 'gap.txt', reason: 'window-limit', readCallId: 'read-1', ranges: [{ startLine: 1, endLine: 1 }] }],
     })
 
     expect(result.isError).toBe(true)
     expect(errorText(result)).toContain('EDIT_POLICY_REASON_UNAVAILABLE')
-    expect(errorText(result)).toContain('snapshot-limit')
+    expect(errorText(result)).toContain('window-limit')
     expect(harness.writes).toHaveLength(0)
   })
 })
