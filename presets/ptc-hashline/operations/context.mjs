@@ -100,6 +100,50 @@ export function replayRoute(records) {
 }
 
 /**
+ * The delegation shape a session header records (SCOPE-06).
+ *
+ * The host writes `origin: 'subagent'`, the parent session and the delegation
+ * depth into the header; any one of them makes this session an assisted one.
+ * A session that records none of them is the main session the user started.
+ * @param {object[]} records decoded records in log order
+ * @returns {{role: string, parentSession: string | null, delegationDepth: number | null, origin: string | null}}
+ */
+export function replayDelegation(records) {
+  const header = records.find(record => record?.type === 'session')
+  const parentSession = typeof header?.parentSession === 'string' && header.parentSession !== '' ? header.parentSession : null
+  const rawDepth = header?.delegationDepth
+  const delegationDepth = typeof rawDepth === 'number' && Number.isSafeInteger(rawDepth) && rawDepth >= 0 ? rawDepth : null
+  const origin = header?.origin === 'subagent' ? 'subagent' : null
+  const assisted = origin === 'subagent' || parentSession !== null || (delegationDepth ?? 0) > 0
+  return { role: assisted ? 'subagent' : 'main', parentSession, delegationDepth, origin }
+}
+
+/**
+ * What a session's delegation allows (SCOPE-06).
+ *
+ * A subagent of the same preset may assist the evidence analysis of a workflow
+ * the user started in the main session. It may not load or start the workflow
+ * itself, and its own message is never the user approval an upgrade needs:
+ * that decision stays in the main session and with the user.
+ * @param {{role: string, parentSession?: string | null, delegationDepth?: number | null, origin?: string | null}} delegation
+ * @returns {{role: string, parentSession: string | null, delegationDepth: number | null, origin: string | null, mayAssistAnalysis: boolean, mayApproveUpgrade: boolean, rule: string}} the rules for this session
+ */
+export function judgeDelegation(delegation) {
+  const known = delegation.role === 'main' || delegation.role === 'subagent'
+  // Every field is filled in explicitly: a refusal verdict knows only the role,
+  // and a spread would leave the declared shape half-present.
+  return {
+    role: delegation.role,
+    parentSession: delegation.parentSession ?? null,
+    delegationDepth: delegation.delegationDepth ?? null,
+    origin: delegation.origin ?? null,
+    mayAssistAnalysis: known,
+    mayApproveUpgrade: delegation.role === 'main',
+    rule: 'SCOPE-06: a subagent of the same preset may assist evidence analysis only; it must not load or start the workflow, and an agent message is never the user approval an upgrade requires.',
+  }
+}
+
+/**
  * Verify the invocation context of one session.
  *
  * Every failure is a stop with a reason; nothing here writes, installs, or
@@ -126,6 +170,7 @@ export async function verifyInvocationContext(options) {
       status: 'context-unverified',
       reason: 'context-unverified: no session id was supplied; the host-managed DSH_SESSION_ID is the only accepted source',
       evidence: { presetArgumentIgnored: options.presetArgument ?? null },
+      delegation: judgeDelegation({ role: 'unknown' }),
     }
   }
   const artifact = await readSessionArtifact({
@@ -141,6 +186,7 @@ export async function verifyInvocationContext(options) {
       status: 'context-unverified',
       reason: 'context-unverified: this session\'s own log is ' + artifact.status + ' (' + artifact.detail + ')',
       evidence: { directory: artifact.directory, presetArgumentIgnored: options.presetArgument ?? null },
+      delegation: judgeDelegation({ role: 'unknown' }),
     }
   }
   const projection = replayPresetProjection(artifact.records)
@@ -170,5 +216,6 @@ export async function verifyInvocationContext(options) {
       presetArgumentIgnored: options.presetArgument ?? null,
     },
     route,
+    delegation: judgeDelegation(replayDelegation(artifact.records)),
   }
 }

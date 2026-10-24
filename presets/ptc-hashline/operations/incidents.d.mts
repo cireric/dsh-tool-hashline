@@ -41,7 +41,6 @@ export interface IncidentEvent {
   isError: boolean | null
   errorCode: string | null
   kind: IncidentKind
-  severity: IncidentSeverity
   detail: string
   firstLine: string
 }
@@ -50,7 +49,22 @@ export interface IncidentReport {
   tool: string
   version: number
   generatedAt: string
-  invocation: { eligible: boolean; preset: string | null; reason: string | null; source: string | null }
+  invocation: {
+    eligible: boolean
+    preset: string | null
+    reason: string | null
+    source: string | null
+    /** Who invoked the workflow (SCOPE-06); null when the verdict carried none. */
+    delegation: {
+      role: 'main' | 'subagent' | 'unknown'
+      parentSession: string | null
+      delegationDepth: number | null
+      origin: string | null
+      mayAssistAnalysis: boolean
+      mayApproveUpgrade: boolean
+      rule: string
+    } | null
+  }
   target: {
     sessionId: string
     cwd: string
@@ -73,6 +87,10 @@ export interface IncidentReport {
     kind: 'user-reported-mismatch'
     severity: IncidentSeverity
     statement: string
+    /** Who supplied it: a subagent message is evidence input, not user confirmation (SCOPE-06). */
+    source: 'user' | 'subagent'
+    standsForUser: boolean
+    independentEvidence: string | null
     relatedEventSeqs: number[]
     verification: 'independent-evidence-required'
     note: string
@@ -91,12 +109,63 @@ export interface IncidentFinding extends Partial<IncidentEvent> {
   doneSeq: number | null
   firstLine: string
   errorCode: string | null
+  /** The same-class fingerprint this finding is grouped and matched by. */
+  recurrence: IncidentRecurrence
+}
+
+/** kind + tool name + normalised first line (INC-07). */
+export interface IncidentRecurrence {
+  key: string
+  kind: IncidentKind
+  tool: string
+  normalizedFirstLine: string
+}
+
+/** One class of failure inside one analyzed range. */
+export interface IncidentRecurrenceGroup {
+  key: string
+  kind: IncidentKind
+  tool: string
+  normalizedFirstLine: string
+  severity: IncidentSeverity
+  via: string
+  state: string
+  errorCode: string | null
+  firstLine: string
+  seqs: number[]
+}
+
+/** What one association did to an existing issue: appended, or already there. */
+export interface IncidentIssueAssociation {
+  path: string
+  number: string
+  status: 'needs-triage'
+  kind: IncidentKind
+  recurrenceKey: string
+  occurrence: number
+  duplicate: boolean
+  appended: boolean
+  statusChanged: false
+}
+
+/** A recovery record: this occurrence was recovered, the issue stays open. */
+export interface IncidentIssueRecovery {
+  path: string
+  number: string
+  statement: '本次已恢复'
+  evidenceSeqs: number[]
+  recordedAt: string
+  recurrenceKey: string
+  closed: false
+  appended: boolean
 }
 
 export interface IncidentIssueRegistration {
   configured: boolean
   directory: string | null
-  written: { path: string; number: string; status: 'needs-triage'; kind: IncidentKind }[]
+  written: { path: string; number: string; status: 'needs-triage'; kind: IncidentKind; recurrenceKey: string }[]
+  associated: IncidentIssueAssociation[]
+  recoveries: IncidentIssueRecovery[]
   skipped: { reason: string }[]
 }
 
@@ -125,7 +194,7 @@ export function buildIncident(options: {
   seqMax?: number
   userReport?: string
   generatedAt?: string
-  invocation?: { eligible: boolean; reason?: string; evidence?: { effectivePreset?: string | null; source?: string | null } }
+  invocation?: { eligible: boolean; reason?: string; evidence?: { effectivePreset?: string | null; source?: string | null }; delegation?: unknown }
   home?: string
 }): IncidentReport
 
@@ -142,4 +211,23 @@ export function registerNeedsTriageIssues(options: {
   feature: string
   incident: IncidentReport
   directory: string
+  baseline?: object
 }): Promise<IncidentIssueRegistration>
+
+export function normalizeFirstLine(text: string): string
+
+export function recurrenceKeyOf(finding: { kind: string; name: string; firstLine: string }): string
+
+export function groupFindings(findings: IncidentFinding[]): IncidentRecurrenceGroup[]
+
+export function detectRecovery(group: IncidentRecurrenceGroup, incident: IncidentReport): { recovered: boolean; evidenceSeqs: number[] }
+
+export function parseIssueMetadata(text: string): { format?: string; version?: number; kind?: string; tool?: string; normalizedFirstLine?: string; recurrenceKey: string; createdAt?: string } | null
+
+export const ISSUE_FORMAT: 'ptc-hashline-incident-issue'
+
+export const OCCURRENCE_FORMAT: 'ptc-hashline-occurrence'
+
+export const RECOVERY_FORMAT: 'ptc-hashline-recovery'
+
+export const RECOVERY_STATEMENT: '本次已恢复'

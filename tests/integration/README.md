@@ -125,6 +125,21 @@ standing in for the registry.
   paths never reach an exported file; and only suspected anomalies are
   auto-registered as `needs-triage` issues (expected refusals and
   cancellations stay in the summary).
+- `operations-recurrence.spec.ts` — INC-07 and SCOPE-06's analysis branch. A second
+  occurrence of the SAME class — same kind, same tool, same normalised first
+  line — appends exactly ONE record to the existing ticket and never rewrites
+  its `Status` or its older evidence (the older bytes remain a verbatim
+  prefix); a different class, or the same text from a different tool, still
+  opens its own ticket; re-analysing the same session and range is the same
+  occurrence — even after the log grew — and appends nothing, while a wider
+  range that now holds the retry success appends only that recovery record;
+  the cited seq is the retry's SETTLE seq. A ticket checked out with CRLF still
+  links (the metadata pattern tolerates it). A later successful retry of that
+  tool records 「本次已恢复」 and closes nothing. A subagent session may run the
+  analysis and the bundle records `invocation.delegation` with
+  `mayApproveUpgrade: false`; a `--user-report` it supplies is marked
+  `userReport.source: subagent` with `standsForUser: false` — an agent message is
+  never the user's consent.
 - `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
   install into an unrelated project, and resolution + execution from a foreign
   working directory. An engine the install does not carry reports `unknown`,

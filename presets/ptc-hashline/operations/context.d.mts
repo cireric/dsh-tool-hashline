@@ -42,7 +42,27 @@ export interface InvocationVerdict {
   reason?: string
   evidence: InvocationEvidence
   route?: { provider?: string; model?: string }
+  delegation: InvocationDelegation
 }
+
+/** What one session's header says about delegation (SCOPE-06). */
+export interface ReplayedDelegation {
+  role: 'main' | 'subagent' | 'unknown'
+  parentSession: string | null
+  delegationDepth: number | null
+  origin: string | null
+}
+
+/** A subagent may assist the analysis; only the main session may hold the consent. */
+export interface InvocationDelegation extends ReplayedDelegation {
+  mayAssistAnalysis: boolean
+  mayApproveUpgrade: boolean
+  rule: string
+}
+
+export function replayDelegation(records: Record<string, unknown>[]): ReplayedDelegation
+
+export function judgeDelegation(delegation: Partial<ReplayedDelegation> & { role: string }): InvocationDelegation
 
 export function verifyInvocationContext(options: {
   sessionsRoot: string

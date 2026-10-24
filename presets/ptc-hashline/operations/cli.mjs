@@ -278,8 +278,11 @@ export async function run(argv, environment = { env: {} }) {
     // package that does not exist (ADR-0004's partial-success lesson).
     await writeIncidentBundle({ directory, incident, baseline })
     incident.issues = maintenance.path === undefined
-      ? { configured: false, directory: null, written: [], skipped: [{ reason: maintenance.reason }] }
-      : await registerNeedsTriageIssues({ maintenanceRepository: maintenance.path, feature, incident, directory })
+      ? { configured: false, directory: null, written: [], associated: [], recoveries: [], skipped: [{ reason: maintenance.reason }] }
+      // The baseline travels with the registration: every occurrence record
+      // keeps the combination IT happened under (INC-07), so a later run under
+      // another commit or route cannot rewrite the earlier record.
+      : await registerNeedsTriageIssues({ maintenanceRepository: maintenance.path, feature, incident, directory, baseline })
     // Rewrite the two files that embed the registration record.
     const files = await writeIncidentBundle({ directory, incident, baseline })
     return {

@@ -1,6 +1,6 @@
 ---
 name: ptc-hashline-incident
-description: PTC Hashline 异常取证入口（仅用户显式调用）。核验调用资格、确认维护仓库与证据目录、采集运行基线，并从指定会话/seq 范围生成脱敏摘要与 needs-triage 问题包；重复关联与 upgrade 工作流尚未实现。
+description: PTC Hashline 异常取证入口（仅用户显式调用）。核验调用资格、确认维护仓库与证据目录、采集运行基线，并从指定会话/seq 范围生成脱敏摘要与 needs-triage 问题包；同类重复发生关联既有工单并记录恢复，upgrade 工作流尚未实现。
 disable-model-invocation: true
 user-invocable: true
 ---
@@ -68,14 +68,23 @@ node <base>/../../operations/cli.mjs incident --target-session "<会话 ID>" [--
 - 退出码：`0` 覆盖完整并已写出证据包；`2` 表示证据不完整（**已写出**，但不得读成“健康”）或流程停止（视 `status` 为 `stopped`/`read-only`/`missing`/`unsupported-generation`，此时不写证据）。停止原因在 `reason`，缺口在 `gaps`。
 - 事件按 `subCallId` 配对；内层失败即使被程序 catch、外层 `run_code` 成功也会保留（INC-01）。`complete`/`completed` 不单独构成成功判据（INC-04）。
 - 分类与严重度分开：`expected-refusal`（预期拒绝）、`model-parameter-error`（模型参数错误）、`environment-problem`（环境问题）、`suspected-implementation-defect`（疑似实现缺陷）、`partial-success`（部分成功）、`cancelled`（取消）、`insufficient-evidence`（证据不足）、`success`。
-- 预期拒绝与取消只进 `summary.md`；疑似实现缺陷、部分成功与用户报告的结果不符会自动登记 `<维护仓库>/.scratch/<feature>/issues/NN-*.md`，`Status: needs-triage`，写明证据与假说（INC-06）。重复发生关联尚未实现（票据 03），不要声称已关联历史问题。
+- 预期拒绝与取消只进 `summary.md`；疑似实现缺陷、部分成功与用户报告的结果不符会自动登记 `<维护仓库>/.scratch/<feature>/issues/NN-*.md`，`Status: needs-triage`，写明证据与假说（INC-06）。
+- 重复发生（INC-07）：同类 = 同 `kind` + 同工具名 + 同归一化首行（引号内载荷、数字、十六进制、摘要、时间戳被掩码，大小写归一；指纹在写盘前再脱敏一次）。同类再次发生时**不新建工单**，只向既有工单**追加一条发生记录**：本次证据包、发生范围与该次运行基线；`Status` 与既有记录一律不改写。同一会话同一范围的同一失败只算一次发生——即使源日志在此期间变长也不重复追加；若新的范围才看到后续重试成功，只补一条恢复记录。恢复记录的 seq 是重试**成功落地**的那次 settle，`recoveries[].statement` 为“本次已恢复”，恢复**不自动关闭**工单，也不抹去历史失败或部分成功。手写工单没有机器可读的指纹块，不会被误认为同类；CRLF 检出也能识别。
 - 脱敏：参数、首行、路径中的凭据与家目录一律掩码；源文件不修改，不重放 MV/REM、不清理部分成功现场、不现场修实现、不自动升级。证据目录不是备份，长期归档由用户管理。
 
-## 5. 本版本尚未支持的动作
+## 5. 子 agent 的取证协助（SCOPE-06）
+
+用户在主会话显式调用后，同 preset 的子 agent 可以辅助取证分析：用同一 CLI、同一已保存配置，把证据包与问题包写到同一位置。
+
+- 子 agent **不自行加载或启动**本工作流；只有真实用户在主会话的显式入口算启动。
+- 子 agent 的结论只是取证输入，**不构成用户同意或审批**；配置、范围、是否升级这类需要用户决定的事一律交回主会话。
+- 证据包 `incident.json` 的 `invocation.delegation` 记录本次由谁调用（`role`、`parentSession`、`delegationDepth`、`mayAssistAnalysis`、`mayApproveUpgrade`）；`mayApproveUpgrade` 为 `false` 时不得用它替代用户确认。
+- 子 agent 传入的 `--user-report` / `--user-evidence` 会记为 `userReport.source: "subagent"`、`standsForUser: false`，`summary.md` 里也标明“agent statement, not a user confirmation”。转述可以保留，但不得当成用户本人的确认，更不得据此推进任何写入或升级。
+
+## 6. 本版本尚未支持的动作
 
 以下能力**尚未实现**，遇到时直接告诉用户“当前版本未支持”，不要用替代手段假装完成：
 
-- 重复发生的关联（跨基线关联已有问题、保留独立发生记录）：票据 03。
 - upgrade 的只读评估、方案、用户同意、候选验证、目标切换与回退（票据 04—07）。
 - 完整真实宿主交付验收；外发、自动清理、重放 `MV`/`REM`、现场修实现或自动升级（票据 08 与规格边界）。
 

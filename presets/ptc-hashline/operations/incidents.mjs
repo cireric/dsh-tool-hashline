@@ -1,5 +1,5 @@
 /**
- * Incident evidence assembly for the ptc-hashline operations skill (INC-01..06).
+ * Incident evidence assembly for the ptc-hashline operations skill (INC-01..07).
  *
  * One explicit session and seq range in; one redacted bundle out. The module
  * never touches the source log and never replays, cleans or repairs anything:
@@ -12,13 +12,19 @@
  * missing settle is evidence about the range rather than a verdict about the
  * code. 'complete'/'completed' alone is never treated as success (INC-04).
  *
+ * A repeated class of failure links the issue that already exists instead of
+ * writing a second one (INC-07): the link is an APPENDED occurrence record that
+ * carries its own evidence package and its own baseline, so no earlier record,
+ * evidence body or Status line is rewritten. A retry that succeeded later in
+ * the same range adds a recovery record and never closes the issue.
+ *
  * Redaction is applied to every exported string (INC-05): tool arguments and
  * bodies never leave this module, and the first lines, paths and statements that
  * do leave it pass through {@link redactText}. The original log is untouched.
  * @module dsh-tool-hashline/presets/ptc-hashline/operations/incidents
  */
 import { createHash } from 'node:crypto'
-import { mkdir, readdir, writeFile } from 'node:fs/promises'
+import { appendFile, mkdir, readdir, readFile, writeFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { join } from 'node:path'
 import { replayRoute } from './context.mjs'
@@ -32,6 +38,27 @@ export const INCIDENT_VERSION = 1
 export const DEFAULT_FEATURE = 'ptc-hashline-operations-skills'
 /** Triage status the issue tracker uses for a not-yet-evaluated report. */
 export const TRIAGE_STATUS = 'needs-triage'
+/** Marker opening the machine-readable metadata block of one issue file. */
+export const ISSUE_FORMAT = 'ptc-hashline-incident-issue'
+/** Marker opening one appended occurrence record. */
+export const OCCURRENCE_FORMAT = 'ptc-hashline-occurrence'
+/** Marker opening one appended recovery record. */
+export const RECOVERY_FORMAT = 'ptc-hashline-recovery'
+/** The one statement a recovery record carries; it never closes an issue. */
+export const RECOVERY_STATEMENT = '本次已恢复'
+/** Occurrence and recovery headings, counted to number the next record. */
+const OCCURRENCE_HEADING = /^### 发生 \d+ · /gmu
+const RECOVERY_HEADING = /^### 恢复 \d+ · /gmu
+/**
+ * The machine-readable blocks this module writes and reads back.
+ *
+ * Each pattern tolerates CRLF on purpose: an issue file may be checked out with
+ * CRLF on this platform, and a block this module wrote must still be recognised
+ * then. A failed match would silently open a second ticket instead of linking.
+ */
+const ISSUE_METADATA = /<!-- ptc-hashline-incident-issue\r?\n([\s\S]*?)\r?\n-->/u
+const OCCURRENCE_METADATA = /<!-- ptc-hashline-occurrence\r?\n([^\r\n]*)\r?\n-->/gu
+const RECOVERY_METADATA = /<!-- ptc-hashline-recovery\r?\n([^\r\n]*)\r?\n-->/gu
 
 /** The gate's refusal marker, distinct from the watchdog's own notices. */
 const GATE_MARK = '[intent-gate]'
@@ -107,6 +134,49 @@ export function redactDeep(value, options = {}) {
     return out
   }
   return value
+}
+
+/**
+ * Normalise one exported first line into a class fingerprint (INC-07).
+ *
+ * Two instances of ONE class differ only in their payload: a path, a byte
+ * offset, a seq, a count, a digest or a timestamp. Masking exactly those makes
+ * the two lines equal without merging different classes, which is what the
+ * ticket's 「同 kind + 同工具名 + 归一化首行」 criterion needs. Case is folded
+ * because a wording change between host versions is not a new class.
+ *
+ * The line is redacted here rather than trusted to the caller: the fingerprint is
+ * stored in a ticket and compared across runs, so it must never carry a token
+ * even when raw text reaches this exported function. Redacting twice is a no-op.
+ * @param {string} text one first line, raw or already redacted
+ * @param {{home?: string}} [options] home directory override (tests pin it)
+ * @returns {string} the normalised form
+ */
+export function normalizeFirstLine(text, options = {}) {
+  const line = typeof text === 'string' ? redactText(text, options).split('\n')[0].replace(/\r/gu, '') : ''
+  const masked = line
+    .replace(/0x[0-9a-f]+/giu, '0x#')
+    .replace(/\b[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}\b/giu, '<id>')
+    .replace(/\b[0-9a-f]{16,}\b/giu, '<hash>')
+    .replace(/\b\d{4}-\d{2}-\d{2}[T ]\d{2}:\d{2}(?::\d{2}(?:\.\d+)?)?(?:Z|[+-]\d{2}:?\d{2})?/gu, '<time>')
+    .replace(/"[^"\n]*"/gu, '"…"')
+    .replace(/'[^'\n]*'/gu, "'…'")
+    .replace(/\d+(?:\.\d+)?/gu, '#')
+    .replace(/\s+/gu, ' ')
+    .trim()
+  return masked.toLowerCase().slice(0, 200)
+}
+
+/**
+ * The same-class fingerprint of one finding: kind, tool name, normalised line.
+ * It is stored in the issue's metadata block (INC-07), so a later run matches
+ * the file by data instead of by its heading wording.
+ * @param {{kind: string, name: string, firstLine: string}} finding the finding
+ * @param {{home?: string}} [options] home directory override (tests pin it)
+ * @returns {string} the fingerprint
+ */
+export function recurrenceKeyOf(finding, options = {}) {
+  return String(finding.kind) + '|' + String(finding.name) + '|' + normalizeFirstLine(finding.firstLine, options)
 }
 
 /**
@@ -320,14 +390,21 @@ export function buildIncident(options) {
     // is that call, and the outer run_code wrapper is only kept when there is no
     // inner one to name (INC-03).
     const related = inner.length > 0 ? inner : direct
+    // SCOPE-06: who supplied the statement. A subagent's message is an agent's
+    // statement, not the user's own: it may assist the analysis, but nothing
+    // recorded here may later be read as the user confirming anything.
+    const byAgent = options.invocation?.delegation?.role === 'subagent'
     userReport = {
       kind: 'user-reported-mismatch',
       severity: 'high',
       statement: redactText(options.userReport, { home }),
+      source: byAgent ? 'subagent' : 'user',
+      standsForUser: !byAgent,
       independentEvidence: typeof options.userEvidence === 'string' && options.userEvidence.trim() !== '' ? redactText(options.userEvidence, { home }) : null,
       relatedEventSeqs: related,
       verification: 'independent-evidence-required',
-      note: 'A successful tool result does not prove the bytes are right: the log cannot detect silent corruption. Check the file bytes, a diff or a test result independently; the related events keep isError=false on purpose.',
+      note: 'A successful tool result does not prove the bytes are right: the log cannot detect silent corruption. Check the file bytes, a diff or a test result independently; the related events keep isError=false on purpose.'
+        + (byAgent ? ' This statement came from an assisted (subagent) session: it is evidence input, never the user confirmation.' : ''),
     }
     if (related.length === 0) issues.push('the user report names a mismatch but the range holds no successful call to associate it with')
   }
@@ -353,6 +430,9 @@ export function buildIncident(options) {
       preset: options.invocation?.evidence?.effectivePreset ?? null,
       reason: options.invocation?.reason ?? null,
       source: typeof options.invocation?.evidence?.source === 'string' ? redactText(options.invocation.evidence.source, { home }) : null,
+      // SCOPE-06: who invoked the workflow. An assisted session may analyze
+      // the evidence; it can never supply the approval an upgrade needs.
+      delegation: options.invocation?.delegation ?? null,
     },
     target: {
       sessionId: options.targetSessionId,
@@ -464,6 +544,9 @@ export function renderSummaryMarkdown(incident) {
     lines.push('## User report')
     lines.push('')
     lines.push('- Statement: ' + incident.userReport.statement)
+    // SCOPE-06: provenance, so an assisted session's message is never read as
+    // the user's own confirmation.
+    lines.push('- Reported by: ' + incident.userReport.source + (incident.userReport.standsForUser === true ? '' : ' (an agent statement, not a user confirmation)'))
     lines.push('- Related successful calls: ' + (incident.userReport.relatedEventSeqs.length === 0 ? 'none' : incident.userReport.relatedEventSeqs.join(', ')))
     lines.push('- Independent evidence supplied by the user: ' + (incident.userReport.independentEvidence === null ? 'none recorded' : incident.userReport.independentEvidence))
     lines.push('- ' + incident.userReport.note)
@@ -476,10 +559,20 @@ export function renderSummaryMarkdown(incident) {
     lines.push('')
   }
   const registration = incident.issues
-  if (registration !== undefined && registration.written.length > 0) {
+  const linked = Array.isArray(registration?.associated) ? registration.associated : []
+  const recovered = Array.isArray(registration?.recoveries) ? registration.recoveries : []
+  if (registration !== undefined && (registration.written.length > 0 || linked.length > 0 || recovered.length > 0)) {
     lines.push('## Registered triage issues')
     lines.push('')
     for (const written of registration.written) lines.push('- ' + written.path + ' (' + written.status + ', ' + written.kind + ')')
+    for (const entry of linked) {
+      lines.push('- linked: ' + entry.path + ' (occurrence ' + entry.occurrence + ', Status unchanged' + (entry.duplicate === true ? ', already recorded' : '') + ')')
+    }
+    for (const entry of recovered) {
+      lines.push('- recovery: ' + entry.path + ' — ' + entry.statement + ' (seq ' + entry.evidenceSeqs.join(', ') + '); the issue stays open')
+    }
+    lines.push('')
+    lines.push('A link appends one occurrence record to the existing ticket and never rewrites its Status or its older evidence; a recovery records that this occurrence was recovered and never closes the issue.')
     lines.push('')
   }
   lines.push('## Notes')
@@ -525,13 +618,15 @@ export async function writeIncidentBundle(options) {
 /**
  * The findings that need a triage issue: suspected defects, partial successes
  * and a user-reported mismatch (never an expected refusal or a cancellation).
+ * Each finding carries its same-class fingerprint (INC-07), so a later run can
+ * link it to the issue that already exists instead of writing another one.
  * @param {object} incident the assembled report
  * @returns {object[]} one finding per actionable item
  */
 export function collectFindings(incident) {
-  const findings = incident.events.filter((event) => ACTIONABLE.has(event.kind)).map((event) => ({ ...event }))
+  const findings = incident.events.filter((event) => ACTIONABLE.has(event.kind)).map((event) => withRecurrence({ ...event }))
   if (incident.userReport !== null) {
-    findings.push({
+    findings.push(withRecurrence({
       kind: 'user-reported-mismatch',
       severity: 'high',
       name: 'user-report',
@@ -541,91 +636,505 @@ export function collectFindings(incident) {
       doneSeq: incident.userReport.relatedEventSeqs[incident.userReport.relatedEventSeqs.length - 1] ?? null,
       firstLine: incident.userReport.statement,
       errorCode: null,
-    })
+    }))
   }
   return findings
 }
 
-function seqRangeOf(finding) {
-  if (finding.startSeq === null || finding.startSeq === undefined) return 'n/a'
-  return String(finding.startSeq) + (finding.doneSeq === null || finding.doneSeq === undefined ? '' : '..' + String(finding.doneSeq))
+/** Attach the same-class fingerprint one finding is grouped by. */
+function withRecurrence(finding) {
+  return {
+    ...finding,
+    recurrence: {
+      key: recurrenceKeyOf(finding),
+      kind: finding.kind,
+      tool: finding.name,
+      normalizedFirstLine: normalizeFirstLine(finding.firstLine),
+    },
+  }
 }
 
-function titleForFinding(finding) {
-  return finding.kind + ': ' + finding.name + ' (seq ' + seqRangeOf(finding) + ')'
+/**
+ * Group one run's findings by fingerprint: one issue, one occurrence record
+ * (INC-07).
+ *
+ * Two instances of one class inside the same range are ONE occurrence of it,
+ * so an issue never receives two records for the same incident. The group reads
+ * kind, tool and normalised line from the finding's own recurrence record, so
+ * one fact never has two sources.
+ * @param {object[]} findings the findings decorated by collectFindings
+ * @returns {object[]} one group per fingerprint
+ */
+export function groupFindings(findings) {
+  const groups = new Map()
+  for (const finding of findings) {
+    const entry = groups.get(finding.recurrence.key) ?? {
+      ...finding.recurrence,
+      severity: finding.severity,
+      via: finding.via,
+      state: finding.state,
+      errorCode: finding.errorCode ?? null,
+      firstLine: finding.firstLine,
+      seqs: [],
+    }
+    entry.seqs.push(seqOfFinding(finding))
+    groups.set(entry.key, entry)
+  }
+  for (const entry of groups.values()) {
+    entry.seqs = entry.seqs.filter((seq) => typeof seq === 'number').sort((left, right) => left - right)
+  }
+  return [...groups.values()]
 }
 
-function renderIssue(finding, incident, directory, number) {
-  const seqRange = seqRangeOf(finding)
+/** The seq one finding is anchored at, or undefined when the range gave none. */
+function seqOfFinding(finding) {
+  if (typeof finding.startSeq === 'number') return finding.startSeq
+  if (typeof finding.doneSeq === 'number') return finding.doneSeq
+  return undefined
+}
+
+/**
+ * Did the same tool succeed later inside this range? (INC-07)
+ *
+ * That is the only retry-success one log can show: a completed, non-error call
+ * of the SAME tool after the failing occurrence, cited at the seq it SETTLED on
+ * (that is when it succeeded, not when it started). It is a recovery record —
+ * not a verdict about the issue and never a status change.
+ * @param {object} group one fingerprint group
+ * @param {object} incident the assembled report
+ * @returns {{recovered: boolean, evidenceSeqs: number[]}} the recovery facts
+ */
+export function detectRecovery(group, incident) {
+  const last = group.seqs[group.seqs.length - 1]
+  if (last === undefined) return { recovered: false, evidenceSeqs: [] }
+  const evidenceSeqs = incident.events
+    .filter((event) => event.name === group.tool
+      && event.kind === 'success'
+      && event.state === 'completed'
+      && event.isError === false
+      && typeof event.seq === 'number'
+      && event.seq > last)
+    .map((event) => (typeof event.doneSeq === 'number' ? event.doneSeq : event.seq))
+    .sort((left, right) => left - right)
+  return { recovered: evidenceSeqs.length > 0, evidenceSeqs }
+}
+
+/**
+ * Read the machine-readable metadata a previously registered issue carries
+ * (INC-07).
+ *
+ * A hand-written ticket has none, so it never matches by accident: an unknown
+ * key stays unknown instead of being guessed from the heading wording.
+ * @param {string} text one issue file's bytes
+ * @returns {object | null} the metadata, or null when the file carries none
+ */
+export function parseIssueMetadata(text) {
+  if (typeof text !== 'string') return null
+  const match = ISSUE_METADATA.exec(text)
+  if (match === null) return null
+  let parsed
+  try {
+    parsed = JSON.parse(match[1])
+  } catch {
+    return null
+  }
+  if (parsed === null || typeof parsed !== 'object') return null
+  if (typeof parsed.recurrenceKey !== 'string' || parsed.recurrenceKey === '') return null
+  return parsed
+}
+
+/** The machine ids one issue file already records for one record kind. */
+function metadataIdsIn(text, pattern) {
+  const ids = []
+  if (typeof text !== 'string') return ids
+  for (const match of text.matchAll(pattern)) {
+    try {
+      const parsed = JSON.parse(match[1])
+      if (typeof parsed?.id === 'string') ids.push(parsed.id)
+    } catch {
+      // An unparsable block is reported by its absence, never by a crash.
+    }
+  }
+  return ids
+}
+
+/** How many records of one kind a file already holds. */
+function countRecordsIn(text, pattern) {
+  const matches = typeof text === 'string' ? text.match(pattern) : null
+  return matches === null ? 0 : matches.length
+}
+
+/** The seq range one group occurred over, as text. */
+function seqRangeOf(group) {
+  if (group.seqs.length === 0) return 'n/a'
+  const first = group.seqs[0]
+  const last = group.seqs[group.seqs.length - 1]
+  return first === last ? String(first) : String(first) + '..' + String(last)
+}
+
+/** Wrap one value in the marker the issue bodies use for machine-ish values. */
+function quoted(value) {
+  return '`' + (value === undefined || value === null || value === '' ? 'unknown' : String(value)) + '`'
+}
+
+/** The evidence-package bullet every record cites, packages path included. */
+function evidenceBullet(directory, incident) {
+  const path = redactText(join(String(directory ?? ''), 'incident.json'))
+  return '- 证据包：' + quoted(path) + '（目标会话 ' + quoted(incident.target.sessionId) + '，源日志 sha256 ' + quoted(incident.target.source.sha256) + '）'
+}
+
+/**
+ * One occurrence's own baseline, condensed to the fields a reader compares.
+ *
+ * Every occurrence keeps its own copy: a later run under another commit, patch
+ * state or route must not rewrite the record of the earlier one.
+ * @param {object} [baseline] the run's baseline report
+ * @returns {string} one markdown bullet's text
+ */
+function baselineLine(baseline) {
+  if (baseline === null || typeof baseline !== 'object') return '基线：unknown（本次未采集到运行基线）'
+  const repository = baseline.repository ?? {}
+  const engines = baseline.engines ?? {}
+  const session = baseline.session ?? {}
+  const patch = (engine) => quoted(engine?.patch?.status ?? 'unknown')
+  const parts = [
+    'commit ' + quoted(repository.commit) + '（' + (repository.dirty === 'clean' ? 'clean' : repository.dirty === 'dirty' ? 'dirty' : 'unknown') + '）',
+    'preset ' + quoted(session.preset),
+    'hashline ' + quoted(engines.hashline?.version) + '（' + patch(engines.hashline) + '）',
+    'tool-edit ' + quoted(engines.toolEdit?.version) + '（' + patch(engines.toolEdit) + '）',
+    'model ' + quoted(session.model),
+    '采集于 ' + quoted(baseline.collectedAt),
+  ]
+  return redactText('基线：' + parts.join(' · '))
+}
+
+/**
+ * One occurrence record's heading and bullets (INC-07).
+ * @param {object} group the fingerprint group this run grouped
+ * @param {object} incident the assembled report
+ * @param {number} index the occurrence number inside the issue file
+ * @param {string} directory the evidence package directory
+ * @param {object} [baseline] the baseline THIS occurrence happened under
+ * @returns {string[]} the record's markdown lines
+ */
+function occurrenceSection(group, incident, index, directory, baseline) {
   return [
-    '# ' + number + ': ' + titleForFinding(finding),
+    '### 发生 ' + index + ' · ' + incident.generatedAt + ' · ' + incident.target.sessionId,
     '',
-    '**What to build:** ' + HYPOTHESES[finding.kind],
+    '- 发生范围：seq ' + seqRangeOf(group) + '（via ' + quoted(group.via) + '，state ' + quoted(group.state) + '，kind ' + quoted(group.kind) + '，severity ' + quoted(group.severity) + '，错误码 ' + quoted(group.errorCode) + '）',
+    '- 首行：' + quoted(group.firstLine || '(none)'),
+    evidenceBullet(directory, incident),
+    '- ' + baselineLine(baseline),
+  ]
+}
+
+/**
+ * One recovery record's heading and bullets (INC-07).
+ *
+ * The wording states the boundary on every record: this occurrence recovered,
+ * the issue stays open, and history is not erased.
+ * @param {object} group the fingerprint group
+ * @param {object} incident the assembled report
+ * @param {number} index the recovery number inside the issue file
+ * @param {string} directory the evidence package directory
+ * @param {{evidenceSeqs: number[]}} recovery the detected retry success
+ * @returns {string[]} the record's markdown lines
+ */
+function recoverySection(group, incident, index, directory, recovery) {
+  return [
+    '### 恢复 ' + index + ' · ' + incident.generatedAt + ' · ' + incident.target.sessionId,
+    '',
+    '- 结论：**' + RECOVERY_STATEMENT + '** —— 同类工具 ' + quoted(group.tool) + ' 在 seq ' + recovery.evidenceSeqs.join(', ') + ' 成功（state ' + quoted('completed') + '，isError=false）。',
+    evidenceBullet(directory, incident),
+    '- 说明：恢复只记录本次，不自动关闭问题 —— Status 保持 ' + quoted(TRIAGE_STATUS) + '，历史失败与部分成功不因此抹去。',
+  ]
+}
+
+/**
+ * Render one NEW issue: the class fingerprint first, then the first occurrence,
+ * then the log section every later association appends to.
+ * @param {object} group the fingerprint group to register
+ * @param {object} incident the assembled report
+ * @param {string} directory the evidence package directory
+ * @param {string} number the ticket number (two digits)
+ * @param {object} [baseline] this occurrence's baseline
+ * @param {{recovered: boolean, evidenceSeqs: number[]}} recovery the recovery facts
+ * @param {string} id the first occurrence's machine id
+ * @param {string | null} [recoveryId] the recovery's machine id, when recovered
+ * @returns {string} the whole issue file
+ */
+function renderIssue(group, incident, directory, number, baseline, recovery, id, recoveryId) {
+  const metadata = JSON.stringify({
+    format: ISSUE_FORMAT,
+    version: 1,
+    kind: group.kind,
+    tool: group.tool,
+    normalizedFirstLine: group.normalizedFirstLine,
+    recurrenceKey: group.key,
+    createdAt: incident.generatedAt,
+  }, null, 2)
+  const lines = [
+    '# ' + number + ': ' + group.kind + ': ' + group.tool + ' (seq ' + seqRangeOf(group) + ')',
+    '',
+    '<!-- ' + ISSUE_FORMAT,
+    metadata,
+    '-->',
+    '',
+    '**What to build:** ' + HYPOTHESES[group.kind],
     '**Blocked by:** None',
     '**Status:** ' + TRIAGE_STATUS,
     '',
     '需求依据：[权威需求规格](../../../docs/specs/2026-10-23-ptc-hashline-operations-skills.md)；本票由 incident 自动登记（INC-06），不表示已证实为代码 Bug。',
     '',
-    '## 证据',
+    '## 同类判据',
     '',
-    '- 证据包：`' + join(directory, 'incident.json') + '`（目标会话 `' + incident.target.sessionId + '`，源日志 sha256 `' + incident.target.source.sha256 + '`）',
-    '- 事件：`' + finding.name + '` via `' + finding.via + '`，state `' + finding.state + '`，kind `' + finding.kind + '`，severity `' + finding.severity + '`，seq `' + seqRange + '`',
-    '- 首行：`' + (finding.firstLine || '(none)') + '`',
-    '- 错误码：`' + (finding.errorCode ?? 'n/a') + '`',
+    '- 同类 = 同 kind + 同工具名 + 同归一化首行：kind ' + quoted(group.kind) + '，工具 ' + quoted(group.tool) + '，归一化首行 ' + quoted(group.normalizedFirstLine),
+    '- 指纹：' + quoted(group.key) + '（incident 用它匹配本文件，不靠标题措辞；手写票据没有该块，因此不会被误认为同类）',
+    '- 关联规则：再次发生时只向本文件追加一条发生记录；本文件的 Status 行不被改写，既有记录与证据不被覆盖。',
+    '',
+    '## 证据（第 1 次发生）',
+    '',
+    evidenceBullet(directory, incident),
+    '- 事件：' + quoted(group.tool) + ' via ' + quoted(group.via) + '，state ' + quoted(group.state) + '，kind ' + quoted(group.kind) + '，severity ' + quoted(group.severity) + '，seq ' + quoted(seqRangeOf(group)),
+    '- 首行：' + quoted(group.firstLine || '(none)'),
+    '- 错误码：' + quoted(group.errorCode),
     '',
     '## 假说',
     '',
-    HYPOTHESES[finding.kind],
+    HYPOTHESES[group.kind],
     '',
     '## 边界',
     '',
-    '- 重复发生关联尚未实现（票据 03）：本记录只覆盖本次发生，旧证据不被覆盖。',
+    '- 同类关联与恢复记录（票据 03）：发生记录只追加，Status 与旧证据不被改写；恢复只记「本次已恢复」，不自动关闭本问题。',
     '- 未重放、未清理现场、未修改实现；核验前不要假定自动回滚。',
     '',
-  ].join('\n')
+    '## 发生与恢复记录',
+    '',
+    '（本段只追加：发生记录与恢复记录按时间顺序追加；恢复不自动关闭本问题。）',
+    '',
+    ...occurrenceMetadataBlock(group, incident, id),
+    ...occurrenceSection(group, incident, 1, directory, baseline),
+    '',
+    ...recovery.recovered ? [...recoveryMetadataBlock(group, incident, recoveryId, recovery), ...recoverySection(group, incident, 1, directory, recovery), ''] : [],
+  ]
+  return lines.join('\n') + '\n'
 }
 
 /**
- * Auto-register one needs-triage issue per actionable finding.
+ * The bytes one association appends: the occurrence id, the occurrence record
+ * and — when this run observed a retry success — the recovery record.
+ *
+ * The block is self-contained and APPENDED, never merged into the existing text,
+ * so an association cannot rewrite the Status line or an older record.
+ * @param {object} group the fingerprint group this run grouped
+ * @param {object} incident the assembled report
+ * @param {string} directory the evidence package directory
+ * @param {object} [baseline] the baseline THIS occurrence happened under
+ * @param {string} id the occurrence's machine id
+ * @param {number} index the occurrence number inside the issue file
+ * @param {{recovered: boolean, evidenceSeqs: number[]}} recovery the recovery facts
+ * @param {string} recoveryId the recovery's machine id
+ * @param {number} recoveryIndex the recovery number inside the issue file
+ * @returns {string} the appended block
+ */
+function occurrenceBlock(group, incident, directory, baseline, id, index, recovery, recoveryId, recoveryIndex) {
+  const lines = [
+    '',
+    ...occurrenceMetadataBlock(group, incident, id),
+    ...occurrenceSection(group, incident, index, directory, baseline),
+    '',
+    '- 说明：本次只追加一条发生记录；Status 未改变，旧证据未被覆盖。',
+    '',
+  ]
+  if (recovery.recovered) lines.push(...recoveryMetadataBlock(group, incident, recoveryId, recovery), ...recoverySection(group, incident, recoveryIndex, directory, recovery), '')
+  return lines.join('\n')
+}
+
+/** One occurrence's machine-readable identity: a re-run must match, not append. */
+function occurrenceMetadataBlock(group, incident, id) {
+  return [
+    '<!-- ' + OCCURRENCE_FORMAT,
+    JSON.stringify({
+      format: OCCURRENCE_FORMAT,
+      version: 1,
+      id,
+      sessionId: incident.target.sessionId,
+      seqRange: seqRangeOf(group),
+      recordedAt: incident.generatedAt,
+      recurrenceKey: group.key,
+    }),
+    '-->',
+  ]
+}
+
+/** One recovery's machine-readable identity, so a re-analysis matches it. */
+function recoveryMetadataBlock(group, incident, id, recovery) {
+  return [
+    '<!-- ' + RECOVERY_FORMAT,
+    JSON.stringify({
+      format: RECOVERY_FORMAT,
+      version: 1,
+      id,
+      sessionId: incident.target.sessionId,
+      evidenceSeqs: recovery.evidenceSeqs,
+      recordedAt: incident.generatedAt,
+      recurrenceKey: group.key,
+    }),
+    '-->',
+  ]
+}
+
+/** A short, stable digest of the given parts. */
+function digestOf(parts) {
+  return createHash('sha256').update(parts.map((part) => String(part)).join('\n')).digest('hex').slice(0, 16)
+}
+
+/**
+ * Identity of one occurrence: this session, this class, this seq range.
+ *
+ * The source-log digest is deliberately NOT part of it. A log grows every turn,
+ * and re-analysing the same failing call after that growth is still the SAME
+ * occurrence — an id that moved with the file would append the record twice.
+ */
+function occurrenceIdOf(group, incident) {
+  return digestOf([group.key, incident.target.sessionId, seqRangeOf(group)])
+}
+
+/** Identity of one recovery: its occurrence plus the seqs that recovered it. */
+function recoveryIdOf(group, incident, recovery) {
+  return digestOf([occurrenceIdOf(group, incident), recovery.evidenceSeqs.join(',')])
+}
+
+/** The registration entry one recovery reports; it is never a status change. */
+function recoveryEntry(facts) {
+  return {
+    path: redactText(facts.path),
+    number: facts.number,
+    statement: RECOVERY_STATEMENT,
+    evidenceSeqs: facts.recovery.evidenceSeqs,
+    recordedAt: facts.incident.generatedAt,
+    recurrenceKey: facts.group.key,
+    closed: false,
+    appended: facts.appended,
+  }
+}
+
+/**
+ * The bytes a re-analysis appends when the occurrence is already on file but the
+ * retry success it now observes is not: a recovery record on its own. Dropping it
+ * would lose the only new fact the wider range produced.
+ */
+function recoveryBlock(group, incident, directory, recoveryId, recoveryIndex, recovery) {
+  return ['', ...recoveryMetadataBlock(group, incident, recoveryId, recovery), ...recoverySection(group, incident, recoveryIndex, directory, recovery), ''].join('\n')
+}
+
+/**
+ * Register one needs-triage issue per actionable finding, and link a repeated
+ * class to the issue that already exists (INC-06, INC-07).
+ *
+ * The first occurrence of a class creates the ticket. A later occurrence of the
+ * SAME class — same kind, same tool, same normalised first line — appends one
+ * occurrence record to the existing file and leaves its Status, its evidence and
+ * every earlier record untouched. When the range also holds a successful retry
+ * of that tool, the association records 「本次已恢复」: a recovery record, never a
+ * status transition, so a retry that worked never closes an open issue.
  *
  * The issue directory follows the tracker convention
- * (`.scratch/<feature>/issues/NN-<slug>.md`); numbering continues after the
+ * (.scratch/<feature>/issues/NN-<slug>.md); numbering continues after the
  * highest existing ticket. An unusable maintenance repository stops the writes
  * and reports the reason instead of falling back to the business cwd (D9).
- * @param {{maintenanceRepository: string, feature: string, incident: object, directory: string}} options
+ * @param {{maintenanceRepository: string, feature: string, incident: object, directory: string, baseline?: object}} options
  * @returns {Promise<object>} the registration result
  */
 export async function registerNeedsTriageIssues(options) {
   const findings = collectFindings(options.incident)
   const repository = typeof options.maintenanceRepository === 'string' ? options.maintenanceRepository : ''
   if (repository === '') {
-    return { configured: false, directory: null, written: [], skipped: findings.length === 0 ? [] : [{ reason: 'the maintenance repository is not usable, so no issue file was written; this workflow never writes into the business working directory' }] }
+    return {
+      configured: false,
+      directory: null,
+      written: [],
+      associated: [],
+      recoveries: [],
+      skipped: findings.length === 0 ? [] : [{ reason: 'the maintenance repository is not usable, so no issue file was written; this workflow never writes into the business working directory' }],
+    }
   }
   const directory = join(repository, '.scratch', options.feature, 'issues')
   const displayDirectory = redactText(directory)
   // No actionable finding means no issue directory at all: a clean analysis
   // must not leave a `.scratch` tree behind (INC-06).
-  if (findings.length === 0) return { configured: true, directory: displayDirectory, written: [], skipped: [] }
+  if (findings.length === 0) return { configured: true, directory: displayDirectory, written: [], associated: [], recoveries: [], skipped: [] }
   let entries = []
   try {
     entries = await readdir(directory)
   } catch (error) {
-    if (error?.code !== 'ENOENT') return { configured: true, directory: displayDirectory, written: [], skipped: [{ reason: 'cannot list ' + displayDirectory + ': ' + (error instanceof Error ? error.message : String(error)) }] }
+    if (error?.code !== 'ENOENT') return { configured: true, directory: displayDirectory, written: [], associated: [], recoveries: [], skipped: [{ reason: 'cannot list ' + displayDirectory + ': ' + (error instanceof Error ? error.message : String(error)) }] }
   }
   await mkdir(directory, { recursive: true })
   let next = 1
+  // Issues already registered for a fingerprint. The match is by data only: a
+  // hand-written ticket carries no metadata block and therefore never matches.
+  const known = new Map()
   for (const name of entries) {
     const match = /^(\d+)-/u.exec(name)
     if (match !== null) next = Math.max(next, Number(match[1]) + 1)
+    if (!name.endsWith('.md')) continue
+    const file = join(directory, name)
+    let text
+    try {
+      text = await readFile(file, 'utf8')
+    } catch {
+      continue
+    }
+    const metadata = parseIssueMetadata(text)
+    if (metadata === null || known.has(metadata.recurrenceKey)) continue
+    known.set(metadata.recurrenceKey, { path: file, number: match?.[1] ?? 'unknown', text })
   }
+  const packageDirectory = redactText(String(options.directory ?? ''))
   const written = []
-  for (const finding of findings) {
-    const number = String(next).padStart(2, '0')
-    next += 1
-    const slug = (String(finding.kind) + '-' + String(finding.name)).toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 60) || 'incident'
-    const file = join(directory, number + '-' + slug + '.md')
-    await writeFile(file, renderIssue(finding, options.incident, redactText(String(options.directory ?? '')), number), 'utf8')
-    written.push({ path: redactText(file), number, status: TRIAGE_STATUS, kind: finding.kind })
+  const associated = []
+  const recoveries = []
+
+  for (const group of groupFindings(findings)) {
+    const recovery = detectRecovery(group, options.incident)
+    const id = occurrenceIdOf(group, options.incident)
+    const recoveryId = recoveryIdOf(group, options.incident, recovery)
+    const existing = known.get(group.key)
+    if (existing === undefined) {
+      const number = String(next).padStart(2, '0')
+      next += 1
+      const slug = (String(group.kind) + '-' + String(group.tool)).toLowerCase().replace(/[^a-z0-9._-]+/gu, '-').replace(/^-+|-+$/gu, '').slice(0, 60) || 'incident'
+      const file = join(directory, number + '-' + slug + '.md')
+      // The new issue records its first occurrence — and its recovery, when this
+      // range already holds one — under the same ids an association looks for,
+      // so re-running the same range cannot append either of them twice.
+      await writeFile(file, renderIssue(group, options.incident, packageDirectory, number, options.baseline, recovery, id, recoveryId), 'utf8')
+      written.push({ path: redactText(file), number, status: TRIAGE_STATUS, kind: group.kind, recurrenceKey: group.key })
+      if (recovery.recovered) {
+        recoveries.push(recoveryEntry({ path: file, number, incident: options.incident, group, recovery, appended: false }))
+      }
+      continue
+    }
+    const occurrence = countRecordsIn(existing.text, OCCURRENCE_HEADING)
+    const recoveryIndex = countRecordsIn(existing.text, RECOVERY_HEADING)
+    const recorded = metadataIdsIn(existing.text, OCCURRENCE_METADATA).includes(id)
+    const newRecovery = recovery.recovered && !metadataIdsIn(existing.text, RECOVERY_METADATA).includes(recoveryId)
+    if (recorded && !newRecovery) {
+      // The same session and range analysed again is the SAME occurrence, and a
+      // recovery already on file stays recorded: nothing is appended twice.
+      associated.push({ path: redactText(existing.path), number: existing.number, status: TRIAGE_STATUS, kind: group.kind, recurrenceKey: group.key, occurrence, duplicate: true, appended: false, statusChanged: false })
+      continue
+    }
+    // Append only: the bytes already in the file — its Status, its evidence and
+    // every earlier record — are never rewritten by an association.
+    const block = recorded
+      ? recoveryBlock(group, options.incident, packageDirectory, recoveryId, recoveryIndex + 1, recovery)
+      : occurrenceBlock(group, options.incident, packageDirectory, options.baseline, id, occurrence + 1, recovery, recoveryId, recoveryIndex + 1)
+    await appendFile(existing.path, block, 'utf8')
+    associated.push({ path: redactText(existing.path), number: existing.number, status: TRIAGE_STATUS, kind: group.kind, recurrenceKey: group.key, occurrence: recorded ? occurrence : occurrence + 1, duplicate: recorded, appended: true, statusChanged: false })
+    if (newRecovery) {
+      recoveries.push(recoveryEntry({ path: existing.path, number: existing.number, incident: options.incident, group, recovery, appended: true }))
+    }
   }
-  return { configured: true, directory: displayDirectory, written, skipped: [] }
+  return { configured: true, directory: displayDirectory, written, associated, recoveries, skipped: [] }
 }
