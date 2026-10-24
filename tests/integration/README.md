@@ -222,6 +222,36 @@ standing in for the registry.
   exactly one case exercises `createDefaultRunner` as a real child process,
   asserting a real exit code, a quoted argument and a killed timeout, and
   reporting the platform gap instead of inventing a pass.
+- `operations-target-switch.spec.ts` — UPG-05/06/07/10/12/13 and D10/D11/D15/D16
+  (11 cases). The approved target, switched, and the failure that restores this
+  round or hands the state over. The gate runs before ANY write and ANY command:
+  no consent record, an approval that only covers the candidate phase, a drifted
+  baseline, a consent record naming another target, a candidate that is not
+  `candidate-verified` (a failed verdict, a missing result.json, a
+  `pendingVerification` flag) and an assisted (subagent) session all stop
+  with exit 2, zero runner calls and byte-identical trees. The user's own edits in
+  an affected file stop the switch (the worktree's porcelain paths against the
+  affected set; the target's manifest read against the digests the proposal bound)
+  and unrelated changes survive untouched — no stash, no commit, no revert. On the
+  approved path the backup lands first, the write list (`switch.json`)
+  before the first change, then the worktree's dependencies and patch files (the
+  same name/key version coupling ticket 06 delivered), the install, the
+  proposal's own `build` entry, the target install, and finally the
+  target's OWN evidence: resolved versions against the approved candidate, the
+  marker state each patch decision expects, one physical hashline instance for
+  read and edit, and a read→edit short link driven inside the target. Exit 0 needs
+  every step to have actually run and every target check to pass. A partial
+  failure restores only this round — the backup copied back, the round's own patch
+  file removed, both sides re-installed — and is only called
+  `switch-failed-restored` once the patch digests, the lockfile digest and
+  the resolved engines are back at the proposal's baseline; a restore that cannot
+  be verified, and a file edited between this round and its restore
+  (`externalChangesOf`, measured on real bytes), are
+  `switch-failed-handover`: stop, keep the evidence, overwrite nothing. An
+  incomplete backup stops the switch before the first change. Nothing outside
+  `<proposalId>/` is written, proposal.json / consent.json / validation.md
+  stay byte-identical, and no daily profile, other profile or official DSH install
+  is touched. The runner is injected for every case; the record names its source.
 - `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
   install into an unrelated project, and resolution + execution from a foreign
   working directory. An engine the install does not carry reports `unknown`,

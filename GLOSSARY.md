@@ -57,5 +57,17 @@ _Avoid_: 目标安装树、日常 profile、仓库根 `.pnpm-store`
 _Avoid_: 方案里的 baselineHash（那是验证前的输入）、版本号相同即视为兼容
 
 **目标切换**:
-把已验证且获得用户同意的 PTC Hashline 变更应用到指定升级目标。
-_Avoid_: 候选验证、检查更新
+把已验证且获得用户同意的 PTC Hashline 变更应用到指定升级目标——方案里点名的那一个 profile 安装树，加上维护仓库自己的依赖与补丁。
+_Avoid_: 候选验证、检查更新、全部 profile
+
+**切换记录**:
+`<evidenceDirectory>/upgrades/<proposalId>/switch.json`：本轮改了哪些文件（`writtenFiles` 的 before/after sha256）、每一步的退出码、目标解析到的引擎版本与补丁标记，以及三态结论；只追加列表，不改写方案、同意记录与候选报告。
+_Avoid_: 已升级、升级成功、回退完成
+
+**回退范围**:
+方案 `rollback` 声明、回退时唯一会动的东西：本轮改动的依赖、补丁与安装状态。用户未提交输入与无关文件不在范围内，也永不覆盖。
+_Avoid_: 全量还原、git reset、stash
+
+**交接（handover）**:
+切换失败但目标已被外部改动、备份不全或恢复后核对不到 baseline 时，只留证、停止，不覆盖任何文件，由用户看 `switch.json` / `rollback.json` 决定下一步。
+_Avoid_: 自动修复、重试到成功、部分回退

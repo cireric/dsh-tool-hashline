@@ -1,6 +1,6 @@
 ---
 name: ptc-hashline-upgrade
-description: PTC Hashline 升级检查与方案入口（仅用户显式调用）。核验调用资格与配置、采集实际运行基线，只读评估官方 DSH、hashline 与 tool-edit 的更新，产出可审阅的升级方案、记录用户同意或拒绝，并在获准后于隔离候选树中验证依赖与补丁组合（不切换目标）；目标切换与回退尚未实现。
+description: PTC Hashline 升级检查与方案入口（仅用户显式调用）。核验调用资格与配置、采集实际运行基线，只读评估官方 DSH、hashline 与 tool-edit 的更新，产出可审阅的升级方案、记录用户同意或拒绝，在获准后于隔离候选树中验证依赖与补丁组合，并在第二阶段同意后把批准的组合切换到指定的那一个 profile 安装树；失败只回退本轮或留证交接。
 disable-model-invocation: true
 user-invocable: true
 ---
@@ -68,7 +68,7 @@ node <base>/../../operations/cli.mjs upgrade assess [--sources <json>] [--now <I
 只有评估结论是 `recommend-candidate` 且至少一个组件 `recommended: true` 时才出方案：
 
 ```bash
-node <base>/../../operations/cli.mjs upgrade propose [--assessment <dir|json>] [--target maintenance-repository|upgrade-target] [--now <ISO>]
+node <base>/../../operations/cli.mjs upgrade propose [--assessment <dir|json>] [--target maintenance-repository|upgrade-target] [--target-path <绝对 profile 目录>] [--now <ISO>]
 ```
 
 - 默认读取 `<evidenceDirectory>/upgrades/` 下最新的 `assessment.json`；**不重算评估**。没有评估、评估不可读、结论不是 `recommend-candidate`、或没有任何推荐项 ⇒ 退出 `2`，**不写任何方案文件**，并说明下一步是重新 `upgrade assess`。
@@ -76,7 +76,9 @@ node <base>/../../operations/cli.mjs upgrade propose [--assessment <dir|json>] [
 - 退出码：`0` 已写出；`2` 已停止（未写出或写出失败）；`3` 用法错误。
 - 只写 `<evidenceDirectory>/upgrades/<proposalId>/` 下的三个文件：`proposal.json`、`proposal.md`、`consent.json`（初始 `status: pending`、`records: []`）。
 - `proposalId = <stamp>-<proposalHash 前 12 位>`；`proposalHash` 覆盖 baselineHash、候选组合、逐项补丁决策、目标、scope、验证命令与回退基线。同一批输入同 hash；任一绑定输入变化即另一份方案（另一个目录）。
-- `--target` 默认 `maintenance-repository`（它可解析出真实路径）；选 `upgrade-target` 时 path 记 `unknown`。它只是**命名与绑定**，不构成切换授权。
+- `--target` 默认 `maintenance-repository`（它可解析出真实路径）；只写 `--target upgrade-target` 时 path 记 `unknown`，而 `unknown` 永远不是可切换的目标。
+- 要真正切换，必须在 propose 时就指名**那一个** profile 安装树：`--target-path <绝对目录>`（已存在、带 `package.json`、且该清单已声明本 bundle）。该路径与被批准的目标清单摘要（`package.json` / `pnpm-lock.yaml` 的 sha256）都进入 `target`，因此进入 `proposalHash`，并被同意记录原样绑定：换一个目标就是另一份方案、另一次同意（UPG-05）。目录不存在、没有 `package.json`、或清单里没有 `dsh-tool-hashline` ⇒ 退出 `2`、不写方案（切换只更新用户指定的那个 profile 安装树，不把本 bundle 装进别人的 profile）。
+- 它只是**命名与绑定**，不构成切换授权；切换要第 8 步的第二阶段同意。
 - 候选目录只**命名**（`.../candidate/`），不创建，也不得落在维护仓库工作树里（证据目录若在维护仓库内，propose 直接退出 `2`）。
 - 验证命令只从维护仓库 `package.json` 的 `scripts` 只读列举，**不执行、不猜命令**；缺 `scripts` 记 gap。运行前缀取自 `packageManager`，未声明时 `run` 记 `null` 并在缺口里说明，不假设 `pnpm`。列的是仓库声明的**全部**脚本：哪些属于本次候选的门禁由审阅确认，脚本不筛选、不排序判断。
 - 回退基线含 commit、dirty、未提交输入（`userInputs`）、lockfile sha256、`patches/*` 摘要与 roles。
@@ -120,19 +122,36 @@ node <base>/../../operations/cli.mjs upgrade validate --proposal <proposal.json>
 - 只执行 `changes.verification` 里列出的命令，外加本步自己的核验（解析路径与共享 hashline 实例、候选版本比对、引擎约束、补丁标记证据、补丁摘要、候选树上的 read→edit 短链路）。命令有自己的白名单（`pnpm` / `npm` / `node` 的 `install`/`build`/`test`/`run`/`exec`，或方案自己声明过的脚本名）、超时（`--timeout-min`，默认 15 分钟）与取消（`SIGINT`/`SIGTERM`：已开始的命令被超时或 shell 结束，后面的门禁记为未执行）。**第一条失败即停**，后面的门禁记为未执行。
 - 退出码：`0` 仅在方案列出的门禁**全部实际执行且通过**、并且核验项全过（`n/a` 表示没有可测对象，既不算过也不算失败）时；`2` 有失败、超时、跳过、缺项或关键基线 `unknown`（结果已写出）；`3` 用法错误。`--yes` / `--approved` / `--auto` 一类参数仍是 `3`。
 - 结论三态：`candidate-verified` / `candidate-failed` / `candidate-incomplete`。关键基线（commit、lockfile、候选版本、解析路径、补丁摘要）或某个未提交输入缺失/读不出 ⇒ `pendingVerification`，最多 `incomplete`；skipped、缺项与 GAP 一律如实写出，且**不计入通过**。
-- **报告怎么读**：只有 `candidate-verified` 才能说“满足第二阶段同意的前置条件”。任何情况都**不说**目标已经切换、不说版本已在目标上生效；失败不切换。`scope.switch === false`（默认，只批准候选）时交付报告后**停下来等第二阶段同意**；`switch === true`（用户一次明确批准两阶段）时也只交付前置条件——目标切换属票据 07，本版本尚未实现。
+- **报告怎么读**：只有 `candidate-verified` 才能说“满足第二阶段同意的前置条件”。任何情况都**不说**目标已经切换、不说版本已在目标上生效；失败不切换。`scope.switch === false`（默认，只批准候选）时交付报告后**停下来等第二阶段同意**（回到第 6 步补 `--scope validation-and-switch`）；`switch === true`（用户一次明确批准两阶段且范围未变）时不必重复询问，直接进入第 8 步。
 - 出现方案外的实现、语义或测试契约改动（报告里 `stop.rule === 'UPG-09'`）⇒ 保留失败现场、停止并另提方案：**不放宽断言、不把测试改绿、不扩大修复范围**。
 
-## 8. 子 agent 的边界（SCOPE-06）
+## 8. 获准后的目标切换（UPG-05/06/07/10/12）
+
+**只有**第 6 步记录到 `approve` 且 `scope.switch === true`、并且第 7 步的候选结论是 `candidate-verified`（读同目录 `candidate/result.json`，不看任何自述）之后，才进入这一步。只批准候选（`scope.switch === false`）时**不改任何目标**：先问用户是否切换，再回到第 6 步补一条 `--scope validation-and-switch`。用户一次明确批准两阶段且范围未变时不重复询问。
+
+```bash
+node <base>/../../operations/cli.mjs upgrade switch --proposal <proposal.json> [--now <ISO>] [--timeout-min <n>]
+```
+
+- 切换前重新核验、且**在任何写入与进程之前**：最后一条同意记录必须是 `approve`、`proposalHash` 与方案一致、`scope.switch === true`；重新采集的基线（含未提交输入）仍等于 `baselineHash`；方案位于 `<evidenceDirectory>/upgrades/` 下；同意记录里的目标与本方案的目标一致；候选是 `candidate-verified` 且 `pendingVerification` 不为 true；本会话不是子 agent。任一不符 ⇒ 退出 `2`、零写入、零命令，`next` 说明该重新 `upgrade assess` / `upgrade propose` / `upgrade consent` / `upgrade validate`。
+- **UPG-10**：维护仓库里被本次切换影响的文件（`package.json`、`pnpm-lock.yaml`、`pnpm-workspace.yaml`、`patches/*`）只要有用户未提交改动就**停止该次切换**；目标 profile 的 `package.json` / `pnpm-lock.yaml` 与方案记录的摘要不一致同样停止。无关改动原样保留：不 stash、不提交、不回退，也不用「HEAD 相同」当证据。
+- 落盘顺序固定：**先备份**（方案 `rollback` 的 commit/dirty/userInputs/lockfileSha256/patchFiles/roles + 目标 profile 的两个清单，逐个核对摘要）→ 写本轮写入清单 `switch.json` → 改维护仓库的依赖与逐项补丁（沿用第 7 步的名字/键版本耦合规则）→ `install` → 方案列出的 `build`（方案没列、仓库也没声明则记 `n/a`；仓库声明了而方案没列 ⇒ 记缺项）→ 装目标 profile → 重新采集目标基线。**每一步失败即停**，按下面的回退规则处理。
+- 备份不完整（受影响文件读不出、源与副本摘要不一致、两侧清单缺失）⇒ **在改动任何文件之前停止**，不是「备份不了就先改」。
+- 备份写 `<proposalId>/backup/`；切换记录写 `<proposalId>/switch.json`（`decision` / `conclusion` / `steps` / `writtenFiles[{path,beforeSha256,afterSha256}]` / `target{role,path}` / `versionsBefore|After` / `engineEvidence` / `sessionId`；只追加：每次写入只增长列表，不改写已有条目），人读报告写 `<proposalId>/switch.md`。`proposal.json`、`consent.json`、`validation.md` 一个字节都不改。
+- **UPG-12**：部分失败时先确认目标仍是**本轮写入**的结果（把当前 sha256 与引擎版本比对 `switch.json` 记的 after 值）。仍属本轮 ⇒ 只在方案声明的回退范围内恢复依赖、补丁与安装状态（从 `backup/` 拷回、删掉本轮新建的补丁文件、重装两侧），并核对恢复后 `patchFiles[].sha256` / lockfile 摘要 / 引擎版本回到 baseline，写 `rollback.json`；出现外部改动、备份不全或回退后核对不上 ⇒ 停止、留证、交接，**不覆盖**业务文件与无关改动。回退不做「部分失败自动重试」。
+- 结论三态：`switch-applied` / `switch-failed-restored` / `switch-failed-handover`。只有 `switch-applied` 才能说「目标已按批准方案切换」；`switch-failed-restored` 要写清恢复了什么、保留了什么；`switch-failed-handover` 要写清哪一步开始不明、交给用户看 `switch.json` / `rollback.json` 的哪一段。没实测到的一律记 GAP，**不当成功**。
+- 退出码：`0` 仅当切换的全部步骤实际执行且目标核验通过（目标 profile 解析到的引擎版本等于候选版本、`patchEvidence` 的标记结论成立、read/edit 共享同一物理 hashline 实例、目标内 read→edit 短链路通过）；`2` 有失败、停止、回退中或交接（记录已写出）；`3` 用法错误。
+- 活依赖不热改：不杀进程、不重启或关闭 DSH、不改其它 profile、不动官方 DSH 安装。用户先安排停止窗口（D11），切换后的重启由用户自己执行。
+- 第 7 步的语义回归口径不变：切换只证明机械结果，不声称上游已实现同一行为。
+
+## 9. 子 agent 的边界（SCOPE-06）
 
 - 用户在主会话显式调用后，同 preset 的子 agent 可以辅助只读取证、基线核对与方案生成（同一 CLI、同一已保存配置）。
 - 子 agent **不自行加载或启动**本工作流；只有真实用户在主会话的显式入口算启动。
-- 子 agent 的消息、结论或“已同意”自述**不构成用户同意或审批**：`delegation.mayApproveUpgrade` 为 `false` 时不得推进任何写入，consent 与 validate 入口都会直接拒绝（候选验证仍归主会话）。
+- 子 agent 的消息、结论或“已同意”自述**不构成用户同意或审批**：`delegation.mayApproveUpgrade` 为 `false` 时不得推进任何写入，consent、validate 与 switch 入口都会直接拒绝（候选验证与目标切换都归主会话）。
 
-## 9. 本版本尚未支持的动作
+## 10. 本版本尚未支持的动作
 
-以下能力**尚未实现**（票据 07），遇到时直接说明“当前版本未支持”，不得用替代手段：
+本版本没有「尚未实现的升级动作」：检查、评估、方案、同意、隔离候选验证、目标切换与本轮回退/交接都在上面几步里。仍未覆盖的只有**真实宿主交付验收**（票据 08）——真实 DSH 会话中的显式调用、模式隔离与打包后的装配证据不在本 skill 的运行时范围内，不得用模拟夹具代替。
 
-- 目标切换、失败回滚，以及任何对维护仓库工作树、目标安装树或日常 profile 的修改。
-
-第 7 步只把候选安装进候选树并验证，不切换、不回退、不改日常 profile、不动官方 DSH 安装、不重启 DSH。到此为止：后续的目标切换要等票据 07 交付后，再由用户明确授权。
+仍然恒定的边界：不改其它 profile、不动官方 DSH 安装、不杀进程、不重启或关闭 DSH、不做「部分失败自动重试」、不放宽任何断言。

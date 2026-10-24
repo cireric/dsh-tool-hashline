@@ -102,7 +102,7 @@ function sha256(value) {
  * @param {string} path the file
  * @returns {{digest: string, problem?: string}} the digest or the reason
  */
-function digestOfFile(path) {
+export function digestOfFile(path) {
   if (!existsSync(path)) return { digest: 'missing' }
   try {
     return { digest: sha256File(path) }
@@ -116,7 +116,7 @@ function digestOfFile(path) {
  * @param {string} directory the directory
  * @returns {{names: string[], problem?: string}} the names or the reason
  */
-function namesIn(directory) {
+export function namesIn(directory) {
   if (!existsSync(directory)) return { names: [] }
   try {
     return { names: readdirSync(directory) }
@@ -131,7 +131,7 @@ function namesIn(directory) {
  * @param {string} child the candidate path
  * @returns {boolean} true when child is strictly inside parent
  */
-function inside(parent, child) {
+export function inside(parent, child) {
   const step = relative(resolve(parent), resolve(child))
   return step !== '' && !step.startsWith('..') && !isAbsolute(step)
 }
@@ -568,6 +568,7 @@ function itemFacts(item) {
  * @returns {{resolution: object, engines: object, unknown: string[]}} the evidence
  */
 export function resolvedCandidateEngines(options) {
+  const label = options.label ?? '候选树'
   const unknown = []
   const requireFrom = createRequire(join(options.tree, 'package.json'))
   /** The physical directory one specifier resolves to, or the reason it does not. */
@@ -599,14 +600,14 @@ export function resolvedCandidateEngines(options) {
   const sideOf = (plugin) => {
     const manifest = join(options.tree, 'node_modules', '@dsh-tool-hashline', plugin, 'package.json')
     if (!existsSync(manifest)) {
-      return { problem: '@dsh-tool-hashline/' + plugin + ' is not installed in the candidate tree, so its own resolution of hashline cannot be read' }
+      return { problem: '@dsh-tool-hashline/' + plugin + ' is not installed in the ' + label + ', so its own resolution of hashline cannot be read' }
     }
     return resolveEngineDir(createRequire(manifest), PACKAGE_OF_COMPONENT.hashline)
   }
   const readSide = sideOf('tool-read')
   const editSide = sideOf('tool-edit')
-  if (readSide.problem !== undefined) unknown.push('the read side does not resolve hashline in the candidate tree: ' + readSide.problem)
-  if (editSide.problem !== undefined) unknown.push('the edit side does not resolve hashline in the candidate tree: ' + editSide.problem)
+  if (readSide.problem !== undefined) unknown.push('the read side does not resolve hashline in the ' + label + ': ' + readSide.problem)
+  if (editSide.problem !== undefined) unknown.push('the edit side does not resolve hashline in the ' + label + ': ' + editSide.problem)
   const readPath = readSide.path ?? 'unknown'
   const editPath = editSide.path ?? 'unknown'
   return {
@@ -617,7 +618,7 @@ export function resolvedCandidateEngines(options) {
       editSideResolved: editSide.problem === undefined,
       samePhysicalInstance: readPath !== 'unknown' && readPath === editPath,
       insideCandidateTree: readPath !== 'unknown' && inside(options.tree, readPath),
-      note: 'read 与 edit 必须落在候选树内的同一个物理 hashline 实例：两个实例会让两边对同一份 snapshot 各说各话（FR-8）。未解析到就是未测量，不记通过。',
+      note: 'read 与 edit 必须落在' + label + '内的同一个物理 hashline 实例：两个实例会让两边对同一份 snapshot 各说各话（FR-8）。未解析到就是未测量，不记通过。',
     },
     engines,
     unknown,
@@ -780,15 +781,19 @@ export function engineConstraintCheck(options) {
  * @returns {string | undefined} the refusal reason, or undefined
  */
 export function candidateCommandProblem(options) {
+  // The label names the tree the rule confines a node script to. The candidate
+  // run and the target switch share this rule and differ only in which tree it is,
+  // so the words are a parameter instead of a second copy.
+  const label = options.label ?? 'candidate tree'
   const manager = basename(options.command).replace(/\.(cmd|exe|bat)$/iu, '')
   if (!MANAGERS.includes(manager)) {
-    return 'refused: only ' + MANAGERS.join(' / ') + ' may run in the candidate tree (got ' + JSON.stringify(options.command) + ')'
+    return 'refused: only ' + MANAGERS.join(' / ') + ' may run in the ' + label + ' (got ' + JSON.stringify(options.command) + ')'
   }
   const verb = options.args.find((arg) => !arg.startsWith('-'))
   if (manager === 'node') {
     if (verb === undefined) return 'refused: node needs a script path'
     const script = resolve(options.tree, verb)
-    if (!inside(options.tree, script)) return 'refused: the node script ' + verb + ' is outside the candidate tree ' + options.tree
+    if (!inside(options.tree, script)) return 'refused: the node script ' + verb + ' is outside the ' + label + ' ' + options.tree
     return undefined
   }
   if (verb === undefined) return 'refused: ' + manager + ' needs a verb (' + MANAGER_VERBS.join(' / ') + ')'
@@ -1291,18 +1296,18 @@ export async function validateCandidate(options) {
  * @param {string} tree the candidate tree
  * @returns {{manager: string, problem?: string}} the manager and, when it was replaced, why
  */
-function managerOf(tree) {
+export function managerOf(tree, label = 'the candidate tree') {
   let manifest
   try {
     manifest = JSON.parse(readFileSync(join(tree, 'package.json'), 'utf8'))
   } catch (error) {
-    return { manager: 'pnpm', problem: 'the candidate tree\'s package.json is unreadable (' + (error instanceof Error ? error.message : String(error)) + '), so pnpm was assumed for the install' }
+    return { manager: 'pnpm', problem: label + '\'s package.json is unreadable (' + (error instanceof Error ? error.message : String(error)) + '), so pnpm was assumed for the install' }
   }
   const declared = typeof manifest.packageManager === 'string' ? manifest.packageManager.trim() : ''
   const name = /^(@[^/]+\/[^@]+|[^@]+)/u.exec(declared)?.[1]
-  if (name === undefined) return { manager: 'pnpm', problem: 'the candidate tree declares no packageManager, so pnpm was assumed for the install' }
+  if (name === undefined) return { manager: 'pnpm', problem: label + ' declares no packageManager, so pnpm was assumed for the install' }
   if (name === 'pnpm' || name === 'npm') return { manager: name }
-  return { manager: 'pnpm', problem: 'the candidate tree declares ' + name + ' as its package manager, which this run does not drive (pnpm/npm only): pnpm was used instead' }
+  return { manager: 'pnpm', problem: label + ' declares ' + name + ' as its package manager, which this run does not drive (pnpm/npm only): pnpm was used instead' }
 }
 
 /**
@@ -1314,7 +1319,7 @@ function managerOf(tree) {
  * @param {object} entry the proposal's verification entry
  * @returns {{command: string, args: string[]} | undefined} the argv
  */
-function splitDeclared(entry) {
+export function splitDeclared(entry) {
   const run = typeof entry?.run === 'string' && entry.run.trim() !== '' ? entry.run.trim() : undefined
   if (run === undefined) return undefined
   const parts = run.split(/\s+/u)
@@ -1323,8 +1328,17 @@ function splitDeclared(entry) {
   return { command: managerCommand(name), args: parts.slice(1) }
 }
 
-/** One patch item's mechanical state versus the resolved build. */
-function resolvedPatchItem(item, engines) {
+/**
+ * One patch item's mechanical state versus the resolved build.
+ *
+ * The label names the tree the markers were read out of, so the candidate run and
+ * the target switch report the same verdict in their own words.
+ * @param {object} item the proposal's decision item
+ * @param {object} engines the resolved engines
+ * @param {string} [label] the tree the resolved build was read from
+ * @returns {object} the verdict
+ */
+export function resolvedPatchItem(item, engines, label = '候选树') {
   const engine = engines[item.component] ?? {}
   const present = Array.isArray(engine.patch?.present) ? engine.patch.present : []
   const missing = Array.isArray(engine.patch?.missing) ? engine.patch.missing : []
@@ -1339,8 +1353,8 @@ function resolvedPatchItem(item, engines) {
         ? '本步只证明补丁文件与注册行已按 delete 决策移除、构建里不再出现该标记；上游是否已实现同一行为（语义回归）不在本步测量。'
         : '决策是 delete，但候选构建里仍有该标记：补丁没有被真正摘掉，需要重切（方案外实现）。')
       : (resolved === 'present'
-        ? '标记在候选树解析到的构建文件里仍存在：本步只证明补丁仍作用于该构建，语义兼容性由方案与人工确认。'
-        : '标记在候选构建里不存在：补丁没有生效，需要重切（方案外实现）。')
+        ? '标记在' + label + '解析到的构建文件里仍存在：本步只证明补丁仍作用于该构建，语义兼容性由方案与人工确认。'
+        : '标记在' + label + '的构建里不存在：补丁没有生效，需要重切（方案外实现）。')
   return {
     component: item.component,
     file: item.file,
@@ -1361,7 +1375,7 @@ function resolvedPatchItem(item, engines) {
 }
 
 /** Parse the driver's last JSON line into a check outcome. */
-function parseDriverOutcome(recorded) {
+export function parseDriverOutcome(recorded) {
   const line = String(recorded.stdout ?? '').trim().split('\n').filter((entry) => entry.trim() !== '').at(-1)
   let parsed
   try {
@@ -1433,7 +1447,7 @@ function nextNoteOf(verdict, switchAuthorized) {
 }
 
 /** The generated short-link driver, written inside the candidate tree. */
-function shortLinkDriver() {
+export function shortLinkDriver() {
   return [
     "import { createRequire } from 'node:module'",
     "import { pathToFileURL } from 'node:url'",

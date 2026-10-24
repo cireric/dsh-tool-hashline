@@ -125,8 +125,8 @@ export function proposalHashOf(bound) {
   return sha256(canonicalJson(bound))
 }
 
-/** A string field, or `'unknown'` — never an empty cell standing in for a fact. */
-function textOf(value) {
+/** A string field, or 'unknown' — never an empty cell standing in for a fact. */
+export function textOf(value) {
   return typeof value === 'string' && value !== '' ? value : 'unknown'
 }
 
@@ -400,7 +400,10 @@ export function buildProposal(options) {
   const assessment = options.assessment
   const baseline = options.baseline
   const evidenceDirectory = resolve(options.evidenceDirectory)
-  const target = options.target
+  // The target's own two manifest bytes are part of the payload when the caller
+  // knows them: that is what lets a later switch refuse a target the user edited
+  // after approving it (UPG-05/UPG-10). Without them the target stays 'unknown'.
+  const target = options.targetProfile === undefined ? options.target : { ...options.target, profile: options.targetProfile }
   const now = options.now
   const stamp = basename(upgradeDirectory(evidenceDirectory, now))
   const verification = (options.verification?.commands ?? []).map((command) => ({ name: command.name, script: command.script, run: command.run }))
@@ -552,6 +555,19 @@ export function consentDrift(options) {
       drift.push({ field: 'target', recorded: target.path ?? null, now: null, note: 'the maintenance repository role is no longer resolvable, so the recorded target cannot be checked' })
     } else if (target.path !== now) {
       drift.push({ field: 'target', recorded: target.path ?? null, now, note: 'the recorded target moved: this approval named another location' })
+    }
+  }
+  // An upgrade-target names the exact profile install tree an approved switch
+  // would change. If that tree disappeared or lost its manifest, the approval can
+  // no longer be applied there — another approval, or none (UPG-05).
+  if (target.role === 'upgrade-target' && typeof target.path === 'string' && target.path !== '' && target.path !== 'unknown' && isAbsolute(target.path)) {
+    if (!existsSync(join(resolve(target.path), 'package.json'))) {
+      drift.push({
+        field: 'target',
+        recorded: target.path,
+        now: null,
+        note: 'the recorded upgrade target is no longer a profile install tree (no package.json at that path), so this approval cannot be applied to it',
+      })
     }
   }
   return drift
@@ -941,6 +957,9 @@ export function renderProposalReport(proposal) {
   lines.push('- lockfile sha256：' + quoted(proposal.rollback?.lockfileSha256))
   for (const entry of proposal.rollback?.patchFiles ?? []) lines.push('- patch：' + quoted(entry.path) + ' sha256 ' + quoted(entry.sha256))
   lines.push('- 授权目标：' + quoted(proposal.rollback?.target?.role) + '（' + quoted(proposal.rollback?.target?.path) + '）')
+  if (proposal.target?.profile !== undefined) {
+    lines.push('- 目标清单摘要（同意绑定这两份字节，改动即需重新出方案）：package.json ' + quoted(proposal.target.profile.manifestSha256) + '、pnpm-lock.yaml ' + quoted(proposal.target.profile.lockfileSha256))
+  }
   if ((proposal.rollback?.userInputs ?? []).length > 0) lines.push('- 用户未提交输入（不作回退）：' + proposal.rollback.userInputs.map(quoted).join('、'))
   lines.push('')
   lines.push('## 执行边界')

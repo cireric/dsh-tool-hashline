@@ -157,7 +157,7 @@ export interface CandidateEngine {
   patch?: { status?: string; present?: string[]; missing?: string[] }
 }
 
-export function resolvedCandidateEngines(options: { tree: string }): {
+export function resolvedCandidateEngines(options: { tree: string; /** The tree the reasons name. */ label?: string }): {
   resolution: ResolutionFacts
   engines: Record<string, CandidateEngine>
   unknown: string[]
@@ -213,7 +213,18 @@ export function candidateCommandProblem(options: {
   args: string[]
   tree: string
   declaredScripts?: string[]
+  /** The tree the reasons name (the candidate run's default, or this run's own). */
+  label?: string
 }): string | undefined
+
+/** The entry names of one directory, plus the reason it could not be listed. */
+export function namesIn(directory: string): { names: string[]; problem?: string }
+
+/** The argv a declared verification entry runs as, when it is runnable at all. */
+export function splitDeclared(entry: Record<string, any>): { command: string; args: string[] } | undefined
+
+/** One patch item's mechanical state versus the resolved build. */
+export function resolvedPatchItem(item: Record<string, any>, engines: Record<string, CandidateEngine>, label?: string): Record<string, any>
 
 export type CandidateRunner = (
   command: string,

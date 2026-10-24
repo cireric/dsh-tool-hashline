@@ -23,14 +23,19 @@
  *                    grants, or the rejection (UPG-03/05/07, SCOPE-06)
  *   upgrade validate the approved candidate, isolated in its own tree and store:
  *                    gates run, nothing switched (UPG-04/06/09/11/13)
+ *   upgrade switch   the approved TARGET, applied to the one profile install tree
+ *                    the proposal named: backup, write, install and re-verify; a
+ *                    partial failure restores this round or hands over
+ *                    (UPG-05/06/07/10/12)
  * Only Node builtins: the shipped bundle must run from any working directory
  * with no checkout, no `.scratch` and no root `scripts/` beside it.
  *
  * @module dsh-tool-hashline/presets/ptc-hashline/operations/cli
  */
+import { existsSync } from 'node:fs'
 import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
-import { dirname, join, resolve } from 'node:path'
+import { dirname, isAbsolute, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { collectBaseline } from './baseline.mjs'
 import { validateCandidate, validationAuthorization, writeCandidateReport } from './candidates.mjs'
@@ -39,6 +44,7 @@ import { verifyInvocationContext } from './context.mjs'
 import { buildIncident, DEFAULT_FEATURE, incidentDirectory, registerNeedsTriageIssues, validateSeqBounds, writeIncidentBundle } from './incidents.mjs'
 import { appendConsentRecord, AUTO_APPROVAL_FLAGS, bindingOf, buildProposal, candidateDirectoryProblem, CONSENT_SCOPES, consentDrift, consentStatus, DECISIONS, freshnessDrift, locateUserReply, makeConsentRecord, proposalEligibility, proposalHashOf, proposalPlacementProblem, readConsent, readProposal, readVerificationCommands, resolveAssessment, scopeFor, writeProposal } from './proposals.mjs'
 import { readSessionArtifact } from './session-log.mjs'
+import { affectedUserChanges, candidateVerdictOf, switchAuthorization, switchTarget, targetProfileProblem, targetStateOf } from './switch.mjs'
 import { assessUpgrade, COMPONENTS, createMetadataQueries, offlineSources, prepareSources, TARGET_ROLES, upgradeDirectory, upstreamRepositories, writeUpgradeAssessment } from './upgrades.mjs'
 
 /** Exit codes: 0 answered, 2 stopped by the workflow guard, 3 refused usage. */
@@ -52,8 +58,8 @@ export function installationRoot() {
 
 class UsageError extends Error {}
 
-/** The four words `upgrade` accepts after it. */
-export const UPGRADE_SUBCOMMANDS = ['assess', 'propose', 'consent', 'validate']
+/** The five words `upgrade` accepts after it. */
+export const UPGRADE_SUBCOMMANDS = ['assess', 'propose', 'consent', 'validate', 'switch']
 
 /**
  * The flags each command accepts.
@@ -68,9 +74,10 @@ export const FLAG_ALLOWLIST = {
   baseline: ['session', 'target-session', 'target-cwd', 'cwd', 'preset'],
   incident: ['session', 'target-session', 'target-cwd', 'cwd', 'seq-min', 'seq-max', 'now', 'feature', 'user-report', 'user-evidence', 'preset'],
   'upgrade assess': ['sources', 'now', 'target', 'preset'],
-  'upgrade propose': ['assessment', 'now', 'target', 'preset'],
+  'upgrade propose': ['assessment', 'now', 'target', 'target-path', 'preset'],
   'upgrade consent': ['proposal', 'decision', 'scope', 'reply', 'now', 'preset'],
   'upgrade validate': ['proposal', 'now', 'timeout-min', 'preset'],
+  'upgrade switch': ['proposal', 'now', 'timeout-min', 'preset'],
 }
 
 /**
@@ -364,6 +371,60 @@ function candidateValue(report) {
 }
 
 /**
+ * The CLI-shaped answer for one target switch.
+ *
+ * A projection, exactly like {@link candidateValue}: the record lives in
+ * switch.json (and rollback.json), and this narrows it to what a skill body
+ * relays — so a new record field is added in ONE place.
+ * @param {object} report the written switch record
+ * @returns {object} the value to print
+ */
+function switchValue(report) {
+  return {
+    conclusion: report.conclusion,
+    phase: report.phase,
+    proposalId: report.proposalId,
+    proposalHash: report.proposalHash,
+    baselineHash: report.baselineHash,
+    runner: report.runner,
+    target: report.target,
+    maintenanceRepository: report.maintenanceRepository,
+    candidate: report.candidate,
+    authorization: {
+      decision: report.authorization?.decision,
+      scope: report.authorization?.scope,
+      repliedAt: report.authorization?.repliedAt,
+      recorder: report.authorization?.recorder,
+    },
+    steps: report.steps.map((entry) => ({
+      name: entry.name,
+      status: entry.status,
+      command: entry.command,
+      args: entry.args,
+      cwd: entry.cwd,
+      exitCode: entry.exitCode,
+      durationMs: entry.durationMs,
+      ...entry.detail === undefined ? {} : { detail: entry.detail },
+    })),
+    writtenFiles: report.writtenFiles,
+    checks: report.checks,
+    versionsBefore: report.versionsBefore,
+    versionsAfter: report.versionsAfter,
+    engineEvidence: {
+      target: report.engineEvidence?.target ?? null,
+      maintenance: report.engineEvidence?.maintenance ?? null,
+    },
+    backup: report.backup,
+    failures: report.failures,
+    skipped: report.skipped,
+    gaps: report.gaps,
+    scope: report.scope,
+    next: report.next,
+    nextNote: report.nextNote,
+  }
+}
+
+/**
  * Resolve each configuration role once, so every command reports an unusable
  * role the SAME way: a path when it resolves, otherwise the reason it does not.
  * @param {object} described the described configuration
@@ -608,7 +669,11 @@ export async function run(argv, environment = { env: {} }) {
     if (upgradeSubcommand === 'propose') {
       if (flags.assessment === true) throw new UsageError('--assessment needs a directory or a JSON file path')
       const now = timeFlag(flags.now)
-      const targetRole = targetFlag(flags.target, 'maintenance-repository')
+      // A named target path IS the upgrade-target role; naming only the path is
+      // not an approval of anything, so it may imply the role it belongs to.
+      const targetRole = flags.target === undefined && flags['target-path'] !== undefined
+        ? 'upgrade-target'
+        : targetFlag(flags.target, 'maintenance-repository')
       const verdict = await verdictFor()
       const context = contextOf(verdict)
       // SCOPE-06: an assisted session MAY build the proposal (that is analysis);
@@ -663,15 +728,59 @@ export async function run(argv, environment = { env: {} }) {
           },
         }
       }
+      // The target a switch may later change is an EXACT profile install tree, so
+      // the proposal names it once: the path is hashed into the payload and copied
+      // verbatim into the consent record, which is what makes an old approval
+      // unable to cover a new target (UPG-05).
+      let namedTargetPath
+      if (flags['target-path'] !== undefined) {
+        if (flags['target-path'] === true) throw new UsageError('--target-path needs an absolute directory of a profile install tree')
+        const raw = String(flags['target-path'])
+        if (!isAbsolute(raw)) {
+          throw new UsageError('--target-path must be an absolute path (got ' + JSON.stringify(raw) + '); a relative path would silently mean the current business directory')
+        }
+        if (targetRole !== 'upgrade-target') {
+          throw new UsageError('--target-path only means something with --target upgrade-target: the maintenance-repository role already resolves its own path from the saved configuration')
+        }
+        const profileProblem = targetProfileProblem({ path: resolve(raw) })
+        if (profileProblem !== undefined) {
+          return {
+            code: EXIT.stopped,
+            value: {
+              command: 'upgrade',
+              status: 'stopped',
+              reason: profileProblem,
+              next: 'prepare that profile install tree first (node scripts/install-profile.mjs --profile <name>), then re-run "upgrade propose"',
+              context,
+            },
+          }
+        }
+        namedTargetPath = resolve(raw)
+      }
       // Verification commands are READ from the repository's own scripts and never
       // executed: a missing list is a named gap, not an invented command.
       const verification = await readVerificationCommands(maintenance.path)
       const target = {
         role: targetRole,
-        path: targetRole === 'maintenance-repository' && maintenance.path !== undefined ? maintenance.path : 'unknown',
-        note: 'The target is named and bound, never switched: this command writes a proposal only.',
+        path: targetRole === 'maintenance-repository' && maintenance.path !== undefined
+          ? maintenance.path
+          : namedTargetPath ?? 'unknown',
+        note: namedTargetPath === undefined
+          ? 'The target is named and bound, never switched: this command writes a proposal only.'
+          : 'The target is the exact profile install tree this payload binds; switching it still needs the second-phase approval and the separate "upgrade switch" command.',
       }
-      const built = buildProposal({ assessment: resolved.assessment, baseline, verification, target, now, evidenceDirectory: evidence.path, assessmentDirectory: resolved.directory })
+      const built = buildProposal({
+        assessment: resolved.assessment,
+        baseline,
+        verification,
+        target,
+        now,
+        evidenceDirectory: evidence.path,
+        assessmentDirectory: resolved.directory,
+        // A named target binds its own manifest bytes too, so a later switch can
+        // refuse a target the user edited after approving it (UPG-10).
+        ...namedTargetPath === undefined ? {} : { targetProfile: targetStateOf({ path: namedTargetPath }) },
+      })
       // A4: the candidate directory is named under the evidence directory, and it
       // must not land inside the worktree an upgrade is about to change.
       const candidateProblem = candidateDirectoryProblem({
@@ -869,6 +978,197 @@ export async function run(argv, environment = { env: {} }) {
           status: report.verdict === 'candidate-verified' ? 'validated' : report.verdict === 'candidate-failed' ? 'failed' : 'incomplete',
           ...candidateValue(report),
           evidence: { directory: candidateDirectory, files },
+          context,
+        },
+      }
+    }
+    // ── upgrade switch: the approved target, applied (UPG-05/06/07/10/12) ────
+    if (upgradeSubcommand === 'switch') {
+      // Usage errors first: they are usage errors whatever the session state is.
+      if (flags.proposal === undefined) throw new UsageError('--proposal is required: the proposal.json (or its directory) whose switch the user approved')
+      if (flags.proposal === true) throw new UsageError('--proposal needs a value')
+      const now = timeFlag(flags.now)
+      const timeoutMin = numberFlag('timeout-min')
+      if (timeoutMin !== undefined && (!Number.isFinite(timeoutMin) || timeoutMin <= 0)) {
+        throw new UsageError('--timeout-min must be a positive number of minutes')
+      }
+      const verdict = await verdictFor()
+      const context = contextOf(verdict)
+      if (!verdict.eligible) {
+        return { code: EXIT.stopped, value: { command: 'upgrade', status: 'stopped', reason: verdict.reason, delegation: verdict.delegation, context } }
+      }
+      const described = await describeConfig(facts.stateDir)
+      const roleStatus = roleResolver(described)
+      const evidence = roleStatus('evidenceDirectory')
+      // D9: an unusable evidence directory has nowhere to keep the record or the
+      // backup, and a switch without those is not a switch.
+      if (evidence.path === undefined) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the evidence directory is unusable (' + evidence.reason + '), so neither the switch record nor the pre-switch backup has a place to live; nothing was switched',
+            next: 'config --set-evidence-dir <absolute path>',
+            context,
+          },
+        }
+      }
+      const maintenance = roleStatus('maintenanceRepository')
+      if (maintenance.path === undefined) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the maintenance repository role is unusable (' + maintenance.reason + '), so there are no dependencies or patches this run may change; nothing was switched',
+            next: 'config --set-maintenance-repo <absolute path>',
+            context,
+          },
+        }
+      }
+      const loaded = await readProposal(flags.proposal)
+      if (loaded.reason !== undefined) {
+        return { code: EXIT.stopped, value: { command: 'upgrade', status: 'stopped', reason: loaded.reason, context } }
+      }
+      const proposal = loaded.proposal
+      const recomputed = proposalHashOf(bindingOf(proposal))
+      if (recomputed !== proposal.proposalHash) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the proposal at ' + loaded.path + ' no longer hashes to its recorded proposalHash (' + proposal.proposalHash + ' recorded, ' + recomputed
+              + ' recomputed): a bound input changed after it was written, so the answer it carries covers another payload; nothing was switched',
+            next: 'upgrade propose',
+            context,
+          },
+        }
+      }
+      const consentPath = join(loaded.directory, 'consent.json')
+      const consentFile = await readConsent(consentPath)
+      // The gate runs BEFORE any write and any command: an unapproved, drifted,
+      // unverified or re-targeted proposal never even gets a backup.
+      const baseline = collectRunBaseline({ verdict, maintenance })
+      // A profile install tree has no VCS, so its own edits are only visible
+      // against the bytes the proposal recorded: read them now, before the gate.
+      const recordedTarget = proposal?.target ?? {}
+      const targetState = typeof recordedTarget.path === 'string' && recordedTarget.path !== 'unknown' && isAbsolute(recordedTarget.path)
+        ? targetStateOf({ path: resolve(recordedTarget.path) })
+        : undefined
+      const authorization = switchAuthorization({
+        proposal,
+        proposalDirectory: loaded.directory,
+        consentPath,
+        records: consentFile.consent?.records ?? [],
+        ...consentFile.reason === undefined ? {} : { consentProblem: consentFile.reason },
+        evidenceDirectory: evidence.path,
+        baseline,
+        maintenancePath: maintenance.path,
+        delegation: verdict.delegation,
+        ...targetState === undefined ? {} : { targetState },
+      })
+      if (!authorization.ok) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: authorization.reason,
+            rule: authorization.rule,
+            next: authorization.next,
+            ...authorization.drift === undefined ? {} : { drift: authorization.drift },
+            delegation: verdict.delegation,
+            context,
+          },
+        }
+      }
+      // UPG-06: the candidate must have been VERIFIED for this payload, and the
+      // verdict is read from the record the validation wrote, never from a claim.
+      const candidate = candidateVerdictOf({ proposal, candidateDirectory: join(loaded.directory, 'candidate') })
+      if (!candidate.ok) {
+        return {
+          code: EXIT.stopped,
+          value: { command: 'upgrade', status: 'stopped', reason: candidate.reason, rule: 'UPG-06', next: candidate.next, context },
+        }
+      }
+      const targetPath = authorization.targetPath
+      const profileProblem = targetProfileProblem({ path: targetPath })
+      if (profileProblem !== undefined) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: profileProblem,
+            rule: 'D11',
+            next: 'prepare the approved profile install tree (it has to carry this bundle already), then re-run "upgrade switch"',
+            context,
+          },
+        }
+      }
+      // UPG-10: the user's own edits among the files this switch would change stop
+      // it. Unrelated changes stay exactly as they are: no stash, no commit, no
+      // revert, and HEAD equality is never used as proof that a file did not move.
+      const changes = affectedUserChanges({ changedPaths: baseline?.repository?.changedPaths ?? [] })
+      if (changes.affected.length > 0) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the maintenance worktree carries the user\'s own edits in files an approved switch would change (' + changes.affected.join('、')
+              + '): this switch stops here, and nothing is stashed, committed or reverted',
+            rule: 'UPG-10',
+            affected: changes.affected,
+            unrelated: changes.unrelated,
+            next: 'ask the user to commit, move or discard those edits, then re-run "upgrade switch"',
+            context,
+          },
+        }
+      }
+      let report
+      try {
+        report = await switchTarget({
+          proposal,
+          proposalDirectory: loaded.directory,
+          evidenceDirectory: evidence.path,
+          maintenanceRepository: maintenance.path,
+          targetPath,
+          basis: authorization.basis,
+          candidateResultPath: candidate.path,
+          candidateVerdict: candidate.verdict,
+          now,
+          sessionId: facts.sessionId ?? 'unknown',
+          ...timeoutMin === undefined ? {} : { timeoutMin },
+          ...environment.runner === undefined ? {} : { runner: environment.runner },
+          ...environment.cancel === undefined ? {} : { cancel: environment.cancel },
+        })
+      } catch (error) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'incomplete',
+            reason: 'the switch could not be completed, and its state is NOT a success: ' + (error instanceof Error ? error.message : String(error))
+              + ' — read ' + join(loaded.directory, 'switch.json') + ' and the backup under ' + join(loaded.directory, 'backup'),
+            evidence: { directory: loaded.directory },
+            context,
+          },
+        }
+      }
+      const files = { record: join(loaded.directory, 'switch.json'), report: join(loaded.directory, 'switch.md') }
+      if (existsSync(join(loaded.directory, 'rollback.json'))) files.rollback = join(loaded.directory, 'rollback.json')
+      return {
+        // 0 only when the switch ran to the end AND the target verified: a gap, a
+        // skipped step or a hand-over is never a success (UPG-12).
+        code: report.conclusion === 'switch-applied' ? EXIT.ok : EXIT.stopped,
+        value: {
+          command: 'upgrade',
+          status: report.conclusion === 'switch-applied' ? 'switched' : report.conclusion === 'switch-failed-restored' ? 'restored' : 'handover',
+          ...switchValue(report),
+          evidence: { directory: loaded.directory, files },
           context,
         },
       }
@@ -1107,7 +1407,7 @@ export async function run(argv, environment = { env: {} }) {
     }
   }
 
-  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline, incident or upgrade assess|propose|consent|validate')
+  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline, incident or upgrade assess|propose|consent|validate|switch')
 }
 
 /**
