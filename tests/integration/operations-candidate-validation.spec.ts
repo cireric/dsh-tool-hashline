@@ -24,22 +24,24 @@
  *   profile or the official DSH install: those belong to ticket 07. The
  *   maintenance worktree is snapshotted around every run.
  */
-import { execFileSync } from 'node:child_process'
+import { execFile, execFileSync } from 'node:child_process'
+import { promisify } from 'node:util'
 import { createHash } from 'node:crypto'
 import { existsSync } from 'node:fs'
-import { mkdir, mkdtemp, readFile, readdir, rm, writeFile } from 'node:fs/promises'
+import { cp, mkdir, mkdtemp, readFile, readdir, rm, symlink, writeFile } from 'node:fs/promises'
 import * as os from 'node:os'
 import * as path from 'node:path'
-import { afterEach, describe, expect, it } from 'vitest'
+import { pathToFileURL } from 'node:url'
+import { afterAll, afterEach, beforeAll, describe, expect, it } from 'vitest'
 import { HASHLINE_PATCH_MARKERS, TOOL_EDIT_PATCH_MARKERS } from '../../presets/ptc-hashline/operations/baseline.mjs'
 import {
   CANDIDATE_TOOL,
   candidateCommandProblem,
   createDefaultRunner,
+  includedInputsOf,
   managerCommand,
   rewritePatchedDependencies,
 } from '../../presets/ptc-hashline/operations/candidates.mjs'
-import { EXIT, run } from '../../presets/ptc-hashline/operations/cli.mjs'
 import { saveConfig } from '../../presets/ptc-hashline/operations/config.mjs'
 import { encodeSegment, projectKey } from '../../presets/ptc-hashline/operations/session-log.mjs'
 
@@ -63,6 +65,117 @@ afterEach(async () => {
   // A child killed by a timeout can hold its cwd for a moment on Windows; a
   // cleanup that cannot remove a temp directory must not fail an assertion.
   await Promise.all(dirs.splice(0).map((dir) => rm(dir, { recursive: true, force: true }).catch(() => undefined)))
+})
+
+/**
+ * R5: the FIXED versions the shared bundle carries.
+ *
+ * These used to be read off the machine: `liveVersions()` ran the real `baseline`
+ * command against this checkout, so every case that prepares a proposal depended on
+ * the official host RESOLVING here. It resolves in this deployment only because the
+ * DSH development store is injected through NODE_PATH; with that injection absent the
+ * baseline reports `version: dsh` unknown, `upgrade assess` stops with exit 2, and 20
+ * cases fail inside `prepared()` before reaching the behaviour they claim to cover.
+ *
+ * The bundle below decides the host itself, so the same facts hold on a machine that
+ * has no official DSH installed at all — and a bundle built WITHOUT the host is how
+ * the refusal side is measured.
+ */
+const BUNDLE_VERSIONS: Versions = { dsh: '0.3.0', hashline: '0.2.1-alpha.4', toolEdit: '0.2.1-alpha.4' }
+/** Directories that must outlive one test, cleaned once at the end of the file. */
+const persistent: string[] = []
+/** The bundle this whole file prepares its proposals in, built once. */
+let operationsBundle: string
+let EXIT: { ok: number; stopped: number; refused: number }
+let run: (argv: string[], environment?: any) => Promise<{ code: number; value: any }>
+
+/**
+ * One bundle install, at whatever versions the caller names.
+ *
+ * It copies the SHIPPED operations modules and gives them a node_modules of their
+ * own, so the modules that actually execute are the ones under test and the baseline
+ * they collect is the fixture's, never this machine's. `dsh: null` leaves the official
+ * host out entirely: the only way to reproduce "a key baseline is unknown"
+ * deterministically.
+ * @param versions the versions the bundle carries
+ * @returns the bundle root
+ */
+async function bundleFixture(versions: { dsh: string | null; hashline: string; toolEdit: string }): Promise<string> {
+  const root = await mkdtemp(path.join(os.tmpdir(), 'candidate-bundle-'))
+  persistent.push(root)
+  await cp(path.resolve(process.cwd(), 'presets', 'ptc-hashline', 'operations'), path.join(root, 'presets', 'ptc-hashline', 'operations'), { recursive: true })
+  await writeFile(path.join(root, 'package.json'), JSON.stringify({
+    name: 'dsh-tool-hashline',
+    version: '0.0.0',
+    type: 'module',
+    exports: { './package.json': './package.json', './presets/*': './presets/*' },
+  }, null, 2), 'utf8')
+  const packages: [string, string, { file: string[]; marker: string }[]][] = [
+    ...versions.dsh === null ? [] : [['@deepseek-ai/dsh', versions.dsh, []] as [string, string, { file: string[]; marker: string }[]]],
+    ['@hy-sde-org/dsh-hashline', versions.hashline, HASHLINE_PATCH_MARKERS],
+    ['@hy-sde-org/dsh-tool-edit', versions.toolEdit, TOOL_EDIT_PATCH_MARKERS],
+  ]
+  for (const [name, version, markers] of packages) {
+    const directory = path.join(root, 'node_modules', ...name.split('/'))
+    await mkdir(directory, { recursive: true })
+    await writeFile(path.join(directory, 'package.json'), JSON.stringify({ name, version, main: 'index.js' }, null, 2), 'utf8')
+    const files = new Map<string, string[]>()
+    for (const { file, marker } of markers) {
+      const key = file.join('/')
+      files.set(key, [...(files.get(key) ?? []), marker])
+    }
+    for (const [key, lines] of files) {
+      const target = path.join(directory, ...key.split('/'))
+      await mkdir(path.dirname(target), { recursive: true })
+      await writeFile(target, lines.join('\n') + '\n', 'utf8')
+    }
+  }
+  return root
+}
+
+/** The bundle's own CLI entry, imported so `installationRoot()` is the bundle. */
+async function loadCli(bundle: string): Promise<{ EXIT: typeof EXIT; run: typeof run }> {
+  const entry = path.join(bundle, 'presets', 'ptc-hashline', 'operations', 'cli.mjs')
+  return (await import(pathToFileURL(entry).href)) as { EXIT: typeof EXIT; run: typeof run }
+}
+
+/** The bundle's CLI path, for the cases that observe a real exit code. */
+function bundleCli(bundle: string): string {
+  return path.join(bundle, 'presets', 'ptc-hashline', 'operations', 'cli.mjs')
+}
+
+const execFileAsync = promisify(execFile)
+
+/**
+ * Run one bundle's CLI as a real child process, with NODE_PATH stripped.
+ *
+ * NODE_PATH is dropped on purpose: pnpm injects the DSH development store into it, and
+ * a package that only exists in that store must not decide whether a fixture bundle
+ * carries the official host. This is the only reliable isolation — an in-process import
+ * inherits the same global paths, which is how a "hostless" fixture silently acquired
+ * a host before this helper existed.
+ */
+async function runBundleChild(bundle: string, argv: string[], env: Record<string, string>): Promise<{ code: number; json?: any; stderr: string }> {
+  const { NODE_PATH: _nodePath, ...inherited } = process.env
+  try {
+    const { stdout } = await execFileAsync(process.execPath, [bundleCli(bundle), ...argv], { env: { ...inherited, ...env }, encoding: 'utf8' })
+    return { code: 0, json: JSON.parse(stdout), stderr: '' }
+  } catch (error) {
+    const failure = error as { code?: number; stdout?: string; stderr?: string }
+    const stdout = (failure.stdout ?? '').trim()
+    return { code: failure.code ?? -1, json: stdout === '' ? undefined : JSON.parse(stdout), stderr: failure.stderr ?? '' }
+  }
+}
+
+beforeAll(async () => {
+  operationsBundle = await bundleFixture(BUNDLE_VERSIONS)
+  const cli = await loadCli(operationsBundle)
+  EXIT = cli.EXIT
+  run = cli.run
+})
+
+afterAll(async () => {
+  await Promise.all(persistent.splice(0).map((dir) => rm(dir, { recursive: true, force: true }).catch(() => undefined)))
 })
 
 async function temp(prefix: string): Promise<string> {
@@ -197,20 +310,16 @@ function cliEnvironment(f: Fixture, runner?: unknown) {
   }
 }
 
-/** The live versions this machine resolves, so a candidate is NEWER than the baseline. */
+/**
+ * The versions the shared bundle resolves.
+ *
+ * This used to run the real `baseline` command against this checkout, which made the
+ * whole file depend on the official host resolving here (R5). The candidate must be
+ * newer than a baseline the FIXTURE declares, never one the machine happens to have.
+ * @returns the fixed versions
+ */
 async function liveVersions(): Promise<Versions> {
-  const home = await temp('candidate-live-')
-  const report = await run(['baseline'], {
-    env: environmentOf(),
-    sessionsRoot: path.join(home, 'sessions'),
-    stateDir: path.join(home, 'state'),
-  })
-  const baseline = (report.value as any).baseline
-  return {
-    hashline: baseline.engines.hashline.version,
-    toolEdit: baseline.engines.toolEdit.version,
-    dsh: baseline.versions.dsh,
-  }
+  return { ...BUNDLE_VERSIONS }
 }
 
 /** The next version above `version` by semver precedence. */
@@ -337,7 +446,7 @@ async function runCli(f: Fixture, argv: string[]): Promise<{ code: number; stder
   const inherited = { ...process.env }
   delete inherited.NODE_PATH
   try {
-    execFileSync(process.execPath, [path.resolve(process.cwd(), 'presets', 'ptc-hashline', 'operations', 'cli.mjs'), ...argv], {
+    execFileSync(process.execPath, [bundleCli(operationsBundle), ...argv], {
       env: { ...inherited, ...environmentOf(), DSH_HOME: f.home },
       encoding: 'utf8',
       stdio: ['ignore', 'pipe', 'pipe'],
@@ -847,6 +956,10 @@ describe('UPG-04/06: an approved candidate is validated in its own tree and stor
     expect(value.verdict).toBe('candidate-incomplete')
     const entry = value.includedInputs.files.find((item: any) => item.path === '.tmp/note.txt')
     expect(entry.sha256).toBe('missing')
+    // R3: the copy is compared with the APPROVED bytes, not merely read. A path the
+    // copy cannot carry does not match the approval, and that is reported as such.
+    expect(entry.expected).toMatch(/^[0-9a-f]{64}$/u)
+    expect(entry.match).toBe(false)
     expect(value.criticalUnknowns.join(' ')).toContain('.tmp/note.txt')
     expect(value.pendingVerification).toBe(true)
     expect(path.basename(proposalDirectory).length).toBeGreaterThan(0)
@@ -1004,6 +1117,87 @@ describe('UPG-07: a two-phase approval still only delivers the preconditions', (
     const report = await readFile(path.join(directory, 'validation.md'), 'utf8')
     expect(report).toContain('用户是否已一次批准两阶段：true')
     expect(report).not.toContain('已升级')
+  })
+})
+
+describe('UPG-11: a bundle that carries no official host authorizes nothing', () => {
+  it('stops the assessment incomplete and forbids a target switch, whatever the approval says', async () => {
+    // The host is missing from the FIXTURE, so `version: dsh` is unknown for a reason
+    // this test owns — never because this machine happens to lack it (R5). It runs as a
+    // CHILD with NODE_PATH stripped, so the fixture alone decides whether the official
+    // host resolves.
+    const hostless = await bundleFixture({ dsh: null, hashline: BUNDLE_VERSIONS.hashline, toolEdit: BUNDLE_VERSIONS.toolEdit })
+    const versions = { ...BUNDLE_VERSIONS }
+    const f = await fixture({ versions })
+    const candidate = { hashline: nextVersion(versions.hashline), toolEdit: nextVersion(versions.toolEdit) }
+    const file = await sourcesFile(recommendingRecords(versions, candidate))
+    const childEnv = { DSH_HOME: f.home, DSH_SESSION_ID: SESSION, PWD: WORKSPACE }
+
+    // (a) The assessment is honest about what it could not establish.
+    const assessed = await runBundleChild(hostless, ['upgrade', 'assess', '--sources', file, '--now', ASSESSED_AT], childEnv)
+    const assessment = assessed.json as any
+    expect(assessed.code).toBe(EXIT.stopped)
+    expect(assessment.complete).toBe(false)
+    expect(assessment.verified).toBe(false)
+    expect(assessment.pendingVerification).toBe(true)
+    expect(assessment.gaps.join(' ')).toContain('version: dsh')
+    expect(assessment.scope.switched).toBe(false)
+
+    // (b) A pending candidate may still be PROPOSED — and that is all it is: the
+    // proposal is written, no candidate is built, nothing is switched.
+    const proposed = await runBundleChild(hostless, ['upgrade', 'propose', '--now', PROPOSED_AT], childEnv)
+    expect(proposed.code).toBe(EXIT.ok)
+    const directory = (proposed.json as any).evidence.directory
+    const proposalPath = path.join(directory, 'proposal.json')
+    const proposal = await readJson(proposalPath)
+    expect(await upgradeDirs(f.evidence)).toEqual([ASSESS_STAMP, path.basename(directory)].sort())
+    expect(existsSync(path.join(directory, 'candidate'))).toBe(false)
+    expect(existsSync(path.join(directory, 'backup'))).toBe(false)
+
+    // (c) A switch is REFUSED and touches nothing: with the host unknown the proposal
+    // cannot name a resolvable upgrade target, so "unknown" is never a switch target
+    // (D12/UPG-11) and the maintenance worktree keeps every byte.
+    const before = await snapshot(f.repository)
+    const switched = await runBundleChild(hostless, ['upgrade', 'switch', '--proposal', proposalPath, '--now', VALIDATED_AT], childEnv)
+    const value = switched.json as any
+    expect(switched.code).toBe(EXIT.stopped)
+    expect(String(value.reason ?? '')).toContain('no target was switched')
+    // A refusal carries no phase record at all: nothing was executed.
+    expect(value.phase).toBeUndefined()
+    expect(await snapshot(f.repository)).toEqual(before)
+    expect(await readFile(proposalPath, 'utf8')).toBe(JSON.stringify(proposal, null, 2) + '\n')
+    expect(existsSync(path.join(directory, 'switch.json'))).toBe(false)
+    expect(existsSync(path.join(directory, 'backup'))).toBe(false)
+  })
+})
+
+describe('R3: a copied input is compared with the approved bytes, like for like', () => {
+  it('matches a symlink by its link target, the way the approval recorded it', async () => {
+    const tree = await temp('candidate-copy-')
+    await writeFile(path.join(tree, 'real.txt'), 'content\n', 'utf8')
+    try {
+      await symlink('real.txt', path.join(tree, 'link.txt'))
+    } catch {
+      // A host that cannot create symlinks cannot exercise this case.
+      return
+    }
+    const digestOf = (text: string) => createHash('sha256').update(text).digest('hex')
+    const included = includedInputsOf({
+      baseline: {
+        repository: {
+          commit: 'abc1234',
+          dirty: 'dirty',
+          changedPaths: ['link.txt'],
+          changedInputs: [{ path: 'link.txt', state: 'modified', kind: 'symlink', sha256: digestOf('real.txt') }],
+        },
+      },
+      tree,
+    })
+    expect(included.files).toHaveLength(1)
+    // Hashing the copied file's CONTENT here would never equal the recorded link
+    // string, so every symlink input would refuse a candidate for an unfixable reason.
+    expect(included.files[0].match).toBe(true)
+    expect(included.problems.filter((problem: string) => problem.includes('link.txt'))).toEqual([])
   })
 })
 
