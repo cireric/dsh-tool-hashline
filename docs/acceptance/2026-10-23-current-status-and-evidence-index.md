@@ -51,6 +51,7 @@
 | 隔离候选验证 | [operations-candidate-validation.spec.ts](../../tests/integration/operations-candidate-validation.spec.ts) |
 | 目标切换与失败回退/交接 | [operations-target-switch.spec.ts](../../tests/integration/operations-target-switch.spec.ts) |
 | 真实宿主交付验收（打包安装 + 真实装配 + 两条工作流） | [交付验收报告](2026-10-24-delivery-acceptance-report.md)、[入口](../../scripts/delivery-acceptance-cli.mjs)、[自检](../../tests/integration/delivery-acceptance.spec.ts) |
+| 默认编辑策略的工程切片（票据 01～08） | [工程验收报告](2026-10-24-default-edit-policy-engineering.md)：各验收 ID 的证据位置、先前存在失败对照、未覆盖项 |
 
 执行说明与环境输入见[根 README](../../README.md)及[测试说明](../../tests/integration/README.md)。用例数量是运行记录，不作为未来版本必须保持不变的常量。
 
