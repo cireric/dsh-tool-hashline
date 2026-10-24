@@ -184,6 +184,44 @@ standing in for the registry.
   session are all refused with nothing recorded. `--yes`, `--approved`, `--auto`,
   an empty reply and unknown flags exit 3 through the real CLI. The maintenance
   worktree is byte-identical afterwards.
+- `operations-candidate-validation.spec.ts` — UPG-04/06/09/11/13 and D7/D10/D11/D15
+  (24 cases). The approved candidate, validated in isolation. The authorization
+  gate runs before ANY write and ANY candidate command: no consent record, a
+  rejection, an approval without `candidateValidation`, an approval for another
+  `proposalHash`, a payload that changed after it was written, a drifted
+  baseline (an edited lockfile AND a new untracked file), a proposal outside the
+  evidence tree and an assisted (subagent) session all stop with exit 2, no
+  candidate directory, no `validation.md` and zero runner calls. On the approved
+  path the APPROVED combination is what gets validated, not the baseline one: the
+  candidate versions are pinned into the candidate tree's own manifest before the
+  install (the install's own view of that manifest is asserted, and the
+  maintenance worktree keeps declaring the baseline), the resolved version is
+  compared with the approved candidate (`candidate-versions-match`), the engines'
+  own dependency ranges are evaluated where this run can read them, and a tree
+  that silently resolves the BASELINE fails instead of passing on its own
+  (perfectly healthy) markers. The tree is a snapshot of the maintenance worktree
+  (uncommitted input digested into `includedInputs`; an input the copy does not
+  carry becomes a critical unknown), the patch files and the `patchedDependencies`
+  keys move with the candidate versions, an all-`delete` component loses its
+  patch entirely, and a `pending-verification` item stays undecided instead of
+  being read as `keep`. What a decision DID is judged by the marker text read out
+  of the tree's resolved build, never by a version number or a declaration — and
+  the report says `semanticRegression: not-measured` for every item, because
+  "the patch applied" is not the semantic-regression judgement the spec asks for.
+  The store is the candidate's own, one log per command lands in `logs/`, no gate
+  is skipped, and exit 0 needs every declared gate to have actually run and
+  passed. A failed gate, a timeout, a cancellation, a gate that could never be
+  executed, an install that left nothing behind, an unknown critical baseline and
+  a short link the tree cannot run are all reported — as `candidate-failed` or
+  `candidate-incomplete`, never as a pass — and a failure keeps its evidence and
+  stops (UPG-09: no assertion relaxed, no wider fix). Nothing outside
+  `candidate/` and `validation.md` is written: proposal.json and consent.json
+  stay byte-identical, the maintenance worktree is untouched, and no target is
+  switched, not even under a one-time two-phase approval (ticket 07). The runner
+  is injected for every one of those cases — the report records that source — and
+  exactly one case exercises `createDefaultRunner` as a real child process,
+  asserting a real exit code, a quoted argument and a killed timeout, and
+  reporting the platform gap instead of inventing a pass.
 - `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
   install into an unrelated project, and resolution + execution from a foreign
   working directory. An engine the install does not carry reports `unknown`,
@@ -198,9 +236,9 @@ test rather than passing on a copy.
 A `.mjs` module that is *imported by a test* must not carry a `#!` line: Vite 7's
 SSR transform keeps the shebang in its output, and Node 24 then fails to parse
 the module (`Invalid or unexpected token`), which shows up as a load failure of
-the importing spec. The three modules this tier imports
-(`presets/ptc-hashline/operations/cli.mjs`, `.../session-log.mjs` and
-`scripts/extract-runtime-evidence.mjs`) are always invoked as `node <path>`, so
-they carry no shebang; the other scripts keep theirs because only the shell
-runs them.
+the importing spec. Every `presets/ptc-hashline/operations/*.mjs` module this
+tier imports (`cli.mjs`, `session-log.mjs`, `baseline.mjs`, `config.mjs`,
+`proposals.mjs`, `candidates.mjs`, …) and `scripts/extract-runtime-evidence.mjs`
+are always invoked as `node <path>`, so they carry no shebang; the other scripts
+keep theirs because only the shell runs them.
 

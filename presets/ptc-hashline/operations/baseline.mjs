@@ -55,7 +55,7 @@ const HOST_PACKAGES = [
  * @param {string} path file to hash
  * @returns {string} the hex SHA-256
  */
-function sha256File(path) {
+export function sha256File(path) {
   return createHash('sha256').update(readFileSync(path)).digest('hex')
 }
 

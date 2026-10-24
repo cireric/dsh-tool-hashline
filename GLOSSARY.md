@@ -48,6 +48,14 @@ _Avoid_: 当前 profile、维护仓库
 在独立环境中检验拟升级的 PTC Hashline 组合，尚不将该组合应用于用户的升级目标。
 _Avoid_: 已升级、目标切换
 
+**候选目录 / 候选树**:
+方案只命名、验证时才创建的 `<evidenceDirectory>/upgrades/<proposalId>/candidate/`：`tree/` 是维护仓库快照（含未提交改动），自带 lockfile 与 store；`logs/` 是每条命令一份的完整输出；`result.json` 是机器可读结论。
+_Avoid_: 目标安装树、日常 profile、仓库根 `.pnpm-store`
+
+**候选基线**:
+安装后在候选树里**重新采集**的解析结果（引擎版本、物理 realpath、补丁标记与摘要），用来证明本次验证的就是方案批准的那个组合。
+_Avoid_: 方案里的 baselineHash（那是验证前的输入）、版本号相同即视为兼容
+
 **目标切换**:
 把已验证且获得用户同意的 PTC Hashline 变更应用到指定升级目标。
 _Avoid_: 候选验证、检查更新

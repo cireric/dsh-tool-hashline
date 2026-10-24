@@ -1,6 +1,6 @@
 ---
 name: ptc-hashline-upgrade
-description: PTC Hashline 升级检查与方案入口（仅用户显式调用）。核验调用资格与配置、采集实际运行基线，只读评估官方 DSH、hashline 与 tool-edit 的更新，产出可审阅的升级方案并记录用户同意或拒绝；候选安装、目标切换与回退尚未实现。
+description: PTC Hashline 升级检查与方案入口（仅用户显式调用）。核验调用资格与配置、采集实际运行基线，只读评估官方 DSH、hashline 与 tool-edit 的更新，产出可审阅的升级方案、记录用户同意或拒绝，并在获准后于隔离候选树中验证依赖与补丁组合（不切换目标）；目标切换与回退尚未实现。
 disable-model-invocation: true
 user-invocable: true
 ---
@@ -104,17 +104,35 @@ node <base>/../../operations/cli.mjs upgrade consent --proposal <proposal.json> 
 - 同一份 `proposalHash` 内已取得明确同意后，不为同一件事重复询问；方案、目标、候选或基线变化后必须重新询问。
 - 记录是工作流追溯，**不宣称**能防住本机操作者伪造；宿主无法提供可核验回复时，交还用户用可见提示确认，不自行创造回执。
 
-## 7. 子 agent 的边界（SCOPE-06）
+## 7. 获准后的隔离候选验证（UPG-04/06/09/11/13）
+
+**只有**第 6 步已经记录到 `approve`（scope 含 `candidateValidation`）之后才进入这一步。没有同意记录、最后一条是拒绝、或方案已漂移时，`validate` 会直接退出 `2`：不创建候选目录、不启动任何命令。
+
+```bash
+node <base>/../../operations/cli.mjs upgrade validate --proposal <proposal.json> [--now <ISO>] [--timeout-min <n>]
+```
+
+- 授权闸门在任何写入与候选命令之前：最后一条同意记录必须是 `approve`、`proposalHash` 与方案一致、`scope.candidateValidation === true`、重新采集的基线（含未提交输入）仍等于方案记录、方案位于 `<evidenceDirectory>/upgrades/` 下、且本会话不是子 agent。任一不符 ⇒ 退出 `2`、零写入、零候选命令（只读的 `git rev-parse`/`git status` 属于基线采集），`next` 说明该重新 `upgrade propose` 还是重新 `upgrade consent`。
+- 候选目录就是方案只命名过的那个 `<evidenceDirectory>/upgrades/<proposalId>/candidate/`：本步才创建 `tree/`（维护仓库快照，**含未提交改动**）、`logs/`（每条命令一份完整输出）与 `result.json`，并写同级的 `validation.md`。不创建别的目录。
+- 验证的是**批准的**组合，不是基线组合：安装前先把 `candidates[].version` 钉进候选树自己的 `package.json`（只改清单里已声明的依赖；清单没声明的记缺项），装完再比对**解析到的**引擎版本与批准的候选版本（`candidate-versions-match`），并核对引擎之间声明的版本约束（`engine-version-constraints`，只读精确版本/`^`/`~`，其它范围记未求值）。版本对不上 ⇒ `candidate-failed`，不是通过。
+- 隔离边界：候选树用自己的 lockfile 与自己的 store（`candidate/.pnpm-store`）。不写维护仓库工作树、不写仓库根 `.pnpm-store`、不写全局 store。
+- 逐项补丁按方案里的 `keep` / `redo` / `delete` 执行，并处理版本耦合：`patchedDependencies` 的键与 `patches/*.patch` 文件名都带精确版本，版本一动就一起改名；一个组件整组都是 `delete` 才删除补丁文件与注册行。`pending-verification` 的项**保持未决**（本步不把它收敛成 keep，记缺项）。补丁是否作用于该构建**只**由候选树解析到的构建文件里的标记证明（版本号与该组件的声明都不算证据）；上游是否已实现同一行为（语义回归）由方案依据来源申报判断，本步不测量，报告里记 `semanticRegression: not-measured`。
+- 只执行 `changes.verification` 里列出的命令，外加本步自己的核验（解析路径与共享 hashline 实例、候选版本比对、引擎约束、补丁标记证据、补丁摘要、候选树上的 read→edit 短链路）。命令有自己的白名单（`pnpm` / `npm` / `node` 的 `install`/`build`/`test`/`run`/`exec`，或方案自己声明过的脚本名）、超时（`--timeout-min`，默认 15 分钟）与取消（`SIGINT`/`SIGTERM`：已开始的命令被超时或 shell 结束，后面的门禁记为未执行）。**第一条失败即停**，后面的门禁记为未执行。
+- 退出码：`0` 仅在方案列出的门禁**全部实际执行且通过**、并且核验项全过（`n/a` 表示没有可测对象，既不算过也不算失败）时；`2` 有失败、超时、跳过、缺项或关键基线 `unknown`（结果已写出）；`3` 用法错误。`--yes` / `--approved` / `--auto` 一类参数仍是 `3`。
+- 结论三态：`candidate-verified` / `candidate-failed` / `candidate-incomplete`。关键基线（commit、lockfile、候选版本、解析路径、补丁摘要）或某个未提交输入缺失/读不出 ⇒ `pendingVerification`，最多 `incomplete`；skipped、缺项与 GAP 一律如实写出，且**不计入通过**。
+- **报告怎么读**：只有 `candidate-verified` 才能说“满足第二阶段同意的前置条件”。任何情况都**不说**目标已经切换、不说版本已在目标上生效；失败不切换。`scope.switch === false`（默认，只批准候选）时交付报告后**停下来等第二阶段同意**；`switch === true`（用户一次明确批准两阶段）时也只交付前置条件——目标切换属票据 07，本版本尚未实现。
+- 出现方案外的实现、语义或测试契约改动（报告里 `stop.rule === 'UPG-09'`）⇒ 保留失败现场、停止并另提方案：**不放宽断言、不把测试改绿、不扩大修复范围**。
+
+## 8. 子 agent 的边界（SCOPE-06）
 
 - 用户在主会话显式调用后，同 preset 的子 agent 可以辅助只读取证、基线核对与方案生成（同一 CLI、同一已保存配置）。
 - 子 agent **不自行加载或启动**本工作流；只有真实用户在主会话的显式入口算启动。
-- 子 agent 的消息、结论或“已同意”自述**不构成用户同意或审批**：`delegation.mayApproveUpgrade` 为 `false` 时不得推进任何写入，consent 入口会直接拒绝。
+- 子 agent 的消息、结论或“已同意”自述**不构成用户同意或审批**：`delegation.mayApproveUpgrade` 为 `false` 时不得推进任何写入，consent 与 validate 入口都会直接拒绝（候选验证仍归主会话）。
 
-## 8. 本版本尚未支持的动作
+## 9. 本版本尚未支持的动作
 
-以下能力**尚未实现**（票据 06/07），遇到时直接说明“当前版本未支持”，不得用替代手段：
+以下能力**尚未实现**（票据 07），遇到时直接说明“当前版本未支持”，不得用替代手段：
 
-- 隔离候选的安装与验证：不创建候选目录、不下载或安装候选、不执行验证命令。
-- 目标切换、失败回滚，以及任何对 manifest/lockfile/patch/dist/profile 的修改。
+- 目标切换、失败回滚，以及任何对维护仓库工作树、目标安装树或日常 profile 的修改。
 
-在候选验证与执行入口交付前，本 skill 只做只读的资格核验、配置确认、基线采集、更新评估、方案生成与同意记录；不安装、不构建、不改依赖、不改 profile、不切换目标。
+第 7 步只把候选安装进候选树并验证，不切换、不回退、不改日常 profile、不动官方 DSH 安装、不重启 DSH。到此为止：后续的目标切换要等票据 07 交付后，再由用户明确授权。

@@ -21,6 +21,8 @@
  *                    (UPG-03/05)
  *   upgrade consent  append the user's own reply to that proposal: the scope it
  *                    grants, or the rejection (UPG-03/05/07, SCOPE-06)
+ *   upgrade validate the approved candidate, isolated in its own tree and store:
+ *                    gates run, nothing switched (UPG-04/06/09/11/13)
  * Only Node builtins: the shipped bundle must run from any working directory
  * with no checkout, no `.scratch` and no root `scripts/` beside it.
  *
@@ -31,6 +33,7 @@ import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
 import { collectBaseline } from './baseline.mjs'
+import { validateCandidate, validationAuthorization, writeCandidateReport } from './candidates.mjs'
 import { describeConfig, requireRole, saveConfig, stateDirectory } from './config.mjs'
 import { verifyInvocationContext } from './context.mjs'
 import { buildIncident, DEFAULT_FEATURE, incidentDirectory, registerNeedsTriageIssues, validateSeqBounds, writeIncidentBundle } from './incidents.mjs'
@@ -49,8 +52,8 @@ export function installationRoot() {
 
 class UsageError extends Error {}
 
-/** The three words `upgrade` accepts after it. */
-export const UPGRADE_SUBCOMMANDS = ['assess', 'propose', 'consent']
+/** The four words `upgrade` accepts after it. */
+export const UPGRADE_SUBCOMMANDS = ['assess', 'propose', 'consent', 'validate']
 
 /**
  * The flags each command accepts.
@@ -67,6 +70,7 @@ export const FLAG_ALLOWLIST = {
   'upgrade assess': ['sources', 'now', 'target', 'preset'],
   'upgrade propose': ['assessment', 'now', 'target', 'preset'],
   'upgrade consent': ['proposal', 'decision', 'scope', 'reply', 'now', 'preset'],
+  'upgrade validate': ['proposal', 'now', 'timeout-min', 'preset'],
 }
 
 /**
@@ -179,6 +183,12 @@ export function parseFlags(argv) {
  * @property {(component: string) => Promise<object[]>} [query] metadata provider
  *   override: the default is the real read-only registry/ref query, and a
  *   fixture (or an offline run) supplies its own
+ * @property {(command: string, args: string[], options: object) => unknown} [runner]
+ *   process runner override for `upgrade validate`: the default is a real child
+ *   process, and a fixture supplies its own so no real command is started
+ * @property {(name: string) => boolean} [cancel]
+ *   cancellation override for `upgrade validate`: the default is the process's
+ *   own SIGINT/SIGTERM predicate, and a fixture supplies a deterministic one
  */
 
 /**
@@ -290,6 +300,66 @@ function proposalValue(proposal) {
     rollback: proposal.rollback,
     execution: proposal.execution,
     gaps: proposal.gaps,
+  }
+}
+
+/**
+ * The CLI-shaped answer for one candidate validation.
+ *
+ * A projection, exactly like {@link proposalValue}: the whole record lives in
+ * result.json beside the candidate tree and in validation.md beside the
+ * proposal, and this narrows it to what a skill body relays — so a new report
+ * field is added in ONE place.
+ * @param {object} report the written candidate report
+ * @returns {object} the value to print
+ */
+function candidateValue(report) {
+  return {
+    verdict: report.verdict,
+    proposalId: report.proposalId,
+    proposalHash: report.proposalHash,
+    baselineHash: report.baselineHash,
+    runner: report.runner,
+    includedInputs: {
+      commit: report.includedInputs.commit,
+      dirty: report.includedInputs.dirty,
+      files: report.includedInputs.files,
+      lockfileSha256: report.includedInputs.lockfileSha256,
+    },
+    dependencyUpdates: report.dependencyUpdates,
+    candidateBaseline: report.candidateBaseline,
+    patchResults: report.patchResults.map((item) => ({
+      component: item.component,
+      file: item.file,
+      decision: item.decision,
+      apply: item.apply,
+      expected: item.expected,
+      resolved: item.resolved,
+      satisfied: item.satisfied,
+      requiresRecut: item.requiresRecut,
+    })),
+    checks: report.checks,
+    commands: report.commands.map((entry) => ({
+      name: entry.name,
+      source: entry.source,
+      command: entry.command,
+      args: entry.args,
+      exitCode: entry.exitCode,
+      durationMs: entry.durationMs,
+      ...entry.timedOut === undefined ? {} : { timedOut: entry.timedOut },
+      ...entry.refused === undefined ? {} : { refused: entry.refused },
+    })),
+    skipped: report.skipped,
+    gaps: report.gaps,
+    criticalUnknowns: report.criticalUnknowns,
+    pendingVerification: report.pendingVerification,
+    failures: report.failures,
+    stop: report.stop,
+    versions: report.versions,
+    scope: report.scope,
+    statements: report.statements,
+    next: report.next,
+    nextNote: report.nextNote,
   }
 }
 
@@ -649,6 +719,160 @@ export async function run(argv, environment = { env: {} }) {
         },
       }
     }
+    // ── upgrade validate: the approved candidate, isolated (UPG-04/06/09/11/13) ─
+    if (upgradeSubcommand === 'validate') {
+      // Usage errors first: they are usage errors whatever the session state is.
+      if (flags.proposal === undefined) throw new UsageError('--proposal is required: the proposal.json (or its directory) the user approved')
+      if (flags.proposal === true) throw new UsageError('--proposal needs a value')
+      const now = timeFlag(flags.now)
+      const timeoutMin = numberFlag('timeout-min')
+      if (timeoutMin !== undefined && (!Number.isFinite(timeoutMin) || timeoutMin <= 0)) {
+        throw new UsageError('--timeout-min must be a positive number of minutes')
+      }
+      const verdict = await verdictFor()
+      const context = contextOf(verdict)
+      if (!verdict.eligible) {
+        return { code: EXIT.stopped, value: { command: 'upgrade', status: 'stopped', reason: verdict.reason, delegation: verdict.delegation, context } }
+      }
+      const described = await describeConfig(facts.stateDir)
+      const roleStatus = roleResolver(described)
+      const evidence = roleStatus('evidenceDirectory')
+      const maintenance = roleStatus('maintenanceRepository')
+      // D9: an unusable evidence directory stops ITS write before anything is
+      // created — a candidate tree needs a directory nobody else owns.
+      if (evidence.path === undefined) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the evidence directory is unusable (' + evidence.reason + '), so the candidate tree has nowhere to go; nothing was created',
+            next: 'config --set-evidence-dir <absolute path>',
+            context,
+          },
+        }
+      }
+      const loaded = await readProposal(flags.proposal)
+      if (loaded.reason !== undefined) {
+        return { code: EXIT.stopped, value: { command: 'upgrade', status: 'stopped', reason: loaded.reason, context } }
+      }
+      const proposal = loaded.proposal
+      const recomputed = proposalHashOf(bindingOf(proposal))
+      if (recomputed !== proposal.proposalHash) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the proposal at ' + loaded.path + ' no longer hashes to its recorded proposalHash (' + proposal.proposalHash + ' recorded, ' + recomputed
+              + ' recomputed): a bound input changed after it was written, so the answer it carries covers another payload; nothing was validated',
+            next: 'upgrade propose',
+            context,
+          },
+        }
+      }
+      const consentPath = join(loaded.directory, 'consent.json')
+      const consentFile = await readConsent(consentPath)
+      // The gate runs BEFORE any write and any candidate command: an unapproved,
+      // drifted or misplaced proposal never gets a tree, let alone a process.
+      const baseline = collectRunBaseline({ verdict, maintenance })
+      const authorization = validationAuthorization({
+        proposal,
+        proposalDirectory: loaded.directory,
+        consentPath,
+        records: consentFile.consent?.records ?? [],
+        ...consentFile.reason === undefined ? {} : { consentProblem: consentFile.reason },
+        evidenceDirectory: evidence.path,
+        baseline,
+        ...maintenance.path === undefined ? {} : { maintenancePath: maintenance.path },
+        delegation: verdict.delegation,
+      })
+      if (!authorization.ok) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: authorization.reason,
+            rule: authorization.rule,
+            next: authorization.next,
+            ...authorization.drift === undefined ? {} : { drift: authorization.drift },
+            delegation: verdict.delegation,
+            context,
+          },
+        }
+      }
+      if (maintenance.path === undefined) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'stopped',
+            reason: 'the maintenance repository role is unusable (' + maintenance.reason + '), so there is no snapshot to copy into a candidate tree; nothing was created',
+            next: 'config --set-maintenance-repo <absolute path>',
+            context,
+          },
+        }
+      }
+      // The gate above proved changes.candidateDirectory is exactly <proposalDir>/candidate.
+      const candidateDirectory = resolve(proposal.changes.candidateDirectory)
+      let report
+      try {
+        report = await validateCandidate({
+          proposal,
+          proposalDirectory: loaded.directory,
+          candidateDirectory,
+          evidenceDirectory: evidence.path,
+          maintenanceRepository: maintenance.path,
+          baseline,
+          basis: authorization.basis,
+          now,
+          ...timeoutMin === undefined ? {} : { timeoutMin },
+          // The runner is a seam: the default is a real child process (win32 uses
+          // a shell, see scripts/test-profile.mjs), and a fixture supplies its own.
+          ...environment.runner === undefined ? {} : { runner: environment.runner },
+          ...environment.cancel === undefined ? {} : { cancel: environment.cancel },
+        })
+      } catch (error) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'incomplete',
+            reason: 'the candidate run could not be completed, and the tree it left is NOT a pass: ' + (error instanceof Error ? error.message : String(error)),
+            candidate: { directory: candidateDirectory },
+            context,
+          },
+        }
+      }
+      let files
+      try {
+        files = await writeCandidateReport({ report, proposalDirectory: loaded.directory })
+      } catch (error) {
+        return {
+          code: EXIT.stopped,
+          value: {
+            command: 'upgrade',
+            status: 'incomplete',
+            reason: 'the candidate result could not be written to ' + candidateDirectory + ': ' + (error instanceof Error ? error.message : String(error)),
+            ...candidateValue(report),
+            context,
+          },
+        }
+      }
+      return {
+        // 0 only when every declared gate ACTUALLY ran and passed: skipped steps,
+        // gaps and a pending candidate are all "not verified" (exit 2).
+        code: report.verdict === 'candidate-verified' ? EXIT.ok : EXIT.stopped,
+        value: {
+          command: 'upgrade',
+          status: report.verdict === 'candidate-verified' ? 'validated' : report.verdict === 'candidate-failed' ? 'failed' : 'incomplete',
+          ...candidateValue(report),
+          evidence: { directory: candidateDirectory, files },
+          context,
+        },
+      }
+    }
     // ── upgrade consent: the user's own answer, recorded (UPG-03/05/07) ───────
     if (upgradeSubcommand === 'consent') {
       // There is no default answer: the decision, the scope and non-empty quote
@@ -883,7 +1107,7 @@ export async function run(argv, environment = { env: {} }) {
     }
   }
 
-  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline, incident or upgrade assess|propose|consent')
+  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline, incident or upgrade assess|propose|consent|validate')
 }
 
 /**
