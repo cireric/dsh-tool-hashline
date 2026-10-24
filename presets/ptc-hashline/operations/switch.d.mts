@@ -94,6 +94,33 @@ export function writtenFilesOf(options: {
   after: { maintenance: WatchedEntry[]; target: WatchedEntry[] }
 }): { path: string; relative: string; side: string; beforeSha256: string; afterSha256: string }[]
 
+/**
+ * The watched files each phase of one switch may write, and the predicate that
+ * decides whether a phase's own work explains one observed change (R1/D15).
+ * A change outside every scope is somebody else's and never enters the restore
+ * plan.
+ */
+export interface WriteScopeRule {
+  /** The side the rule belongs to: a maintenance phase never licenses the target's file. */
+  side: 'maintenance' | 'target'
+  relative: string
+}
+
+export const STEP_WRITE_SCOPE: Record<string, WriteScopeRule[]>
+
+export function inWriteScope(entry: { relative: string; side: string }, scope: WriteScopeRule[]): boolean
+
+/**
+ * Whether one observed change is this round's write, and on what evidence: a
+ * matching declared-write digest, or a package-manager phase's own scope.
+ */
+export function attributeChange(options: {
+  change: { path: string; relative: string; side: string; beforeSha256: string; afterSha256: string }
+  declared?: { path: string; sha256: string }[]
+  scope?: WriteScopeRule[]
+  commandScope?: boolean
+}): { attributed: boolean; basis: 'declared-write' | 'declared-write-mismatch' | 'command-scope' | 'undeclared' }
+
 export function targetPatchResults(options: { proposal: Record<string, any>; engines: Record<string, ResolvedEngines> }): Record<string, any>[]
 
 /** One switch run: the record written to switch.json. */

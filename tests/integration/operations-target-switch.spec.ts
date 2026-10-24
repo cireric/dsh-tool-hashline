@@ -32,7 +32,7 @@ import { EXIT, run } from '../../presets/ptc-hashline/operations/cli.mjs'
 import { saveConfig } from '../../presets/ptc-hashline/operations/config.mjs'
 import { encodeSegment, projectKey } from '../../presets/ptc-hashline/operations/session-log.mjs'
 import { candidateCommandProblem } from '../../presets/ptc-hashline/operations/candidates.mjs'
-import { externalChangesOf, targetStateOf } from '../../presets/ptc-hashline/operations/switch.mjs'
+import { STEP_WRITE_SCOPE, attributeChange, externalChangesOf, inWriteScope, targetStateOf } from '../../presets/ptc-hashline/operations/switch.mjs'
 
 const SESSION = 'session-target-switch-0001'
 const PARENT = 'session-target-switch-parent-0001'
@@ -99,6 +99,12 @@ interface FixtureOptions {
   unrelatedChange?: boolean
   /** A subagent session header (SCOPE-06). */
   assisted?: boolean
+  /**
+   * Start the target profile WITHOUT an install. The default is installed, because
+   * an upgrade target that resolves nothing has no measurable baseline, and a
+   * restore may not claim it came back to one (D15/UPG-12, R2).
+   */
+  targetInstalled?: boolean
 }
 
 /** One session log: the header, a preset projection and two user messages. */
@@ -206,6 +212,16 @@ async function fixture(options: FixtureOptions): Promise<Fixture> {
   await saveConfig({ directory: state, maintenanceRepository: repository, evidenceDirectory: evidence })
   await writeSession(sessions, { assisted: options.assisted === true })
   const profile = await writeProfile(home, repository)
+  // A real upgrade target is an INSTALLED profile: it already resolves the
+  // baseline combination, which is exactly the state a restore has to prove it
+  // came back to. An empty tree has no measurable baseline, so "restored" could
+  // not be claimed for it at all (D15/UPG-12, R2) — the fixture now starts where
+  // the user's own profile starts.
+  if (options.targetInstalled !== false) await materialize(profile, repository)
+  // A profile that has resolved a lockfile but was never installed: the one state
+  // in which EVERY other term of the restore verdict matches, so the measured-baseline
+  // gate is the only thing left to refuse it (R2/T3 step 2).
+  else await writeFile(path.join(profile, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n# never installed\n', 'utf8')
   return { home, state, sessions, repository, evidence, profile, versions: options.versions }
 }
 
@@ -357,6 +373,18 @@ interface RunnerOptions {
   failInstallIn?: string[]
   /** Directories whose SECOND install fails (the rollback's own re-install). */
   failSecondInstallIn?: string[]
+  /** Directories whose SECOND install exits 0 but materializes nothing. */
+  silentSecondInstallIn?: string[]
+  /**
+   * Rewrite that directory's pnpm-lock.yaml on EVERY install, with a counter in it.
+   *
+   * A real package manager does exactly this: the rollback's own install writes a
+   * lockfile with different bytes than the forward install did. That is the case a
+   * target-lockfile digest may NOT be judged on (R2).
+   */
+  rewriteLockfileIn?: string[]
+  /** Somebody else edits the target's lockfile while the short link runs. */
+  tamperTargetLockfile?: string
   driver?: {
     status?: 'ok' | 'gap' | 'failed'
     detail?: string
@@ -364,6 +392,14 @@ interface RunnerOptions {
     /** Somebody else changes the target while this run is still working. */
     tamper?: { engineVersion: string }
   }
+  /**
+   * Somebody else edits a WATCHED file while this run is still working.
+   *
+   * The edit lands inside a step this round executes, so it is indistinguishable
+   * from this round's own write unless the step's declared scope is what decides
+   * (R1). It is applied on the first install in `directory`.
+   */
+  concurrentEdit?: { directory: string; path: string; apply: (path: string) => Promise<void> }
 }
 
 /**
@@ -376,9 +412,15 @@ interface RunnerOptions {
 function fakeRunner(options: RunnerOptions) {
   const calls: RunnerCall[] = []
   const installs = new Map<string, number>()
+  /** The concurrent edit lands once, however many installs follow. */
+  const edits = new Set<string>()
   const runner = async (command: string, args: string[], callOptions: { cwd: string }) => {
     calls.push({ command, args: [...args], cwd: callOptions.cwd })
     if (args[0] === 'install') {
+      if (options.concurrentEdit !== undefined && callOptions.cwd === options.concurrentEdit.directory && !edits.has(options.concurrentEdit.path)) {
+        edits.add(options.concurrentEdit.path)
+        await options.concurrentEdit.apply(options.concurrentEdit.path)
+      }
       const count = (installs.get(callOptions.cwd) ?? 0) + 1
       installs.set(callOptions.cwd, count)
       if ((options.failInstallIn ?? []).includes(callOptions.cwd) && count === 1) {
@@ -387,10 +429,19 @@ function fakeRunner(options: RunnerOptions) {
       if ((options.failSecondInstallIn ?? []).includes(callOptions.cwd) && count === 2) {
         return { exitCode: 1, stdout: '', stderr: 'the fixture refused the rollback install' }
       }
+      if ((options.silentSecondInstallIn ?? []).includes(callOptions.cwd) && count === 2) {
+        return { exitCode: 0, stdout: 'installed (the fixture materialized nothing)' }
+      }
       await materialize(callOptions.cwd, options.repository)
+      if ((options.rewriteLockfileIn ?? []).includes(callOptions.cwd)) {
+        await writeFile(path.join(callOptions.cwd, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n# install ' + String(count) + '\n', 'utf8')
+      }
       return { exitCode: 0, stdout: 'installed' }
     }
     if (typeof args[0] === 'string' && args[0].endsWith('short-link.mjs')) {
+      if (options.tamperTargetLockfile !== undefined) {
+        await writeFile(path.join(options.tamperTargetLockfile, 'pnpm-lock.yaml'), 'lockfileVersion: 9.0\n# written by somebody else\n', 'utf8')
+      }
       const driver = options.driver ?? { status: 'ok' as const }
       if (driver.tamper !== undefined) {
         const manifestPath = path.join(callOptions.cwd, 'node_modules', HASH_PKG, 'package.json')
@@ -845,6 +896,64 @@ describe('UPG-12: a partial failure restores this round, or hands the state over
     expect(String(value.nextNote)).toContain('外部改动')
   })
 
+  it('reports handover when the TARGET-side rollback install fails, and never a two-sided restored', async () => {
+    // R2: the switch's own failure is the REASON this restore runs, so it can
+    // never decide the restore's verdict — and a rollback install that exits
+    // non-zero can never be reported as a restore either.
+    const { fixture: f, proposalDirectory, candidate } = await prepared()
+    const { runner } = fakeRunner({
+      repository: f.repository,
+      driver: { status: 'failed', detail: 'the link broke, so the round has to restore' },
+      failSecondInstallIn: [f.profile],
+    })
+    const switched = await runSwitch(f, ['--proposal', path.join(proposalDirectory, 'proposal.json'), '--now', SWITCHED_AT], runner)
+    const value = switched.value as any
+    expect(switched.code).toBe(EXIT.stopped)
+    expect(value.conclusion).toBe('switch-failed-handover')
+    expect(value.phase).toBe('handover')
+
+    const rollback = await readJson(path.join(proposalDirectory, 'rollback.json'))
+    expect(rollback.phase).toBe('handover')
+    // Each rollback step is summarised on its own result, not on the round's.
+    expect(rollback.steps.map((entry: any) => [entry.name, entry.exitCode])).toEqual([
+      ['rollback-maintenance-install', 0],
+      ['rollback-target-install', 1],
+    ])
+    expect(rollback.stepProblems).toEqual(['rollback-target-install exited 1'])
+    // The maintenance side IS back at the baseline, and the record says so…
+    expect(rollback.verification.lockfile.match).toBe(true)
+    expect(rollback.verification.engines.every((entry: any) => entry.match)).toBe(true)
+    // …while the target side is not, and that difference is what blocks the claim.
+    expect(rollback.verification.target.engines.some((entry: any) => entry.match === false)).toBe(true)
+    expect((await readJson(path.join(f.profile, 'node_modules', HASH_PKG, 'package.json'))).version).toBe(candidate.hashline)
+    expect(String(value.nextNote)).toContain('rollback-target-install')
+  })
+
+  it('does not call a restore restored when the rollback install exits zero and the target is still the candidate', async () => {
+    // A zero exit code is not the verdict: what the target actually RESOLVES decides.
+    const { fixture: f, proposalDirectory, candidate } = await prepared()
+    const { runner } = fakeRunner({
+      repository: f.repository,
+      driver: { status: 'failed', detail: 'the link broke, so the round has to restore' },
+      silentSecondInstallIn: [f.profile],
+    })
+    const switched = await runSwitch(f, ['--proposal', path.join(proposalDirectory, 'proposal.json'), '--now', SWITCHED_AT], runner)
+    const value = switched.value as any
+    expect(switched.code).toBe(EXIT.stopped)
+    expect(value.conclusion).toBe('switch-failed-handover')
+    const rollback = await readJson(path.join(proposalDirectory, 'rollback.json'))
+    expect(rollback.steps[1]).toMatchObject({ name: 'rollback-target-install', exitCode: 0 })
+    expect(rollback.stepProblems).toEqual([])
+    // The command "succeeded", yet the target still resolves the candidate: the
+    // per-side engine comparison is what catches it.
+    expect(rollback.verification.target.engines.map((entry: any) => [entry.component, entry.now])).toEqual([
+      ['hashline', candidate.hashline],
+      ['tool-edit', candidate.toolEdit],
+    ])
+    expect(rollback.verification.target.engines.every((entry: any) => entry.match)).toBe(false)
+    expect(rollback.phase).toBe('handover')
+  })
+
   it('hands over instead of restoring when something was not measured (a GAP is not a failure)', async () => {
     const { fixture: f, proposalDirectory, candidate } = await prepared()
     // The target cannot run the short link: the switch did happen, but one check
@@ -863,6 +972,70 @@ describe('UPG-12: a partial failure restores this round, or hands the state over
     expect(repositoryManifest.dependencies[HASH_PKG]).toBe(candidate.hashline)
     expect((await readJson(path.join(f.profile, 'node_modules', HASH_PKG, 'package.json'))).version).toBe(candidate.hashline)
     expect(String(value.nextNote)).toContain('缺项')
+  })
+
+  it('keeps a user edit that lands DURING the round and hands over instead of restoring over it', async () => {
+    // The edit happens inside a step this round executes, so "the file changed
+    // while we were running" cannot tell it apart from our own write. What can is
+    // the step's DECLARED scope: a maintenance install rewrites the lockfile and
+    // never the manifest, so a manifest change there is somebody else's (R1).
+    const { fixture: f, proposalDirectory } = await prepared()
+    const manifestPath = path.join(f.repository, 'package.json')
+    const { runner, calls } = fakeRunner({
+      repository: f.repository,
+      failInstallIn: [f.profile],
+      concurrentEdit: {
+        directory: f.repository,
+        path: manifestPath,
+        apply: async (file) => {
+          const manifest = JSON.parse(await readFile(file, 'utf8'))
+          await writeFile(file, JSON.stringify({ ...manifest, userConcurrentEdit: 'KEEP ME' }, null, 2) + '\n', 'utf8')
+        },
+      },
+    })
+    const switched = await runSwitch(f, ['--proposal', path.join(proposalDirectory, 'proposal.json'), '--now', SWITCHED_AT], runner)
+    const value = switched.value as any
+
+    expect(switched.code).toBe(EXIT.stopped)
+    expect(value.conclusion).toBe('switch-failed-handover')
+    expect(value.status).toBe('handover')
+    // The user's bytes are still there: nothing overwrote the manifest.
+    expect((await readJson(manifestPath)).userConcurrentEdit).toBe('KEEP ME')
+
+    // The record NAMES the unexplained change, with the phase it appeared in,
+    // and keeps it out of writtenFiles — so it was never a restore candidate.
+    expect((value.unknownChanges ?? []).map((entry: any) => path.basename(entry.path))).toContain('package.json')
+    const unexplained = (value.unknownChanges ?? []).find((entry: any) => entry.path === manifestPath)
+    expect(unexplained.phases).toContain('maintenance-install')
+    expect((value.writtenFiles ?? []).some((entry: any) => entry.path === manifestPath)).toBe(false)
+
+    // No restore ran: rollback.json exists, lists no restored file, and the two
+    // rollback install commands were never started.
+    const rollback = await readJson(path.join(proposalDirectory, 'rollback.json'))
+    expect(rollback.phase).toBe('handover')
+    expect(rollback.restoredFiles).toEqual([])
+    expect(rollback.steps).toEqual([])
+    expect(calls.filter((call: RunnerCall) => call.args[0] === 'install' && call.cwd === f.profile).length).toBe(1)
+    expect(rollback.unknownChanges.map((entry: any) => entry.path)).toContain(manifestPath)
+    expect(String(rollback.nextNote)).toContain('无法证明属于本轮')
+  })
+
+  it('attributes a watched change only when the phase that made it could have made it', () => {
+    // The rule behind the case above, stated on its own: an install may move the
+    // lockfile and nothing else, pinning dependencies writes the manifest, and
+    // patch decisions own pnpm-workspace.yaml and every file under patches/.
+    expect(inWriteScope({ relative: 'pnpm-lock.yaml', side: 'maintenance' }, STEP_WRITE_SCOPE['maintenance-install'])).toBe(true)
+    expect(inWriteScope({ relative: 'package.json', side: 'maintenance' }, STEP_WRITE_SCOPE['maintenance-install'])).toBe(false)
+    expect(inWriteScope({ relative: 'package.json', side: 'maintenance' }, STEP_WRITE_SCOPE['maintenance-dependencies'])).toBe(true)
+    expect(inWriteScope({ relative: 'pnpm-workspace.yaml', side: 'maintenance' }, STEP_WRITE_SCOPE['maintenance-patches'])).toBe(true)
+    expect(inWriteScope({ relative: 'patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.5.patch', side: 'maintenance' }, STEP_WRITE_SCOPE['maintenance-patches'])).toBe(true)
+    expect(inWriteScope({ relative: 'patches/x.patch', side: 'target' }, STEP_WRITE_SCOPE['maintenance-patches'])).toBe(false)
+    expect(inWriteScope({ relative: 'pnpm-lock.yaml', side: 'target' }, STEP_WRITE_SCOPE['target-install'])).toBe(true)
+    expect(inWriteScope({ relative: 'package.json', side: 'target' }, STEP_WRITE_SCOPE['target-install'])).toBe(false)
+    expect(inWriteScope({ relative: 'package.json', side: 'maintenance' }, STEP_WRITE_SCOPE['maintenance-build'])).toBe(false)
+    // The SAME file name on the other side is never licensed by this side's rule.
+    expect(inWriteScope({ relative: 'pnpm-lock.yaml', side: 'target' }, STEP_WRITE_SCOPE['maintenance-install'])).toBe(false)
+    expect(inWriteScope({ relative: 'pnpm-lock.yaml', side: 'maintenance' }, STEP_WRITE_SCOPE['target-install'])).toBe(false)
   })
 
   it('treats a file edited between this round and its restore as an external change', async () => {
@@ -888,7 +1061,7 @@ describe('UPG-12: a partial failure restores this round, or hands the state over
   })
 
   it('stops before the first change when the backup cannot be complete', async () => {
-    const { fixture: f, proposalDirectory, proposal } = await prepared()
+    const { fixture: f, proposalDirectory } = await prepared()
     // A watched file that cannot be read: the backup would be incomplete, so the
     // switch must stop BEFORE it changes anything ("备份不了就先改" is the failure).
     await rm(path.join(f.profile, 'pnpm-workspace.yaml'), { force: true })
@@ -904,9 +1077,113 @@ describe('UPG-12: a partial failure restores this round, or hands the state over
     expect(runner.calls).toEqual([])
     expect(existsSync(path.join(proposalDirectory, 'backup'))).toBe(false)
     expect(await snapshot(f.repository)).toEqual(repositoryBefore)
-    const record = await readJson(path.join(proposalDirectory, 'switch.json'))
-    expect(record.phase).toBe('stopped')
-    expect(record.writtenFiles).toEqual([])
-    expect(proposal.proposalHash).toBe(record.proposalHash)
   })
 })
+
+/**
+ * The fix-pass regressions: the restore verdict must be gated on facts that were
+ * actually MEASURED, on both sides, and the document must not certify checks that
+ * never ran.
+ */
+describe('D15/UPG-12: the restore verdict is gated on measured facts, on both sides', () => {
+  it('refuses to call it restored when the target baseline was never measurable', async () => {
+    // A target that resolves nothing before the round has no baseline to come back
+    // to: engines unknown before AND after, no shared instance either way, no
+    // lockfile write. Every term of the old verdict was satisfied, so the run
+    // claimed "restored" for a side nothing had ever measured.
+    const { fixture: f, proposalDirectory } = await prepared({ targetInstalled: false })
+    const { runner } = fakeRunner({
+      repository: f.repository,
+      failInstallIn: [f.profile],
+      // The rollback's own install reports success and materializes NOTHING, so the
+      // target still resolves nothing: every OTHER term of the verdict is satisfied,
+      // and the measured-baseline gate is the only thing left that can refuse it.
+      silentSecondInstallIn: [f.profile],
+    })
+    const switched = await runSwitch(f, ['--proposal', path.join(proposalDirectory, 'proposal.json'), '--now', SWITCHED_AT], runner)
+    const value = switched.value as any
+    expect(switched.code).toBe(EXIT.stopped)
+    expect(value.conclusion).toBe('switch-failed-handover')
+    const rollback = await readJson(path.join(proposalDirectory, 'rollback.json'))
+    expect(rollback.phase).toBe('handover')
+    // Every other term matched, and the reason is NAMED rather than assumed.
+    expect(rollback.stepProblems).toEqual([])
+    expect(rollback.verification.lockfile.match).toBe(true)
+    expect(rollback.verification.engines.every((entry: any) => entry.match)).toBe(true)
+    expect(rollback.verification.target.files.manifest.match).toBe(true)
+    expect(rollback.verification.target.files.lockfile.match).toBe(true)
+    expect(rollback.verification.target.engines.every((entry: any) => entry.match)).toBe(true)
+    expect(rollback.verification.target.engines.every((entry: any) => entry.measurable === false)).toBe(true)
+    expect(rollback.verification.target.baselineKnown).toBe(false)
+    expect(String(rollback.nextNote)).toContain('回退基线')
+  })
+
+  it('still restores when the round itself rewrote the target lockfile and the rollback rewrote it again', async () => {
+    // A real install rewrites the lockfile, and the rollback's own install writes
+    // DIFFERENT bytes. Ruling: a lockfile this round rewrote is evidence, not a
+    // gate — the inverted predicate handed over here, refusing a real restore.
+    const { fixture: f, proposalDirectory } = await prepared()
+    const { runner } = fakeRunner({
+      repository: f.repository,
+      driver: { status: 'failed', detail: 'the link broke, so the round has to restore' },
+      rewriteLockfileIn: [f.profile],
+    })
+    const switched = await runSwitch(f, ['--proposal', path.join(proposalDirectory, 'proposal.json'), '--now', SWITCHED_AT], runner)
+    const value = switched.value as any
+    expect(switched.code).toBe(EXIT.stopped)
+    expect(value.conclusion).toBe('switch-failed-restored')
+    const rollback = await readJson(path.join(proposalDirectory, 'rollback.json'))
+    expect(rollback.phase).toBe('restored')
+    // The lockfile really did move, and it is recorded as judged-by-scope, not as a match.
+    expect(rollback.verification.target.files.lockfile.rewrittenByThisRound).toBe(true)
+    expect(rollback.verification.target.files.lockfile.match).toBe(false)
+    expect(rollback.stepProblems).toEqual([])
+  })
+
+  it('does not certify a restore in switch.md when the hand-over measured nothing', async () => {
+    const { fixture: f, proposalDirectory } = await prepared()
+    const { runner } = fakeRunner({
+      repository: f.repository,
+      failInstallIn: [f.profile],
+      concurrentEdit: {
+        directory: f.repository,
+        path: path.join(f.repository, 'package.json'),
+        apply: async (file) => {
+          const manifest = JSON.parse(await readFile(file, 'utf8'))
+          await writeFile(file, JSON.stringify({ ...manifest, userConcurrentEdit: 'KEEP ME' }, null, 2) + '\n', 'utf8')
+        },
+      },
+    })
+    const switched = await runSwitch(f, ['--proposal', path.join(proposalDirectory, 'proposal.json'), '--now', SWITCHED_AT], runner)
+    expect((switched.value as any).conclusion).toBe('switch-failed-handover')
+    const report = await readFile(path.join(proposalDirectory, 'switch.md'), 'utf8')
+    // A document that certifies a restore nobody performed is the R2 misreport one
+    // layer up, in the artifact a human actually reads.
+    expect(report).toContain('未执行任何核验')
+    expect(report).not.toContain('全部回到基线')
+    expect(report).not.toContain('已回到切换前')
+  })
+
+  it('attributes a watched change only on evidence: a declared digest, or a command that owns the path', () => {
+    const change = { path: '/repo/package.json', relative: 'package.json', side: 'maintenance', beforeSha256: 'a', afterSha256: 'b' }
+    // A phase that DECLARED that exact write, and the bytes match: ours.
+    expect(attributeChange({ change, declared: [{ path: '/repo/package.json', sha256: 'b' }] })).toEqual({ attributed: true, basis: 'declared-write' })
+    // Declared, but the bytes on disk are not the ones it wrote: somebody else wrote.
+    expect(attributeChange({ change, declared: [{ path: '/repo/package.json', sha256: 'c' }] })).toEqual({ attributed: false, basis: 'declared-write-mismatch' })
+    // A path that was merely WRITABLE during a phase that wrote nothing is not ours.
+    expect(attributeChange({ change, declared: [], scope: STEP_WRITE_SCOPE['maintenance-dependencies'] }))
+      .toEqual({ attributed: false, basis: 'undeclared' })
+    // A package-manager phase may claim only its own side's lockfile…
+    const lockChange = { path: '/repo/pnpm-lock.yaml', relative: 'pnpm-lock.yaml', side: 'maintenance', beforeSha256: 'a', afterSha256: 'b' }
+    expect(attributeChange({ change: lockChange, commandScope: true, scope: STEP_WRITE_SCOPE['maintenance-install'] })).toEqual({ attributed: true, basis: 'command-scope' })
+    // …and never the OTHER side's file of the same name.
+    const targetLock = { path: '/profile/pnpm-lock.yaml', relative: 'pnpm-lock.yaml', side: 'target', beforeSha256: 'a', afterSha256: 'b' }
+    expect(attributeChange({ change: targetLock, commandScope: true, scope: STEP_WRITE_SCOPE['maintenance-install'] })).toEqual({ attributed: false, basis: 'undeclared' })
+    expect(attributeChange({ change: targetLock, commandScope: true, scope: STEP_WRITE_SCOPE['target-install'] })).toEqual({ attributed: true, basis: 'command-scope' })
+  })
+})
+
+/** A git fact about the maintenance worktree, for the includedInputs assertion. */
+function git(repository: string, ...args: string[]): string {
+  return runGit(repository, ...args).trim()
+}

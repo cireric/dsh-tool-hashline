@@ -42,7 +42,7 @@ import { validateCandidate, validationAuthorization, writeCandidateReport } from
 import { describeConfig, requireRole, saveConfig, stateDirectory } from './config.mjs'
 import { verifyInvocationContext } from './context.mjs'
 import { buildIncident, DEFAULT_FEATURE, incidentDirectory, registerNeedsTriageIssues, validateSeqBounds, writeIncidentBundle } from './incidents.mjs'
-import { appendConsentRecord, AUTO_APPROVAL_FLAGS, bindingOf, buildProposal, candidateDirectoryProblem, CONSENT_SCOPES, consentDrift, consentStatus, DECISIONS, freshnessDrift, locateUserReply, makeConsentRecord, proposalEligibility, proposalHashOf, proposalPlacementProblem, readConsent, readProposal, readVerificationCommands, resolveAssessment, scopeFor, writeProposal } from './proposals.mjs'
+import { appendConsentRecord, AUTO_APPROVAL_FLAGS, bindingOf, buildProposal, candidateDirectoryProblem, CONSENT_SCOPES, consentDrift, consentStatus, DECISIONS, driftSummary, freshnessDrift, locateUserReply, makeConsentRecord, proposalEligibility, proposalHashOf, proposalPlacementProblem, readConsent, readProposal, readVerificationCommands, resolveAssessment, scopeFor, writeProposal } from './proposals.mjs'
 import { readSessionArtifact } from './session-log.mjs'
 import { affectedUserChanges, candidateVerdictOf, switchAuthorization, switchTarget, targetProfileProblem, targetStateOf } from './switch.mjs'
 import { assessUpgrade, COMPONENTS, createMetadataQueries, offlineSources, prepareSources, TARGET_ROLES, upgradeDirectory, upstreamRepositories, writeUpgradeAssessment } from './upgrades.mjs'
@@ -407,6 +407,10 @@ function switchValue(report) {
       ...entry.detail === undefined ? {} : { detail: entry.detail },
     })),
     writtenFiles: report.writtenFiles,
+    // A watched file somebody else changed is the one fact a reader must see
+    // beside writtenFiles: it is why a failed round handed the scene over
+    // instead of restoring it (R1/D15).
+    unknownChanges: report.unknownChanges ?? [],
     checks: report.checks,
     versionsBefore: report.versionsBefore,
     versionsAfter: report.versionsAfter,
@@ -1253,7 +1257,7 @@ export async function run(argv, environment = { env: {} }) {
           value: {
             command: 'upgrade',
             status: 'stopped',
-            reason: 'the approval basis moved since the proposal was written (' + drift.map((entry) => entry.field + ': ' + String(entry.recorded) + ' -> ' + String(entry.now)).join('、')
+            reason: 'the approval basis moved since the proposal was written (' + driftSummary(drift)
               + '); nothing was recorded — re-run "upgrade assess" and "upgrade propose" for a new answer',
             drift,
             next: 'upgrade assess',

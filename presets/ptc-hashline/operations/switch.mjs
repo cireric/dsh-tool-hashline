@@ -63,7 +63,7 @@ import {
   shortLinkDriver,
   splitDeclared,
 } from './candidates.mjs'
-import { consentDrift, proposalPlacementProblem, textOf } from './proposals.mjs'
+import { consentDrift, driftSummary, proposalPlacementProblem, textOf } from './proposals.mjs'
 import { clip } from './text.mjs'
 /** The markdown code tick, spelled without a raw backtick in this file. */
 const TICK = '\u0060'
@@ -84,6 +84,32 @@ export const BACKUP_DIRECTORY = 'backup'
 export const AFFECTED_MANIFEST_FILES = ['package.json', 'pnpm-lock.yaml', 'pnpm-workspace.yaml']
 /** The maintenance worktree's patch directory prefix. */
 export const AFFECTED_PATCH_PREFIX = 'patches/'
+/**
+ * The watched files each phase of one switch is ALLOWED to write.
+ *
+ * Attribution is decided here, never by "the disk differed between the two
+ * snapshots" (R1/D15). A phase may only claim a file its own declared work
+ * explains: pinning dependencies rewrites the manifest, applying patch decisions
+ * rewrites pnpm-workspace.yaml and patches/, an install rewrites the lockfile.
+ * A watched file that changes outside every scope was written by somebody else —
+ * the user's editor, another process — so it is not this round's write: it stays
+ * out of the restore plan and the round hands over rather than overwriting it.
+ *
+ * No file lock, file watcher or compare-then-copy can prove that no other
+ * process writes between two of our own observations, which is exactly why the
+ * claim is made from scope instead of from elapsed time.
+ *
+ * `patch:*` means "any file under patches/" on the maintenance side and is a
+ * prefix rule; every other entry is an exact relative path on that side.
+ */
+export const STEP_WRITE_SCOPE = {
+  'maintenance-dependencies': [{ side: 'maintenance', relative: 'package.json' }],
+  'maintenance-patches': [{ side: 'maintenance', relative: 'pnpm-workspace.yaml' }, { side: 'maintenance', relative: 'patch:*' }],
+  'maintenance-install': [{ side: 'maintenance', relative: 'pnpm-lock.yaml' }],
+  'maintenance-build': [],
+  'target-install': [{ side: 'target', relative: 'pnpm-lock.yaml' }],
+  'target-verification': [],
+}
 /** The two sides, in the order the report lists them. */
 export const SIDES = ['maintenance', 'target']
 
@@ -121,7 +147,7 @@ export function switchAuthorization(options) {
   const drift = consentDrift({ proposal, baseline: options.baseline, maintenancePath: options.maintenancePath })
   if (drift.length > 0) {
     return {
-      ...refuse('UPG-05', 'the approval basis moved since the proposal was written (' + drift.map((entry) => entry.field + ': ' + String(entry.recorded) + ' -> ' + String(entry.now)).join('、') + '); no target was switched — re-run "upgrade assess" and "upgrade propose" for a new answer', 'upgrade assess'),
+      ...refuse('UPG-05', 'the approval basis moved since the proposal was written (' + driftSummary(drift) + '); no target was switched — re-run "upgrade assess" and "upgrade propose" for a new answer', 'upgrade assess'),
       drift,
     }
   }
@@ -295,6 +321,55 @@ export function affectedUserChanges(options) {
     else unrelated.push(entry)
   }
   return { affected, unrelated }
+}
+
+/**
+ * Whether one observed change falls inside a phase's declared write scope.
+ * @param {{relative: string, side: string}} entry the observed change
+ * @param {string[]} scope the phase's declared writable set
+ * @returns {boolean} true when the phase's own work explains the change
+ */
+export function inWriteScope(entry, scope) {
+  const relative = String(entry.relative ?? '').replaceAll('\\', '/')
+  for (const rule of Array.isArray(scope) ? scope : []) {
+    // The SIDE is part of the rule: a maintenance install may write the
+    // maintenance lockfile, never the target's.
+    if (rule === null || typeof rule !== 'object' || rule.side !== entry.side) continue
+    const hit = rule.relative === 'patch:*'
+      ? relative.startsWith(AFFECTED_PATCH_PREFIX)
+      : relative === rule.relative
+    if (hit) return true
+  }
+  return false
+}
+
+/**
+ * Whether one observed change is this round's own write, and on what evidence.
+ *
+ * Two bases, and only these (R1/D15):
+ *  - `declared-write`: the phase computed the bytes it was about to write, and the
+ *    digest observed afterwards EQUALS that digest. A mismatch means somebody else
+ *    wrote the same path in between, so the phase may not claim it.
+ *  - `command-scope`: the phase ran a package manager, whose output bytes cannot be
+ *    predicted, so it may claim only a path its own side's scope names. The basis
+ *    is recorded as scope rather than as a measured match.
+ *
+ * Anything else is somebody else's change — including a change to a path that was
+ * merely WRITABLE during a phase that wrote nothing, which is exactly how a user's
+ * save inside a phase used to be mistaken for ours.
+ * @param {{change: object, declared?: {path: string, sha256: string}[], scope?: object[], commandScope?: boolean}} options the facts
+ * @returns {{attributed: boolean, basis: string}} the verdict
+ */
+export function attributeChange(options) {
+  const change = options.change ?? {}
+  const declared = (Array.isArray(options.declared) ? options.declared : []).find((entry) => entry?.path === change.path)
+  if (declared !== undefined) {
+    return declared.sha256 === change.afterSha256
+      ? { attributed: true, basis: 'declared-write' }
+      : { attributed: false, basis: 'declared-write-mismatch' }
+  }
+  if (options.commandScope === true && inWriteScope(change, options.scope)) return { attributed: true, basis: 'command-scope' }
+  return { attributed: false, basis: 'undeclared' }
 }
 
 // ── the backup and the watched file set ────────────────────────────────────
@@ -576,6 +651,11 @@ export async function switchTarget(options) {
     failures: [],
     writtenFiles: [],
     restorePlan: [],
+    // Every observed watched-file change, with the phase it happened in and
+    // whether that phase's scope explains it (R1). Only an attributed change
+    // becomes a written file and, with it, a restore-plan entry.
+    attribution: [],
+    unknownChanges: [],
     evidenceDirectory,
     proposalDirectory,
     declaredScripts: (Array.isArray(proposal?.changes?.verification) ? proposal.changes.verification : [])
@@ -589,6 +669,41 @@ export async function switchTarget(options) {
   const interrupt = options.cancel === undefined ? interruptPredicate() : undefined
   const cancel = options.cancel ?? interrupt.cancelled
   const before = watchedSnapshot({ maintenanceRepository, targetDirectory })
+  // The cursor walks forward one PHASE at a time, so every change is labelled
+  // with the work that was running when it appeared. A change nobody's scope
+  // covers is somebody else's, and it never enters the restore plan.
+  let cursor = before
+  // The rollback baseline of BOTH sides, read before the first write. The target
+  // is never assumed to equal the maintenance worktree: its own resolved
+  // engines, shared-instance evidence and manifest digests are recorded here,
+  // because claiming a restore for a side whose baseline was never measured is a
+  // claim with no basis (D15/UPG-12, R2).
+  const startTarget = resolvedCandidateEngines({ tree: targetDirectory, label: '目标 profile' })
+  const startTargetState = targetStateOf({ path: targetDirectory })
+  const rollbackBaseline = {
+    maintenance: {
+      lockfileSha256: textOf(proposal?.rollback?.lockfileSha256),
+      patchFiles: Array.isArray(proposal?.rollback?.patchFiles)
+        ? proposal.rollback.patchFiles.map((entry) => ({ path: basename(String(entry.path)), sha256: String(entry.sha256) }))
+        : [],
+      engines: {
+        hashline: textOf(proposal?.baseline?.versions?.hashline),
+        toolEdit: textOf(proposal?.baseline?.versions?.toolEdit),
+      },
+    },
+    target: {
+      engines: {
+        hashline: textOf(startTarget.engines.hashline?.version),
+        toolEdit: textOf(startTarget.engines['tool-edit']?.version),
+      },
+      sidesResolved: startTarget.resolution.readSideResolved === true && startTarget.resolution.editSideResolved === true,
+      samePhysicalInstance: startTarget.resolution.samePhysicalInstance === true,
+      insideTarget: startTarget.resolution.insideCandidateTree === true,
+      manifestSha256: startTargetState.manifestSha256,
+      lockfileSha256: startTargetState.lockfileSha256,
+    },
+    note: '两边的回退基线各自独立记录：目标 profile 的原版本/解析路径/共享实例不等于维护仓库的，版本相同也不等于补丁状态相同。',
+  }
   const record = {
     tool: SWITCH_TOOL,
     version: SWITCH_VERSION,
@@ -622,8 +737,11 @@ export async function switchTarget(options) {
     versionsAfter: null,
     engineEvidence: null,
     backup: null,
+    rollbackBaseline,
     steps: state.steps,
     writtenFiles: state.writtenFiles,
+    attribution: state.attribution,
+    unknownChanges: state.unknownChanges,
     checks: state.checks,
     gaps: state.gaps,
     skipped: state.skipped,
@@ -638,6 +756,24 @@ export async function switchTarget(options) {
     },
     next: null,
     nextNote: null,
+  }
+  /**
+   * Observe one finished phase and attribute what it changed.
+   *
+   * `declared` is the list of files the phase itself computed and wrote; a phase
+   * that wrote nothing declares nothing and therefore claims nothing (R1). The
+   * journal is written after every phase, so an interrupted run still says what it
+   * had already touched instead of only what the LAST step happened to leave.
+   */
+  const observe = async (phase, options = {}) => {
+    const now = watchedSnapshot({ maintenanceRepository, targetDirectory })
+    const scope = STEP_WRITE_SCOPE[phase] ?? []
+    for (const change of writtenFilesOf({ before: cursor, after: now })) {
+      const verdict = attributeChange({ change, declared: options.declared, scope, commandScope: options.commandScope === true })
+      state.attribution.push({ ...change, phase, ...verdict })
+    }
+    cursor = now
+    await writeJournal(state.proposalDirectory, record)
   }
   try {
     // 0) a backup that cannot be taken stops the switch BEFORE the first change.
@@ -668,6 +804,7 @@ export async function switchTarget(options) {
     // 2) the maintenance worktree's dependencies and patches.
     const dependencies = await applyDependencyUpdates({ tree: maintenanceRepository, proposal })
     state.gaps.push(...dependencies.gaps)
+    await observe('maintenance-dependencies', { declared: dependencies.writes })
     recordStep(state, {
       name: 'maintenance-dependencies',
       status: 'executed',
@@ -681,6 +818,7 @@ export async function switchTarget(options) {
     for (const item of patches.items) {
       if (item.apply === 'undecided') state.gaps.push('the ' + item.component + ' patch item ' + item.marker + ' is still pending-verification: a switch never turns an undecided item into keep')
     }
+    await observe('maintenance-patches', { declared: patches.writes })
     recordStep(state, {
       name: 'maintenance-patches',
       status: 'executed',
@@ -702,6 +840,7 @@ export async function switchTarget(options) {
     } else {
       state.skipped.push({ name: 'maintenance-install', reason: 'cancelled before this step started' })
     }
+    await observe('maintenance-install', { commandScope: true })
     const verification = Array.isArray(proposal?.changes?.verification) ? proposal.changes.verification : []
     const buildEntry = verification.find((entry) => entry?.name === 'build' && typeof entry?.run === 'string' && entry.run.trim() !== '')
     const declaredScripts = scriptsOf(maintenanceRepository)
@@ -730,6 +869,7 @@ export async function switchTarget(options) {
         await runStep(state, { name: 'maintenance-build', source: 'proposal-changes', command: argv.command, args: argv.args, cwd: maintenanceRepository })
       }
     }
+    await observe('maintenance-build')
 
     // 4) the approved target install tree.
     if (state.failures.length > 0) {
@@ -741,6 +881,7 @@ export async function switchTarget(options) {
       const step = await runStep(state, { name: 'target-install', source: 'switch-own', command: managerCommand(targetManager.manager), args: ['install'], cwd: targetDirectory })
       if (targetManager.problem !== undefined) step.detail = targetManager.problem
     }
+    await observe('target-install', { commandScope: true })
 
     // 5) the target's own evidence: versions, markers, shared instance, link.
     if (state.failures.length > 0) {
@@ -750,10 +891,44 @@ export async function switchTarget(options) {
     } else {
       await verifyTarget({ state, record, proposal, targetDirectory, cancel })
     }
+    await observe('target-verification')
 
     // 6) what actually changed, and the maintenance repository's own result.
-    const after = watchedSnapshot({ maintenanceRepository, targetDirectory })
-    state.writtenFiles.push(...writtenFilesOf({ before, after }))
+    // A path counts as this round's write only when EVERY phase that changed it
+    // had a scope covering it. The cumulative before-digest is the one the FIRST
+    // such phase saw, so the restore copies the round's own pre-state and not a
+    // later, already-attributed one.
+    const cumulative = new Map()
+    for (const entry of state.attribution) {
+      const previous = cumulative.get(entry.path)
+      cumulative.set(entry.path, {
+        path: entry.path,
+        relative: entry.relative,
+        side: entry.side,
+        beforeSha256: previous?.beforeSha256 ?? entry.beforeSha256,
+        afterSha256: entry.afterSha256,
+        attributed: (previous?.attributed ?? true) && entry.attributed,
+        phases: [...(previous?.phases ?? []), entry.phase],
+      })
+    }
+    const changes = [...cumulative.values()].sort((left, right) => left.path.localeCompare(right.path))
+    state.writtenFiles.push(...changes.filter((entry) => entry.attributed).map((entry) => ({
+      path: entry.path,
+      relative: entry.relative,
+      side: entry.side,
+      beforeSha256: entry.beforeSha256,
+      afterSha256: entry.afterSha256,
+    })))
+    // Not this round's write: somebody else changed a watched file. It is named
+    // with the phase it appeared in and kept OUT of the restore plan.
+    state.unknownChanges.push(...changes.filter((entry) => !entry.attributed).map((entry) => ({
+      path: entry.path,
+      relative: entry.relative,
+      side: entry.side,
+      beforeSha256: entry.beforeSha256,
+      afterSha256: entry.afterSha256,
+      phases: entry.phases,
+    })))
     state.restorePlan = state.writtenFiles
       .map((entry) => ({ ...entry, backup: backup.files.find((file) => file.path === entry.path)?.backup ?? null }))
     const repositoryEngines = resolvedCandidateEngines({ tree: maintenanceRepository, label: '维护仓库' })
@@ -935,6 +1110,18 @@ async function conclude(options) {
   }
   // A measured failure: restore THIS round when it is still this round's result.
   const rollback = await restoreRound({ state, record, proposal, targetDirectory, maintenanceRepository, now: record.finishedAt })
+  // The markdown has to say the same thing the JSON says: one section, projected
+  // from the rollback record rather than retyped (R2).
+  record.rollbackSummary = {
+    phase: rollback.phase,
+    steps: rollback.steps,
+    stepProblems: rollback.stepProblems,
+    externalChange: rollback.externalChange,
+    unknownChanges: rollback.unknownChanges,
+    restoredFiles: rollback.restoredFiles,
+    verification: rollback.verification,
+    nextNote: rollback.nextNote,
+  }
   await writeRollbackReport({ rollback, proposalDirectory: state.proposalDirectory })
   await writeSwitchReport({ report: record, proposalDirectory: state.proposalDirectory })
   return record
@@ -954,6 +1141,12 @@ async function conclude(options) {
  */
 async function restoreRound(options) {
   const { state, record, proposal, targetDirectory, maintenanceRepository, now } = options
+  // The two-sided baseline read before the first write. Absent means nothing was
+  // measured, and an unmeasured baseline can never be reported as restored.
+  const rollbackBaseline = record.rollbackBaseline ?? {
+    maintenance: { lockfileSha256: 'unknown', patchFiles: [], engines: { hashline: 'unknown', toolEdit: 'unknown' } },
+    target: { engines: { hashline: 'unknown', toolEdit: 'unknown' }, sidesResolved: false, samePhysicalInstance: false, insideTarget: false, manifestSha256: 'unknown', lockfileSha256: 'unknown' },
+  }
   const rollback = {
     tool: SWITCH_TOOL + '-rollback',
     version: SWITCH_VERSION,
@@ -963,6 +1156,7 @@ async function restoreRound(options) {
     trigger: state.failures.map((entry) => entry.name + ': ' + entry.reason),
     phase: null,
     externalChange: [],
+    unknownChanges: state.unknownChanges,
     restoredFiles: [],
     steps: [],
     verification: null,
@@ -970,6 +1164,19 @@ async function restoreRound(options) {
     next: null,
     nextNote: null,
     note: '回退只覆盖本轮写入的依赖、补丁与安装状态；用户自己的改动（未提交输入、无关文件）不在此范围内，也不被覆盖。',
+  }
+  // 0) a watched file was changed by something this round cannot account for
+  // (R1): the pre-state of that path is no longer what the backup holds, so no
+  // restore may touch it. Keep the scene and hand over.
+  if (state.unknownChanges.length > 0) {
+    rollback.phase = 'handover'
+    rollback.next = 'inspect unknownChanges in switch.json, then decide by hand whether to restore <proposalId>/backup'
+    rollback.nextNote = '有受监视文件的改动无法证明属于本轮（见 unknownChanges，含发生的阶段）：本步不覆盖任何文件，保留现场并交接。'
+    record.phase = 'handover'
+    record.conclusion = 'switch-failed-handover'
+    record.next = rollback.next
+    record.nextNote = '切换失败，且有文件改动不属于本轮：不自动回退、不覆盖现场，交用户确认下一步。'
+    return rollback
   }
   // 1) is it still this round's result?
   const enginesBeforeRestore = resolvedCandidateEngines({ tree: targetDirectory, label: '目标 profile' }).engines
@@ -1008,38 +1215,134 @@ async function restoreRound(options) {
     }
   }
   // 3) the installation state, re-installed from the restored manifests.
+  //
+  // The two re-installs are summarised SEPARATELY, and only these steps decide
+  // whether the restore succeeded (R2). The switch's own failure is why this code
+  // runs at all, so reading it as a rollback failure would make every restore
+  // hand over; the mirror error — a rollback install that exits non-zero while
+  // the record still says 'restored' — is what this list exists to prevent.
+  const rollbackSteps = []
   for (const [name, directory] of [['rollback-maintenance-install', maintenanceRepository], ['rollback-target-install', targetDirectory]]) {
     const manager = managerOf(directory, 'the ' + (name.includes('maintenance') ? 'maintenance repository' : 'target profile'))
-    await runStep(state, { name, source: 'rollback-own', command: managerCommand(manager.manager), args: ['install'], cwd: directory })
+    const step = await runStep(state, { name, source: 'rollback-own', command: managerCommand(manager.manager), args: ['install'], cwd: directory })
+    rollbackSteps.push({
+      name,
+      status: step.status,
+      exitCode: step.exitCode ?? null,
+      timedOut: step.timedOut === true,
+      durationMs: step.durationMs,
+    })
   }
-  rollback.steps = state.steps.map((entry) => ({ name: entry.name, status: entry.status, ...entry.exitCode === undefined || entry.exitCode === null ? {} : { exitCode: entry.exitCode } }))
-  // 4) did the restore land on the proposal's baseline?
+  rollback.steps = rollbackSteps
+  // A missing exit code, a timeout, a refusal or a non-zero exit all prevent a
+  // 'restored' verdict: an unproven re-install is not a restored install.
+  const stepProblems = rollbackSteps
+    .filter((entry) => entry.status !== 'executed' || entry.timedOut || entry.exitCode !== 0)
+    .map((entry) => entry.name + ' ' + (entry.timedOut === true
+      ? 'timed out'
+      : entry.exitCode === null || entry.exitCode === undefined ? entry.status : 'exited ' + String(entry.exitCode)))
+  rollback.stepProblems = stepProblems
+  // 4) did the restore land on the baseline of EACH side?
+  //
+  // Both sides are measured on their OWN facts. The maintenance worktree's
+  // digests cannot stand in for the target's, and the same version number is not
+  // the same patch state, so the target gets its own engine, resolution and
+  // digest comparison (D15/UPG-12).
   const lockNow = digestOfFile(join(maintenanceRepository, 'pnpm-lock.yaml')).digest
   const patchDirectory = join(maintenanceRepository, 'patches')
   const patchesNow = namesIn(patchDirectory).names.filter((name) => name.endsWith('.patch')).sort()
     .map((name) => ({ path: join(patchDirectory, name), sha256: digestOfFile(join(patchDirectory, name)).digest }))
-  const recordedPatches = Array.isArray(proposal?.rollback?.patchFiles) ? proposal.rollback.patchFiles : []
-  const patchMatches = recordedPatches.map((entry) => {
-    const wanted = basename(String(entry.path))
-    const found = patchesNow.find((file) => basename(file.path) === wanted)
-    return { path: wanted, recorded: String(entry.sha256), now: found?.sha256 ?? 'missing', match: found !== undefined && found.sha256 === String(entry.sha256) }
+  const expectedPatches = rollbackBaseline.maintenance.patchFiles
+  const patchMatches = expectedPatches.map((entry) => {
+    const found = patchesNow.find((file) => basename(file.path) === entry.path)
+    return { path: entry.path, recorded: entry.sha256, now: found?.sha256 ?? 'missing', match: found !== undefined && found.sha256 === entry.sha256 }
   })
+  // A patch file this round CREATED and the restore did not remove is a leftover,
+  // not a restore: the recorded list is checked in both directions.
+  const leftoverPatches = patchesNow
+    .map((file) => basename(file.path))
+    .filter((name) => !expectedPatches.some((entry) => entry.path === name))
   const enginesNow = resolvedCandidateEngines({ tree: maintenanceRepository, label: '维护仓库' }).engines
   const engineMatches = [
-    { component: 'hashline', expected: textOf(proposal?.baseline?.versions?.hashline), now: enginesNow.hashline?.version ?? 'unknown' },
-    { component: 'tool-edit', expected: textOf(proposal?.baseline?.versions?.toolEdit), now: enginesNow['tool-edit']?.version ?? 'unknown' },
+    { component: 'hashline', expected: rollbackBaseline.maintenance.engines.hashline, now: enginesNow.hashline?.version ?? 'unknown' },
+    { component: 'tool-edit', expected: rollbackBaseline.maintenance.engines.toolEdit, now: enginesNow['tool-edit']?.version ?? 'unknown' },
   ].map((entry) => ({ ...entry, match: entry.expected !== 'unknown' && entry.expected === entry.now }))
+  const targetNow = resolvedCandidateEngines({ tree: targetDirectory, label: '目标 profile' })
+  const targetStateNow = targetStateOf({ path: targetDirectory })
+  const targetEngines = [
+    { component: 'hashline', expected: rollbackBaseline.target.engines.hashline, now: targetNow.engines.hashline?.version ?? 'unknown' },
+    { component: 'tool-edit', expected: rollbackBaseline.target.engines.toolEdit, now: targetNow.engines['tool-edit']?.version ?? 'unknown' },
+  ].map((entry) => ({ ...entry, measurable: entry.expected !== 'unknown', match: entry.expected === entry.now }))
+  const targetResolution = {
+    sidesResolved: targetNow.resolution.readSideResolved === true && targetNow.resolution.editSideResolved === true,
+    samePhysicalInstance: targetNow.resolution.samePhysicalInstance === true,
+    insideTarget: targetNow.resolution.insideCandidateTree === true,
+  }
+  const targetLockfilePath = join(targetDirectory, 'pnpm-lock.yaml')
+  // The rollback's own install legitimately rewrites a lockfile this round had
+  // already rewritten, so a different digest there proves nothing. A lockfile the
+  // round NEVER wrote is a different matter: its bytes changing means someone
+  // else edited the target while the restore ran.
+  const targetLockfileTouched = state.writtenFiles.some((entry) => entry.path === targetLockfilePath)
+  const targetFiles = {
+    manifest: {
+      expected: rollbackBaseline.target.manifestSha256,
+      now: targetStateNow.manifestSha256,
+      match: rollbackBaseline.target.manifestSha256 === targetStateNow.manifestSha256,
+    },
+    lockfile: {
+      expected: rollbackBaseline.target.lockfileSha256,
+      now: targetStateNow.lockfileSha256,
+      rewrittenByThisRound: targetLockfileTouched,
+      match: rollbackBaseline.target.lockfileSha256 === targetStateNow.lockfileSha256,
+    },
+  }
   rollback.verification = {
-    lockfile: { expected: textOf(proposal?.rollback?.lockfileSha256), now: lockNow, match: textOf(proposal?.rollback?.lockfileSha256) === lockNow },
+    lockfile: {
+      expected: rollbackBaseline.maintenance.lockfileSha256,
+      now: lockNow,
+      match: rollbackBaseline.maintenance.lockfileSha256 !== 'unknown' && rollbackBaseline.maintenance.lockfileSha256 === lockNow,
+    },
     patchFiles: patchMatches,
+    leftoverPatches,
     engines: engineMatches,
-    note: '核对的是「恢复后是否回到方案的回退基线」：lockfile 摘要、patches/* 摘要与维护仓库解析到的引擎版本。',
+    target: {
+      baselineKnown: rollbackBaseline.target.engines.hashline !== 'unknown' && rollbackBaseline.target.sidesResolved,
+      files: targetFiles,
+      engines: targetEngines,
+      resolution: {
+        expected: {
+          sidesResolved: rollbackBaseline.target.sidesResolved,
+          samePhysicalInstance: rollbackBaseline.target.samePhysicalInstance,
+          insideTarget: rollbackBaseline.target.insideTarget,
+        },
+        now: targetResolution,
+      },
+      note: '目标 profile 按它自己的基线核对（原解析引擎、manifest/lockfile 摘要、共享实例证据），不拿维护仓库的结果顶替；同一版本号也不等于同一补丁状态。',
+    },
+    note: '核对的是「恢复后是否各自回到方案的回退基线」：两边分开核，回退步骤本身必须全部真正成功。',
   }
   const restoreIncomplete = rollback.restoredFiles.some((entry) => entry.action === 'failed' || entry.action === 'no-backup')
   const verified = !restoreIncomplete
+    && rollback.stepProblems.length === 0
     && rollback.verification.lockfile.match
     && patchMatches.every((entry) => entry.match)
+    && leftoverPatches.length === 0
     && engineMatches.every((entry) => entry.match)
+    && targetFiles.manifest.match
+    // The ruling, implemented the way it is written: a lockfile this round itself
+    // rewrote is evidence only (its own rollback install rewrites it again, with
+    // equivalent but different bytes), while a lockfile this round never wrote must
+    // come back byte-identical — a change there means someone else edited the
+    // target while the restore ran (UPG-12, R2).
+    && (targetLockfileTouched || targetFiles.lockfile.match)
+    // A side nothing ever measured is not a restored side: both fields below are
+    // recorded for exactly this gate (T3 step 2, "baseline unknown 时不允许声称恢复").
+    && rollback.verification.target.baselineKnown
+    && targetEngines.every((entry) => entry.measurable === true && entry.match === true)
+    && targetResolution.sidesResolved === rollbackBaseline.target.sidesResolved
+    && targetResolution.samePhysicalInstance === rollbackBaseline.target.samePhysicalInstance
+    && targetResolution.insideTarget === rollbackBaseline.target.insideTarget
   rollback.kept = [
     'the user\'s uncommitted input recorded in the proposal (rollback.userInputs) — never stashed, committed or reverted',
     'every file outside the declared change set, including unrelated worktree changes',
@@ -1056,11 +1359,13 @@ async function restoreRound(options) {
   }
   rollback.phase = 'handover'
   rollback.next = 'read rollback.json, then restore <proposalId>/backup by hand or re-run "upgrade switch" once the cause is fixed'
-  rollback.nextNote = '恢复后没能核对回到方案的回退基线（见 verification）：状态不明，留证交接，不当作已回退。'
+  rollback.nextNote = '恢复后没能核对该侧回到方案的回退基线（见 stepProblems 与 verification）：状态不明，留证交接，不当作已回退。'
   record.phase = 'handover'
   record.conclusion = 'switch-failed-handover'
   record.next = rollback.next
-  record.nextNote = '切换失败且回退无法核对：从哪一步开始不明见 rollback.json 的 verification 与 restoredFiles，请用户查看后再决定。'
+  record.nextNote = '切换失败且回退无法核对：'
+    + (rollback.stepProblems.length > 0 ? '回退步骤没有全部成功（' + rollback.stepProblems.join('、') + '）；' : '')
+    + '两侧的实际状态见 rollback.json 的 verification 与 restoredFiles，请用户查看后再决定。'
   return rollback
 }
 
@@ -1160,6 +1465,14 @@ export function renderSwitchReport(record) {
     for (const entry of record.writtenFiles) lines.push('- ' + quoted(entry.path) + '：' + quoted(entry.beforeSha256) + ' → ' + quoted(entry.afterSha256))
   }
   lines.push('')
+  if ((record.unknownChanges ?? []).length > 0) {
+    lines.push('### 不属于本轮的改动（未纳入回退）')
+    lines.push('')
+    for (const entry of record.unknownChanges) {
+      lines.push('- ' + quoted(entry.path) + '：' + quoted(entry.beforeSha256) + ' → ' + quoted(entry.afterSha256) + '（出现于 ' + (entry.phases ?? []).join('、') + '）')
+    }
+    lines.push('')
+  }
   lines.push('## 目标核验')
   lines.push('')
   if ((record.checks ?? []).length === 0) {
@@ -1170,6 +1483,58 @@ export function renderSwitchReport(record) {
   lines.push('')
   lines.push('- 切换前版本：hashline ' + quoted(record.versionsBefore?.hashline) + '、tool-edit ' + quoted(record.versionsBefore?.toolEdit) + '、DSH ' + quoted(record.versionsBefore?.dsh))
   lines.push('- 切换后版本（目标解析）：hashline ' + quoted(record.versionsAfter?.hashline) + '、tool-edit ' + quoted(record.versionsAfter?.toolEdit) + '、DSH ' + quoted(record.versionsAfter?.dsh))
+  lines.push('')
+  lines.push('## 回退核验（两侧各自）')
+  lines.push('')
+  const rollbackSummary = record.rollbackSummary
+  // An early hand-over never measures anything, so `verification` stays null. An
+  // empty required list must NEVER read as "everything matched": that is how this
+  // document used to certify a restore that had not even started (R2).
+  const measured = rollbackSummary !== undefined
+    && rollbackSummary.verification !== null
+    && typeof rollbackSummary.verification === 'object'
+  if (rollbackSummary === undefined) {
+    lines.push('本次没有执行回退（切换没有走到失败回退这一步，或回退在改动之前就已停下）。')
+  } else if (!measured) {
+    lines.push('- 回退阶段：**' + String(rollbackSummary.phase ?? 'unknown') + '**')
+    lines.push('- 回退步骤：' + ((rollbackSummary.steps ?? []).length === 0
+      ? '没有执行任何回退命令'
+      : rollbackSummary.steps.map((entry) => entry.name + '（退出码 ' + String(entry.exitCode ?? '—') + '').join('；')))
+    lines.push('- 未执行任何核验：回退在改动任何文件之前就停下了，两侧都没有可核对的结果。')
+    lines.push('- 不属于本轮的改动：' + ((rollbackSummary.unknownChanges ?? []).length === 0 ? '无' : (rollbackSummary.unknownChanges ?? []).map((entry) => entry.path).join('、')))
+    lines.push('- 外部改动：' + ((rollbackSummary.externalChange ?? []).length === 0 ? '无' : (rollbackSummary.externalChange ?? []).map((entry) => entry.path).join('、')))
+    lines.push('- ' + String(rollbackSummary.nextNote ?? ''))
+  } else {
+    const verification = rollbackSummary.verification
+    const targetVerification = verification.target ?? {}
+    const allPatches = (verification.patchFiles ?? []).every((entry) => entry.match)
+    const allEngines = (verification.engines ?? []).every((entry) => entry.match)
+    const allTargetEngines = (targetVerification.engines ?? []).every((entry) => entry.match)
+    const baselineEqual = (targetVerification.resolution?.now?.samePhysicalInstance === targetVerification.resolution?.expected?.samePhysicalInstance)
+      && (targetVerification.resolution?.now?.insideTarget === targetVerification.resolution?.expected?.insideTarget)
+    // The SAME predicate the verdict used, so the document and the JSON cannot
+    // disagree about whether that lockfile was judged at all (R2/T3 step 5).
+    const lockfileVerdict = targetVerification.files?.lockfile?.rewrittenByThisRound === true
+      ? '本轮重写过，摘要不参与判定'
+      : targetVerification.files?.lockfile?.match === true ? '已回到切换前' : '与切换前不同（本轮没有写过它）'
+    lines.push('- 回退阶段：**' + String(rollbackSummary.phase ?? 'unknown') + '**')
+    lines.push('- 回退步骤：' + ((rollbackSummary.steps ?? []).length === 0
+      ? '没有执行任何回退命令'
+      : rollbackSummary.steps.map((entry) => entry.name + '（退出码 ' + String(entry.exitCode ?? '—') + (entry.timedOut === true ? '，超时' : '') + '）').join('；')))
+    lines.push('- 未成功的回退步骤：' + ((rollbackSummary.stepProblems ?? []).length === 0 ? '无' : rollbackSummary.stepProblems.join('、')))
+    lines.push('- 维护仓库：lockfile ' + (verification.lockfile?.match === true ? '已回到基线' : '未回到基线')
+      + '；补丁 ' + (allPatches ? '全部回到基线' : '未全部回到基线')
+      + '；遗留补丁 ' + String((verification.leftoverPatches ?? []).length) + ' 个'
+      + '；解析引擎 ' + (allEngines ? '已回到基线' : '未回到基线'))
+    lines.push('- 目标 profile：基线可核验 ' + (targetVerification.baselineKnown === true ? '是' : '否（基线从未测到，不能声称恢复）')
+      + '；解析引擎 ' + (allTargetEngines ? '已回到切换前' : '未回到切换前')
+      + '；manifest ' + (targetVerification.files?.manifest?.match === true ? '已回到切换前' : '未回到切换前')
+      + '；lockfile ' + lockfileVerdict
+      + '；共享实例 ' + (baselineEqual ? '与切换前一致' : '与切换前不一致'))
+    lines.push('- 外部改动：' + ((rollbackSummary.externalChange ?? []).length === 0 ? '无' : (rollbackSummary.externalChange ?? []).map((entry) => entry.path).join('、')))
+    lines.push('- 不属于本轮的改动：' + ((rollbackSummary.unknownChanges ?? []).length === 0 ? '无' : (rollbackSummary.unknownChanges ?? []).map((entry) => entry.path).join('、')))
+    lines.push('- ' + String(rollbackSummary.nextNote ?? ''))
+  }
   lines.push('')
   lines.push('## 失败、跳过与缺项')
   lines.push('')
