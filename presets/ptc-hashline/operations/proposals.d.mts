@@ -26,11 +26,22 @@ export interface ExecutionBoundary {
 
 export const EXECUTION_BOUNDARY: ExecutionBoundary
 
+/** Bumped when the bound payload gains a required part; an older record is refused. */
+export const BASELINE_FORMAT: number
+
 export interface BaselineSnapshot {
+  format: number
   commit: string
   dirty: string
   /** The uncommitted inputs: HEAD equality alone can never prove a file did not change. */
   changedPaths: string[]
+  /**
+   * The CONTENT of those inputs. Same path, different bytes must not hash the
+   * same, or an approval would silently cover bytes the user never saw (R3/D10).
+   */
+  inputs: { path: string; state: string; kind: string; sha256: string; from?: string }[]
+  /** Present when the input set could not be read at all: never "nothing uncommitted". */
+  inputsProblem?: string
   lockfileSha256: string
   patchFiles: { path: string; sha256: string }[]
   versions: { dsh: string; hashline: string; toolEdit: string }
@@ -194,6 +205,15 @@ export function canonicalJson(value: unknown): string
 export function proposalHashOf(bound: unknown): string
 
 export function baselineSnapshot(baseline: unknown): BaselineSnapshot
+
+/**
+ * Why a proposal's bound inputs cannot be checked, or nothing when they can.
+ * A record written before content binding is refused, never back-filled.
+ */
+export function baselineInputsProblem(proposal: unknown): string | undefined
+
+/** The readable one-line rendering of a drift list, note included. */
+export function driftSummary(drift: { field: string; recorded: unknown; now: unknown; note?: string }[]): string
 
 export function baselineHashOf(baseline: unknown): string
 

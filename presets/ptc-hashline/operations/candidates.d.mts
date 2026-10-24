@@ -76,6 +76,10 @@ export interface IncludedInputFile {
   path: string
   /** A hex SHA-256, or 'missing' / 'unreadable' — never silently empty. */
   sha256: string
+  /** The digest the APPROVAL recorded for this path ('unknown' when it recorded none). */
+  expected: string
+  /** Whether the copied bytes are the approved ones — never assumed, always measured. */
+  match: boolean
   problem?: string
 }
 
@@ -99,10 +103,22 @@ export interface DependencyUpdate {
   changed: boolean
 }
 
+/**
+ * One file a write phase wrote, with the digest read back from disk.
+ *
+ * The switch attributes an observed change to itself only when the phase DECLARED
+ * that path and the observed digest equals this one (R1/D15).
+ */
+export interface DeclaredWrite {
+  path: string
+  /** A hex SHA-256, or 'missing' for a removal. */
+  sha256: string
+}
+
 export function applyDependencyUpdates(options: {
   tree: string
   proposal: Record<string, any>
-}): Promise<{ updates: DependencyUpdate[]; gaps: string[]; written: boolean }>
+}): Promise<{ updates: DependencyUpdate[]; gaps: string[]; written: boolean; writes: DeclaredWrite[] }>
 
 export function decodePatchFileName(name: string): { file: string; package: string; version: string } | undefined
 
@@ -138,6 +154,8 @@ export function applyPatchDecisions(options: { tree: string; proposal: Record<st
   files: PatchMove[]
   changed: string[]
   gaps: string[]
+  /** Every file this call wrote or removed, for the switch's attribution. */
+  writes: DeclaredWrite[]
 }>
 
 export interface ResolutionFacts {

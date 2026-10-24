@@ -125,6 +125,15 @@ export function proposalHashOf(bound) {
   return sha256(canonicalJson(bound))
 }
 
+/**
+ * The baseline record's own shape version.
+ *
+ * Bumped when the bound payload gains a required part, so an OLD proposal is
+ * refused with "re-assess" instead of being silently compared against a new
+ * shape — and never back-filled with the files that happen to be here today.
+ */
+export const BASELINE_FORMAT = 2
+
 /** A string field, or 'unknown' — never an empty cell standing in for a fact. */
 export function textOf(value) {
   return typeof value === 'string' && value !== '' ? value : 'unknown'
@@ -149,9 +158,28 @@ function patchDigestsOf(repository) {
 export function baselineSnapshot(baseline) {
   const repository = baseline?.repository ?? {}
   return {
+    // The record's own shape version: a proposal written before content binding
+    // carries no `inputs`, and that absence must refuse rather than be refilled
+    // with today's files (R3).
+    format: BASELINE_FORMAT,
     commit: textOf(repository.commit),
     dirty: textOf(repository.dirty),
     changedPaths: [...(Array.isArray(repository.changedPaths) ? repository.changedPaths : [])].map(String).sort(),
+    // The CONTENT of every uncommitted input. Names alone cannot tell v1 from v2
+    // at the same dirty path, so these digests are part of the bound payload.
+    inputs: (Array.isArray(repository.changedInputs) ? repository.changedInputs : [])
+      .map((entry) => ({
+        path: textOf(entry?.path),
+        state: textOf(entry?.state),
+        kind: textOf(entry?.kind),
+        sha256: textOf(entry?.sha256),
+        ...entry?.from === undefined ? {} : { from: textOf(entry.from) },
+      }))
+      .sort((left, right) => left.path.localeCompare(right.path)),
+    // A read FAILURE is not "no uncommitted input": it is carried into the bound
+    // payload so the digest differs from a genuinely clean worktree, and so the
+    // proposal is refused instead of approved against bytes nobody read.
+    ...typeof repository.changedInputsProblem === 'string' ? { inputsProblem: repository.changedInputsProblem } : {},
     lockfileSha256: textOf(repository.lockfileSha256),
     patchFiles: patchDigestsOf(repository),
     versions: {
@@ -503,6 +531,41 @@ export function bindingOf(proposal) {
 }
 
 /**
+ * Why a proposal's bound inputs cannot be checked, or nothing when they can.
+ *
+ * A record written before content binding has no `baseline.inputs`. Filling it
+ * from the files that are here NOW would be the exact defect this field exists to
+ * prevent — it would bless bytes nobody approved — so the record is refused with
+ * the two commands that re-establish an approval from scratch (R3).
+ * @param {object} proposal the written proposal
+ * @returns {string | undefined} the refusal reason
+ */
+export function baselineInputsProblem(proposal) {
+  const baseline = proposal?.baseline ?? {}
+  if (typeof baseline.inputsProblem === 'string') {
+    return 'the uncommitted inputs could not be read when this proposal was built (' + baseline.inputsProblem + '): an unread input set is not an empty one, so this approval cannot be checked and is refused. Fix the worktree access and re-run "upgrade assess" and "upgrade propose"'
+  }
+  if (baseline.format === BASELINE_FORMAT && Array.isArray(baseline.inputs)) return undefined
+  return 'this proposal carries no content-bound baseline (baseline.format ' + String(baseline.format ?? 'unknown') + ', baseline.inputs ' + (Array.isArray(baseline.inputs) ? 'present' : 'absent') + '): its approval cannot be checked against the bytes on disk now, so it is refused. Re-run "upgrade assess" and "upgrade propose" for a new answer, and show the new proposal to the user'
+}
+
+/**
+ * The one-line rendering of a drift list.
+ *
+ * Every refusal that names drift goes through this, so the `note` — the part that
+ * says WHY and what to run next — reaches the user instead of being dropped in
+ * favour of a bare "null -> null" (R3).
+ * @param {{field: string, recorded: unknown, now: unknown, note?: string}[]} drift the drifted fields
+ * @returns {string} the readable summary
+ */
+export function driftSummary(drift) {
+  return (Array.isArray(drift) ? drift : [])
+    .map((entry) => entry.field + ': ' + String(entry.recorded) + ' -> ' + String(entry.now)
+      + (typeof entry.note === 'string' && entry.note !== '' ? '（' + entry.note + '）' : ''))
+    .join('、')
+}
+
+/**
  * The drift between what an assessment recorded and the baseline re-collected now.
  *
  * The components' own baseline versions are the input a proposal rests on: if
@@ -539,6 +602,10 @@ export function freshnessDrift(assessment, baseline) {
  */
 export function consentDrift(options) {
   const drift = []
+  const inputsProblem = baselineInputsProblem(options.proposal)
+  if (inputsProblem !== undefined) {
+    drift.push({ field: 'baseline.inputs', recorded: 'content-bound baseline', now: 'absent', note: inputsProblem })
+  }
   const current = baselineHashOf(options.baseline)
   if (current !== options.proposal?.baselineHash) {
     drift.push({

@@ -2,12 +2,15 @@
  * Baseline collection: real resolved versions, patch evidence from build files,
  * and explicit `unknown` for anything that cannot be established.
  */
+import { execFileSync } from 'node:child_process'
+import { createHash } from 'node:crypto'
 import { mkdir, mkdtemp, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import * as os from 'node:os'
 import * as path from 'node:path'
 import { afterEach, describe, expect, it } from 'vitest'
-import { collectBaseline, patchEvidence, readManifest } from '../../presets/ptc-hashline/operations/baseline.mjs'
+import { baselineInputsProblem, baselineHashOf, baselineSnapshot, consentDrift, driftSummary } from '../../presets/ptc-hashline/operations/proposals.mjs'
+import { collectBaseline, patchEvidence, readChangedInputs, readManifest, readRepositoryState } from '../../presets/ptc-hashline/operations/baseline.mjs'
 
 const dirs: string[] = []
 const installationRoot = process.cwd()
@@ -148,5 +151,145 @@ describe('baseline: the running combination as actually resolved', () => {
     // Nothing is fabricated: a package that cannot resolve says so.
     const requireFrom = createRequire(path.join(emptyRoot, 'package.json'))
     expect(readManifest(requireFrom, 'package-that-cannot-resolve').version).toBe('unknown')
+  })
+})
+
+/**
+ * R3/D10: the baseline binds the CONTENT of every uncommitted input.
+ *
+ * A path list is not an input. The same dirty path holding v1 at proposal time and
+ * v2 at switch time used to hash identically, so an approval silently covered
+ * bytes the user never saw.
+ */
+describe('baseline: an uncommitted input is bound to its CONTENT, not its name', () => {
+  const git = (repository: string, ...args: string[]): string =>
+    execFileSync('git', ['-C', repository, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+
+  /** A one-commit worktree, so every later write is genuinely uncommitted. */
+  async function seededRepo(): Promise<string> {
+    const repository = await temp('baseline-content-')
+    await writeFile(path.join(repository, 'source.js'), 'v0\n', 'utf8')
+    await writeFile(path.join(repository, 'gone.txt'), 'bye\n', 'utf8')
+    await writeFile(path.join(repository, 'old-name.txt'), 'rename me\n', 'utf8')
+    git(repository, 'init', '-q')
+    git(repository, 'add', '.')
+    git(repository, '-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'baseline')
+    return repository
+  }
+
+  it('hashes two different contents at the SAME dirty path differently', async () => {
+    const repository = await seededRepo()
+    await writeFile(path.join(repository, 'source.js'), 'v1\n', 'utf8')
+    const first = readRepositoryState(repository)
+    const firstHash = baselineHashOf({ repository: first })
+    await writeFile(path.join(repository, 'source.js'), 'v2-not-validated\n', 'utf8')
+    const second = readRepositoryState(repository)
+    const secondHash = baselineHashOf({ repository: second })
+
+    // The NAMES are identical — which is exactly why names alone cannot bind it.
+    expect(second.changedPaths).toEqual(first.changedPaths)
+    expect(secondHash).not.toBe(firstHash)
+    const entry = (second.changedInputs ?? []).find((input) => input.path === 'source.js')
+    expect(entry?.state).toBe('modified')
+    expect(entry?.kind).toBe('file')
+    // The digest is of the bytes on disk, compared with one computed here.
+    expect(entry?.sha256).toBe(createHash('sha256').update('v2-not-validated\n').digest('hex'))
+
+    // And an approval that named v1 no longer covers v2.
+    const drift = consentDrift({
+      // The projection under test, not a whole written proposal: the snapshot is
+      // what the drift compares, and the shape is checked by the unit above.
+      proposal: { baselineHash: firstHash, baseline: { format: 2, inputs: [] } } as any,
+      baseline: { repository: second },
+    })
+    expect(drift.map((entry2: any) => entry2.field)).toContain('baselineHash')
+  })
+
+  it('reads a spaced name, a Unicode name, a rename pair and a deletion exactly, never as an empty file', async () => {
+    const repository = await seededRepo()
+    await writeFile(path.join(repository, 'a file with spaces.txt'), 'spaced\n', 'utf8')
+    await writeFile(path.join(repository, '中文名称.txt'), 'unicode\n', 'utf8')
+    await mkdir(path.join(repository, 'nested dir'), { recursive: true })
+    await writeFile(path.join(repository, 'nested dir', 'inner.txt'), 'inner\n', 'utf8')
+    git(repository, 'mv', 'old-name.txt', 'new-name.txt')
+    await rm(path.join(repository, 'gone.txt'))
+    const inputs = readChangedInputs(repository).inputs
+    const byPath = new Map(inputs.map((entry) => [entry.path, entry]))
+
+    expect(byPath.get('a file with spaces.txt')).toMatchObject({ state: 'untracked', kind: 'file' })
+    expect(byPath.get('a file with spaces.txt')?.sha256).toBe(createHash('sha256').update('spaced\n').digest('hex'))
+    expect(byPath.get('中文名称.txt')?.sha256).toBe(createHash('sha256').update('unicode\n').digest('hex'))
+    // An untracked DIRECTORY is expanded to its files, never one opaque entry.
+    expect(byPath.get('nested dir/inner.txt')?.state).toBe('untracked')
+    // A rename carries both names, and a deletion is a fact with no bytes.
+    expect(byPath.get('new-name.txt')).toMatchObject({ state: 'renamed', from: 'old-name.txt' })
+    expect(byPath.get('gone.txt')).toMatchObject({ state: 'deleted', kind: 'absent', sha256: 'missing' })
+    // Sorted, so a digest can never depend on git's output order.
+    expect(inputs.map((entry) => entry.path)).toEqual([...inputs.map((entry) => entry.path)].sort((left, right) => left.localeCompare(right)))
+  })
+
+  it('refuses a proposal written before content binding instead of back-filling it from today\'s files', () => {
+    const legacy = { baselineHash: 'a'.repeat(64), baseline: { commit: 'abc1234', dirty: 'dirty', changedPaths: ['source.js'] } }
+    expect(String(baselineInputsProblem(legacy))).toContain('upgrade assess')
+    const drift = consentDrift({ proposal: legacy as any, baseline: { repository: { commit: 'abc1234', changedPaths: ['source.js'] } } })
+    const refused = drift.find((entry: any) => entry.field === 'baseline.inputs')
+    expect(refused).toBeDefined()
+    expect(String(refused?.note)).toContain('baseline.inputs')
+    // The RENDERED refusal must carry that remedy: "null -> null" alone tells the
+    // user nothing about what to run next.
+    const rendered = driftSummary(drift)
+    expect(rendered).toContain('baseline.inputs')
+    expect(rendered).toContain('upgrade assess')
+    // …and it names WHICH side is missing instead of a bare "null -> null".
+    expect(rendered).toContain('content-bound baseline -> absent')
+    // A record that DOES carry the content-bound baseline passes the same check.
+    expect(baselineInputsProblem({ baseline: { format: 2, inputs: [] } })).toBeUndefined()
+  })
+})
+
+describe('baseline: an input set that could not be read is not an empty one', () => {
+  it('refuses a proposal built while the input list was unreadable', () => {
+    // The plain porcelain call works, the content-bound one does not: exactly the
+    // shape a half-working worktree produces. `inputs: []` here would be a lie that
+    // a clean worktree also produces, so it must not collapse into one.
+    const stub = (...args: unknown[]) => {
+      const argv = args[1] as string[]
+      if (argv.includes('rev-parse')) return 'a'.repeat(40)
+      if (argv.includes('-z')) throw new Error('this fixture cannot read a NUL-delimited listing')
+      if (argv.includes('status')) return ' M source.js\n'
+      return ''
+    }
+    const state = readRepositoryState(process.cwd(), { execFileSync: stub as any })
+    expect(state.changedPaths).toEqual(['source.js'])
+    expect(state.changedInputsProblem).toContain('git status could not be read')
+    const snapshot = baselineSnapshot({ repository: state })
+    expect(snapshot.inputs).toEqual([])
+    // The failure is CARRIED, so the digest differs from a genuinely clean worktree.
+    expect(snapshot.inputsProblem).toContain('could not be read')
+    expect(String(baselineInputsProblem({ baseline: snapshot }))).toContain('could not be read')
+    // A clean worktree (no problem, no inputs) is accepted by the same check.
+    expect(baselineInputsProblem({ baseline: { format: 2, inputs: [] } })).toBeUndefined()
+  })
+
+  it('records a merge conflict as unmerged, never as a deletion', async () => {
+    const repository = await temp('baseline-conflict-')
+    const git = (...args: string[]): string => execFileSync('git', ['-C', repository, ...args], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] })
+    await writeFile(path.join(repository, 'shared.txt'), 'base\n', 'utf8')
+    git('init', '-q')
+    git('add', '.')
+    git('-c', 'user.name=fixture', '-c', 'user.email=fixture@example.invalid', 'commit', '-qm', 'base')
+    git('checkout', '-q', '-b', 'other')
+    await writeFile(path.join(repository, 'shared.txt'), 'theirs\n', 'utf8')
+    git('commit', '-qam', 'theirs')
+    git('checkout', '-q', '-')
+    await writeFile(path.join(repository, 'shared.txt'), 'ours\n', 'utf8')
+    git('commit', '-qam', 'ours')
+    try {
+      git('merge', 'other')
+    } catch {
+      // The merge is EXPECTED to fail: the conflict is the fixture.
+    }
+    const entry = readChangedInputs(repository).inputs.find((input) => input.path === 'shared.txt')
+    expect(entry?.state).toBe('unmerged')
   })
 })

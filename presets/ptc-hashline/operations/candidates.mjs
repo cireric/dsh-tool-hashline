@@ -52,12 +52,12 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readFileSync, readdirSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, readFileSync, readdirSync, readlinkSync, realpathSync } from 'node:fs'
 import { cp, mkdir, readFile, readdir, rename, rm, writeFile } from 'node:fs/promises'
 import { createRequire } from 'node:module'
 import { basename, dirname, isAbsolute, join, relative, resolve } from 'node:path'
 import { HASHLINE_PATCH_MARKERS, patchEvidence, sha256File } from './baseline.mjs'
-import { candidateDirectoryProblem, consentDrift, proposalPlacementProblem } from './proposals.mjs'
+import { candidateDirectoryProblem, consentDrift, driftSummary, proposalPlacementProblem } from './proposals.mjs'
 import { clip } from './text.mjs'
 import { PATCH_MARKERS, compareVersions, parseVersion } from './upgrades.mjs'
 
@@ -191,7 +191,7 @@ export function validationAuthorization(options) {
     return {
       ok: false,
       rule: 'UPG-05',
-      reason: 'the approval basis moved since the proposal was written (' + drift.map((entry) => entry.field + ': ' + String(entry.recorded) + ' -> ' + String(entry.now)).join('、') + '); nothing was validated — re-run "upgrade assess" and "upgrade propose" for a new answer',
+      reason: 'the approval basis moved since the proposal was written (' + driftSummary(drift) + '); nothing was validated — re-run "upgrade assess" and "upgrade propose" for a new answer',
       next: 'upgrade assess',
       drift,
     }
@@ -297,20 +297,64 @@ export async function copyCandidateTree(options) {
  */
 export function includedInputsOf(options) {
   const repository = options.baseline?.repository ?? {}
-  const changed = Array.isArray(repository.changedPaths) ? repository.changedPaths.map(String).sort() : []
+  // The APPROVED inputs carry their own digests now, so the copy is compared with
+  // what the user approved instead of only being read (R3/D10). A path whose bytes
+  // moved while the tree was copied is a problem, not a detail: validating the
+  // copy would then be validating bytes the approval never named.
+  const approved = Array.isArray(repository.changedInputs) ? repository.changedInputs : []
+  const wanted = approved.length > 0
+    ? approved.map((entry) => ({
+      path: String(entry.path),
+      expected: typeof entry.sha256 === 'string' ? entry.sha256 : 'unknown',
+      kind: typeof entry.kind === 'string' ? entry.kind : 'file',
+    }))
+    : (Array.isArray(repository.changedPaths) ? repository.changedPaths.map(String).sort() : []).map((path) => ({ path, expected: 'unknown', kind: 'file' }))
   const patchDirectory = join(options.tree, 'patches')
   const listing = namesIn(patchDirectory)
   const patchFiles = listing.names.filter((name) => name.endsWith('.patch')).sort()
     .map((name) => ({ path: join(patchDirectory, name), sha256: digestOfFile(join(patchDirectory, name)).digest }))
+  /**
+   * The copied digest of one input, read the SAME WAY the approval recorded it.
+   *
+   * A symlink is hashed over its link target, exactly like `readChangedInputs`
+   * does, because `readFileSync` follows the link: hashing the content on one side
+   * and the link string on the other would make every symlink input mismatch
+   * forever and refuse a candidate for a reason nobody could fix (R3).
+   */
+  const copiedDigestOf = (entry) => {
+    const path = join(options.tree, entry.path)
+    if (entry.kind !== 'symlink') return digestOfFile(path)
+    try {
+      return lstatSync(path).isSymbolicLink()
+        ? { digest: createHash('sha256').update(String(readlinkSync(path))).digest('hex') }
+        : digestOfFile(path)
+    } catch (error) {
+      const code = error?.code
+      return { digest: code === 'ENOENT' ? 'missing' : 'unreadable', problem: String(code ?? error) }
+    }
+  }
+  const files = wanted.map((entry) => {
+    const facts = copiedDigestOf(entry)
+    return {
+      path: entry.path,
+      sha256: facts.digest,
+      expected: entry.expected,
+      match: entry.expected === 'unknown' || entry.expected === facts.digest,
+      ...facts.problem === undefined ? {} : { problem: facts.problem },
+    }
+  })
   return {
     commit: typeof repository.commit === 'string' && repository.commit !== '' ? repository.commit : 'unknown',
     dirty: typeof repository.dirty === 'string' && repository.dirty !== '' ? repository.dirty : 'unknown',
-    files: changed.map((path) => ({ path, ...digestOfFile(join(options.tree, path)) })).map((entry) => ({ path: entry.path, sha256: entry.digest, ...entry.problem === undefined ? {} : { problem: entry.problem } })),
+    files,
     lockfileSha256: digestOfFile(join(options.tree, 'pnpm-lock.yaml')).digest,
     patchFiles,
-    problems: [...listing.problem === undefined ? [] : [listing.problem],
-      ...changed.map((path) => digestOfFile(join(options.tree, path))).map((entry) => entry.problem).filter((entry) => entry !== undefined)],
-    note: 'commit 只说明已提交的部分；files 是维护仓库的未提交输入（含未跟踪文件），逐个从候选树读取 sha256，因此「HEAD 相同」不会被当作「文件没变」。',
+    problems: [
+      ...listing.problem === undefined ? [] : [listing.problem],
+      ...files.filter((entry) => entry.problem !== undefined).map((entry) => 'the copied tree cannot read the input ' + entry.path + ': ' + entry.problem),
+      ...files.filter((entry) => entry.match === false).map((entry) => 'the input ' + entry.path + ' does not match the approved bytes (approved ' + entry.expected + ', copied ' + entry.sha256 + '): the candidate tree would validate bytes this approval never named'),
+    ],
+    note: 'commit 只说明已提交的部分；files 是维护仓库的未提交输入（含未跟踪文件），从候选树逐个读取 sha256 并与已批准清单比对，因此「HEAD 相同」不会被当作「文件没变」，复制期间源输入变动也不会被当成通过。',
   }
 }
 
@@ -328,6 +372,8 @@ export function includedInputsOf(options) {
  * @returns {Promise<{updates: object[], gaps: string[], written: boolean}>} what was pinned
  */
 export async function applyDependencyUpdates(options) {
+  /** The exact files this call wrote, with the digest read back from disk. */
+  const writes = []
   const manifestPath = join(options.tree, 'package.json')
   let manifest
   try {
@@ -367,8 +413,13 @@ export async function applyDependencyUpdates(options) {
     }
   }
   const written = updates.some((entry) => entry.changed)
-  if (written) await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8')
-  return { updates, gaps, written }
+  if (written) {
+    await writeFile(manifestPath, JSON.stringify(manifest, null, 2) + '\n', 'utf8')
+    // The digest is read BACK from disk, so a caller comparing it with what it
+    // observes later is comparing two measurements, not a computation with itself.
+    writes.push({ path: manifestPath, sha256: digestOfFile(manifestPath).digest })
+  }
+  return { updates, gaps, written, writes }
 }
 
 // ── patch decisions and the version coupling ────────────────────────────────
@@ -468,6 +519,8 @@ export async function applyPatchDecisions(options) {
   const files = []
   const changed = []
   const gaps = []
+  /** The exact files this call wrote or removed, with the resulting digest. */
+  const writes = []
   const plans = []
   const decisions = Array.isArray(options.proposal?.patchDecisions) ? options.proposal.patchDecisions : []
   const candidates = Array.isArray(options.proposal?.candidates) ? options.proposal.candidates : []
@@ -492,6 +545,7 @@ export async function applyPatchDecisions(options) {
     }
     if (allDelete) {
       await rm(join(patchDirectory, file.file), { force: true })
+      writes.push({ path: join(patchDirectory, file.file), sha256: 'missing' })
       files.push({ from: file.file, to: null, action: 'removed' })
       plans.push({ key: specifier + '@' + file.version, nextKey: null, nextPath: '' })
       for (const item of componentItems) items.push({ ...itemFacts(item), apply: 'patch-file-removed', requiresRecut: false })
@@ -501,6 +555,8 @@ export async function applyPatchDecisions(options) {
     if (typeof candidateVersion === 'string' && candidateVersion !== '' && candidateVersion !== file.version) {
       const next = encodePatchFileName(specifier, candidateVersion)
       await rename(join(patchDirectory, file.file), join(patchDirectory, next))
+      writes.push({ path: join(patchDirectory, file.file), sha256: 'missing' })
+      writes.push({ path: join(patchDirectory, next), sha256: digestOfFile(join(patchDirectory, next)).digest })
       files.push({ from: file.file, to: next, action: 'renamed' })
       plans.push({ key: specifier + '@' + file.version, nextKey: specifier + '@' + candidateVersion, nextPath: 'patches/' + next })
       current = { file: next, package: specifier, version: candidateVersion }
@@ -527,11 +583,12 @@ export async function applyPatchDecisions(options) {
       for (const entry of rewritten.missing) gaps.push('the patchedDependencies block registers no entry for ' + entry + ': the patch file moved but the registration did not')
       if (rewritten.text !== before) {
         await writeFile(workspaceFile, rewritten.text, 'utf8')
+        writes.push({ path: workspaceFile, sha256: digestOfFile(workspaceFile).digest })
         changed.push(...rewritten.changed)
       }
     }
   }
-  return { items, files, changed, gaps }
+  return { items, files, changed, gaps, writes }
 }
 
 /** The proposal fields one patch item keeps in the report. */

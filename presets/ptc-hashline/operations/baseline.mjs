@@ -16,7 +16,7 @@
  */
 import { execFileSync } from 'node:child_process'
 import { createHash } from 'node:crypto'
-import { existsSync, readdirSync, readFileSync, realpathSync } from 'node:fs'
+import { existsSync, lstatSync, readdirSync, readFileSync, readlinkSync, realpathSync } from 'node:fs'
 import { createRequire } from 'node:module'
 import { dirname, join, resolve } from 'node:path'
 
@@ -128,6 +128,91 @@ export function patchEvidence(requireFrom, specifier, markers) {
 }
 
 /**
+ * The CONTENT of every uncommitted input, not just its name (R3/D10).
+ *
+ * A path list is not an input: the same dirty path can hold v1 at proposal time
+ * and v2 at switch time, and a hash over names alone would say the approval still
+ * covers bytes the user never saw. Each entry therefore carries the file's own
+ * sha256, and a state that is explicit rather than inferred:
+ *
+ *   - `deleted`   the working tree has no file there (`sha256: 'missing'`) — an
+ *                 absent file is a fact, not an empty one;
+ *   - `unreadable` the file is there and could not be read — never hashed as if
+ *                 it were empty;
+ *   - `symlink`   hashed over the LINK TARGET, because that is what is consumed,
+ *                 and recorded as its own kind so a copy may be compared fairly.
+ *
+ * `-z --untracked-files=all` is used on purpose: a path with spaces, a Unicode
+ * name and a rename pair are all read exactly, and an untracked DIRECTORY is
+ * expanded to its files instead of standing in for them.
+ * @param {string} repository the maintenance worktree
+ * @param {{execFileSync?: Function}} [deps] injectable runner (tests pass a stub)
+ * @returns {{inputs: object[], problem?: string}} the content-bound inputs
+ */
+export function readChangedInputs(repository, deps = {}) {
+  const runner = deps.execFileSync ?? execFileSync
+  const ZERO = '\u0000'
+  let raw
+  try {
+    raw = String(runner('git', ['-C', repository, 'status', '--porcelain=v1', '-z', '--untracked-files=all'], { encoding: 'utf8', stdio: ['ignore', 'pipe', 'pipe'] }))
+  } catch (error) {
+    return { inputs: [], problem: 'git status could not be read: ' + (error instanceof Error ? error.message : String(error)) }
+  }
+  const fields = raw.split(ZERO)
+  const inputs = []
+  for (let index = 0; index < fields.length; index += 1) {
+    const entry = fields[index]
+    if (entry === '' || entry.length < 4) continue
+    const code = entry.slice(0, 2)
+    const path = entry.slice(3)
+    // A rename (or copy) carries the ORIGINAL path as the next NUL-separated field.
+    const renamedFrom = code.includes('R') || code.includes('C') ? fields[index + 1] ?? null : null
+    if (renamedFrom !== null) index += 1
+    inputs.push({ path: path.replaceAll('\\', '/'), ...contentOf(join(repository, path), code, renamedFrom) })
+  }
+  inputs.sort((left, right) => left.path.localeCompare(right.path))
+  return { inputs }
+}
+
+/**
+ * The bytes and the state of one working-tree input.
+ * @param {string} absolute the path on disk
+ * @param {string} code the porcelain XY code
+ * @param {string | null} renamedFrom the original path of a rename, if any
+ * @returns {object} the content facts
+ */
+function contentOf(absolute, code, renamedFrom) {
+  // 'U' is tested FIRST: in a conflicted worktree the codes are DD/DU/UD/AU/UA/UU,
+  // and a conflicted manifest must not be presented to the user as a deletion.
+  const state = code === '??' ? 'untracked'
+    : code.includes('U') ? 'unmerged'
+      : code.includes('D') ? 'deleted'
+        : code.includes('R') ? 'renamed'
+          : code.includes('A') ? 'added'
+            : 'modified'
+  const base = { code, state, ...renamedFrom === null ? {} : { from: renamedFrom.replaceAll('\\', '/') } }
+  let link = null
+  try {
+    link = lstatSync(absolute)
+  } catch (error) {
+    return { ...base, kind: 'absent', sha256: 'missing', ...error?.code === undefined ? {} : { detail: String(error.code) } }
+  }
+  if (link.isSymbolicLink()) {
+    try {
+      return { ...base, kind: 'symlink', sha256: createHash('sha256').update(String(readlinkSync(absolute))).digest('hex') }
+    } catch (error) {
+      return { ...base, kind: 'symlink', sha256: 'unreadable', detail: String(error?.code ?? error) }
+    }
+  }
+  if (!link.isFile()) return { ...base, kind: 'not-a-file', sha256: 'unreadable' }
+  try {
+    return { ...base, kind: 'file', sha256: createHash('sha256').update(readFileSync(absolute)).digest('hex') }
+  } catch (error) {
+    return { ...base, kind: 'file', sha256: 'unreadable', detail: String(error?.code ?? error) }
+  }
+}
+
+/**
  * Read the maintenance repository's VCS facts: commit, dirty state and digests
  * of the files an upgrade would touch.
  *
@@ -158,7 +243,18 @@ export function readRepositoryState(repository, deps = {}) {
       ? readdirSync(patchDir).filter(name => name.endsWith('.patch')).sort()
         .map(name => ({ path: join(patchDir, name), sha256: sha256File(join(patchDir, name)) }))
       : []
-    return { commit, dirty: changedPaths.length === 0 ? 'clean' : 'dirty', changedPaths, lockfileSha256, patchFiles }
+    // The NAMES above only say which paths are dirty; these entries carry the
+    // bytes, so "same path, different content" cannot look unchanged (R3/D10).
+    const changed = readChangedInputs(repository, deps)
+    return {
+      commit,
+      dirty: changedPaths.length === 0 ? 'clean' : 'dirty',
+      changedPaths,
+      changedInputs: changed.inputs,
+      ...changed.problem === undefined ? {} : { changedInputsProblem: changed.problem },
+      lockfileSha256,
+      patchFiles,
+    }
   } catch (error) {
     return { ...unknown, detail: error instanceof Error ? error.message : String(error) }
   }
