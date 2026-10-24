@@ -12,12 +12,15 @@
  *   baseline  report the actual running combination
  *   incident  assemble a redacted evidence bundle for one session/seq range
  *             and register suspected anomalies for triage (INC-01..06)
- *
+ *   upgrade   ASSESS only: a read-only update assessment of the three
+ *             components with its sources, patch decisions and conclusion
+ *             (UPG-01/02/08/11)
  * Only Node builtins: the shipped bundle must run from any working directory
  * with no checkout, no `.scratch` and no root `scripts/` beside it.
  *
  * @module dsh-tool-hashline/presets/ptc-hashline/operations/cli
  */
+import { readFile } from 'node:fs/promises'
 import { homedir } from 'node:os'
 import { dirname, join, resolve } from 'node:path'
 import { fileURLToPath, pathToFileURL } from 'node:url'
@@ -26,6 +29,7 @@ import { describeConfig, requireRole, saveConfig, stateDirectory } from './confi
 import { verifyInvocationContext } from './context.mjs'
 import { buildIncident, DEFAULT_FEATURE, incidentDirectory, registerNeedsTriageIssues, validateSeqBounds, writeIncidentBundle } from './incidents.mjs'
 import { readSessionArtifact } from './session-log.mjs'
+import { assessUpgrade, COMPONENTS, createMetadataQueries, offlineSources, prepareSources, TARGET_ROLES, upgradeDirectory, upstreamRepositories, writeUpgradeAssessment } from './upgrades.mjs'
 
 /** Exit codes: 0 answered, 2 stopped by the workflow guard, 3 refused usage. */
 export const EXIT = { ok: 0, stopped: 2, refused: 3 }
@@ -65,6 +69,9 @@ export function parseFlags(argv) {
  * @property {NodeJS.ProcessEnv} env the process environment (host-managed values)
  * @property {string} [sessionsRoot] override of the sessions root
  * @property {string} [stateDir] override of the operations state directory
+ * @property {(component: string) => Promise<object[]>} [query] metadata provider
+ *   override: the default is the real read-only registry/ref query, and a
+ *   fixture (or an offline run) supplies its own
  */
 
 /**
@@ -86,6 +93,115 @@ export function resolveEnvironment(environment) {
 }
 
 /**
+ * Read the injected metadata records for `upgrade assess`.
+ *
+ * `--sources` exists so a run can be driven by a pinned metadata fixture (and by
+ * a test) instead of a network: it takes a JSON file path or an inline JSON
+ * object with a `records` array. A malformed record is refused rather than
+ * skipped, because a silently dropped record would read as an empty channel.
+ * @param {string | true | undefined} value the flag value
+ * @returns {Promise<{injected: boolean, records: object[]}>} the records, when supplied
+ */
+async function readSourceRecords(value) {
+  if (value === undefined) return { injected: false, records: [] }
+  if (typeof value !== 'string' || value === '') throw new UsageError('--sources needs a JSON file path or an inline JSON object')
+  const trimmed = value.trim()
+  const inline = trimmed.startsWith('{') || trimmed.startsWith('[')
+  let text
+  try {
+    text = inline ? value : await readFile(value, 'utf8')
+  } catch (error) {
+    throw new UsageError('--sources could not be read: ' + (error instanceof Error ? error.message : String(error)))
+  }
+  let parsed
+  try {
+    parsed = JSON.parse(text)
+  } catch (error) {
+    throw new UsageError('--sources is not valid JSON: ' + (error instanceof Error ? error.message : String(error)))
+  }
+  const records = Array.isArray(parsed) ? parsed : (Array.isArray(parsed?.records) ? parsed.records : undefined)
+  if (records === undefined) throw new UsageError('--sources must be an array of records, or an object with a "records" array')
+  return { injected: true, records }
+}
+
+/**
+ * The CLI-shaped answer for one upgrade assessment.
+ *
+ * The whole report lives in the written files; this narrows the assessment to
+ * the verdict, the per-component results and the boundaries, so a skill body can
+ * relay them without parsing markdown.
+ * @param {object} assessment the assessment
+ * @returns {{conclusion: string, summary: string, complete: boolean, verified: boolean, pendingVerification: boolean, conclusions: Record<string, string>, components: object[], target: object, scope: object, manualActions: string[], gaps: string[]}} the value to print
+ */
+function upgradeValue(assessment) {
+  return {
+    conclusion: assessment.conclusion,
+    summary: assessment.summary,
+    complete: assessment.complete,
+    verified: assessment.verified,
+    pendingVerification: assessment.pendingVerification,
+    conclusions: assessment.conclusions,
+    components: assessment.components.map((component) => ({
+      component: component.component,
+      conclusion: component.conclusion,
+      recommended: component.recommended,
+      verified: component.verified,
+      pendingVerification: component.pendingVerification,
+      baseline: component.baseline.version,
+      patches: component.patches.map((item) => ({ file: item.file, decision: item.decision })),
+    })),
+    target: assessment.target,
+    scope: assessment.scope,
+    manualActions: assessment.manualActions,
+    gaps: assessment.gaps,
+  }
+}
+/**
+ * Resolve each configuration role once, so every command reports an unusable
+ * role the SAME way: a path when it resolves, otherwise the reason it does not.
+ * @param {object} described the described configuration
+ * @returns {(role: 'maintenanceRepository' | 'evidenceDirectory') => {path?: string, reason?: string}} the resolver
+ */
+function roleResolver(described) {
+  return (role) => {
+    try {
+      return { path: requireRole(described, role) }
+    } catch (error) {
+      return { reason: error instanceof Error ? error.message : String(error) }
+    }
+  }
+}
+
+/**
+ * The running combination for one command.
+ *
+ * The maintenance role's own reason joins the baseline's gaps when it is
+ * unusable: an absent role must name its cause, exactly as the `baseline`
+ * command does, so nobody has to read 'unknown' without a reason.
+ * @param {{verdict: object, maintenance: {path?: string, reason?: string}}} options the run's facts
+ * @returns {object} the baseline report
+ */
+function collectRunBaseline(options) {
+  const verdict = options.verdict
+  const maintenance = options.maintenance
+  const baseline = collectBaseline({
+    installationRoot: installationRoot(),
+    // A configured role is reported as itself; an unconfigured or unusable one
+    // stays 'unknown' rather than falling back to any working directory.
+    ...maintenance.path === undefined ? {} : { maintenanceRepository: maintenance.path },
+    // Provider/model come from the host's own request record for THIS session;
+    // a session that never sent a request leaves them unknown.
+    ...typeof verdict.evidence?.provider !== 'string' ? {} : { provider: verdict.evidence.provider },
+    ...typeof verdict.evidence?.model !== 'string' ? {} : { model: verdict.evidence.model },
+    presetId: verdict.evidence?.effectivePreset ?? undefined,
+    presetSource: verdict.evidence?.source,
+  })
+  return maintenance.reason === undefined
+    ? baseline
+    : { ...baseline, unknown: [...baseline.unknown, 'maintenance repository: ' + maintenance.reason] }
+}
+
+/**
  * Run one command.
  * @param {string[]} argv command plus arguments
  * @param {Environment} [environment] injected host facts (tests pass fixtures)
@@ -93,8 +209,11 @@ export function resolveEnvironment(environment) {
  */
 export async function run(argv, environment = { env: {} }) {
   const [command, ...rest] = argv
+  // `upgrade` is the one two-word command: its subcommand belongs to the verb,
+  // so it is taken out before the flag parser ever sees a positional argument.
+  const upgradeSubcommand = command === 'upgrade' ? rest[0] : undefined
   const facts = resolveEnvironment(environment)
-  const flags = parseFlags(rest)
+  const flags = parseFlags(upgradeSubcommand === undefined ? rest : rest.slice(1))
   /** A numeric flag, or a usage refusal (never a silent NaN). */
   const numberFlag = (name) => {
     const raw = flags[name]
@@ -149,35 +268,11 @@ export async function run(argv, environment = { env: {} }) {
     const described = await describeConfig(facts.stateDir)
     // An unusable role is reported, not silently dropped: the reason travels
     // into the baseline's `unknown` gaps so the skill body can relay it.
-    const roleStatus = (role) => {
-      try {
-        return { path: requireRole(described, role) }
-      } catch (error) {
-        return { reason: error instanceof Error ? error.message : String(error) }
-      }
-    }
+    const roleStatus = roleResolver(described)
     const context = await verdictFor()
-    const maintenance = roleStatus('maintenanceRepository')
-    const baseline = collectBaseline({
-      installationRoot: installationRoot(),
-      // A configured role is reported as itself; an unconfigured or unusable
-      // one stays 'unknown' rather than falling back to any working directory,
-      // and its reason is listed among the gaps below.
-      ...maintenance.path === undefined ? {} : { maintenanceRepository: maintenance.path },
-      // Provider/model come from the host's own request record for THIS
-      // session; a session that never sent a request leaves them unknown.
-      ...typeof context.evidence?.provider !== 'string' ? {} : { provider: context.evidence.provider },
-      ...typeof context.evidence?.model !== 'string' ? {} : { model: context.evidence.model },
-      presetId: context.evidence?.effectivePreset ?? undefined,
-      presetSource: context.evidence?.source,
-    })
     const value = {
       command: 'baseline',
-      baseline: {
-        ...baseline,
-        // An unusable role is a named gap, not a silent absence.
-        unknown: maintenance.reason === undefined ? baseline.unknown : [...baseline.unknown, 'maintenance repository: ' + maintenance.reason],
-      },
+      baseline: collectRunBaseline({ verdict: context, maintenance: roleStatus('maintenanceRepository') }),
       // The analyzed target is reported beside the eligibility verdict, never
       // folded into it.
       target,
@@ -194,22 +289,14 @@ export async function run(argv, environment = { env: {} }) {
       return { code: EXIT.stopped, value: { command: 'incident', status: 'stopped', reason: verdict.reason, context } }
     }
     const described = await describeConfig(facts.stateDir)
-    let evidenceDirectory
-    let evidenceProblem
-    try {
-      evidenceDirectory = requireRole(described, 'evidenceDirectory')
-    } catch (error) {
-      // D9: a role that is unconfigured or unusable stops ITS write and names
-      // the fix. The read-only analysis below still runs, so the user sees
-      // counts and gaps instead of nothing.
-      evidenceProblem = error instanceof Error ? error.message : String(error)
-    }
-    let maintenance
-    try {
-      maintenance = { path: requireRole(described, 'maintenanceRepository') }
-    } catch (error) {
-      maintenance = { reason: error instanceof Error ? error.message : String(error) }
-    }
+    const roleStatus = roleResolver(described)
+    // D9: a role that is unconfigured or unusable stops ITS write and names the
+    // fix. The read-only analysis below still runs, so the user sees counts and
+    // gaps instead of nothing.
+    const evidence = roleStatus('evidenceDirectory')
+    const evidenceDirectory = evidence.path
+    const evidenceProblem = evidence.reason
+    const maintenance = roleStatus('maintenanceRepository')
     const targetSession = typeof flags['target-session'] === 'string' ? flags['target-session']
       : typeof flags.session === 'string' ? flags.session : facts.sessionId
     if (typeof targetSession !== 'string' || targetSession.trim() === '') {
@@ -266,13 +353,11 @@ export async function run(argv, environment = { env: {} }) {
       }
     }
     const directory = incidentDirectory(evidenceDirectory, targetSession, generatedAt)
-    const baseline = collectBaseline({
-      installationRoot: installationRoot(),
-      ...maintenance.path === undefined ? {} : { maintenanceRepository: maintenance.path },
-      ...incident.route.provider === undefined ? {} : { provider: incident.route.provider },
-      ...incident.route.model === undefined ? {} : { model: incident.route.model },
-      presetId: verdict.evidence?.effectivePreset ?? undefined,
-      presetSource: verdict.evidence?.source,
+    // The analyzed session's own route, not this one's: an incident bundle
+    // carries the combination IT happened under.
+    const baseline = collectRunBaseline({
+      verdict: { ...verdict, evidence: { ...verdict.evidence, provider: incident.route.provider, model: incident.route.model } },
+      maintenance,
     })
     // The bundle is written BEFORE any issue: a triage ticket must never cite a
     // package that does not exist (ADR-0004's partial-success lesson).
@@ -299,7 +384,92 @@ export async function run(argv, environment = { env: {} }) {
       },
     }
   }
-  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline or incident')
+  if (command === 'upgrade') {
+    if (upgradeSubcommand !== 'assess') {
+      throw new UsageError('unknown upgrade command ' + JSON.stringify(upgradeSubcommand ?? '') + '; expected assess')
+    }
+    const verdict = await verdictFor()
+    const context = { eligible: verdict.eligible, status: verdict.status, ...verdict.reason === undefined ? {} : { reason: verdict.reason } }
+    // A wrong or unverifiable mode stops before any file, network or install
+    // action (SCOPE-04/05): the analyzed session never authorizes this one.
+    if (!verdict.eligible) {
+      return { code: EXIT.stopped, value: { command: 'upgrade', status: 'stopped', reason: verdict.reason, context } }
+    }
+    for (const name of ['now', 'target', 'sources']) {
+      if (flags[name] === true) throw new UsageError('--' + name + ' needs a value')
+    }
+    const now = typeof flags.now === 'string' ? flags.now : new Date().toISOString()
+    if (Number.isNaN(Date.parse(now))) throw new UsageError('--now must be an ISO-8601 timestamp')
+    const targetRole = typeof flags.target === 'string' ? flags.target : 'upgrade-target'
+    if (!TARGET_ROLES.includes(targetRole)) throw new UsageError('--target must be one of ' + TARGET_ROLES.join(', '))
+    const described = await describeConfig(facts.stateDir)
+    const roleStatus = roleResolver(described)
+    const maintenance = roleStatus('maintenanceRepository')
+    // The target is REPORTED, never switched: a configured role names where a
+    // consented upgrade could later land, and an unconfigured one stays
+    // 'unknown' rather than being guessed from the working directory.
+    const target = {
+      role: targetRole,
+      path: targetRole === 'maintenance-repository' && maintenance.path !== undefined ? maintenance.path : 'unknown',
+      note: 'Reported only: an assessed target is not a switch target, and nothing here installs or switches.',
+    }
+    // An unusable maintenance role is named among the gaps, so the report never
+    // says 'unknown' without a cause.
+    const baseline = collectRunBaseline({ verdict, maintenance })
+    const injected = await readSourceRecords(flags.sources)
+    let raw
+    if (injected.injected) {
+      raw = injected.records
+    } else {
+      // The query is a seam: the DEFAULT provider is the real read-only
+      // registry/ref query, and a caller (or an offline run) may inject another.
+      const query = environment.query ?? createMetadataQueries({ now, repositories: await upstreamRepositories(baseline) })
+      raw = []
+      for (const component of COMPONENTS) {
+        try {
+          raw.push(...await query(component))
+        } catch (error) {
+          // A failed query is recorded as unverified, never as "no update": an
+          // unavailable source caps the conclusion at defer.
+          raw.push(...offlineSources(now, 'the metadata query failed: ' + (error instanceof Error ? error.message : String(error))).filter((record) => record.component === component))
+        }
+      }
+    }
+    const records = prepareSources(raw, now)
+    const assessment = assessUpgrade({ baseline, records, now, target })
+    const evidence = roleStatus('evidenceDirectory')
+    if (evidence.path === undefined) {
+      // D9: an unconfigured or unusable evidence directory stops ITS write, not
+      // the read-only analysis. Nothing at all is written in that case.
+      return { code: EXIT.stopped, value: { command: 'upgrade', status: 'read-only', reason: evidence.reason, ...upgradeValue(assessment), context } }
+    }
+    const directory = upgradeDirectory(evidence.path, now)
+    let files
+    try {
+      files = await writeUpgradeAssessment({ directory, assessment, records })
+    } catch (error) {
+      // A write failure is neither a usage error (3) nor a completed assessment:
+      // it is "not written" (2), and the reason names the directory to fix.
+      return {
+        code: EXIT.stopped,
+        value: {
+          command: 'upgrade',
+          status: 'incomplete',
+          reason: 'the assessment could not be written to ' + directory + ': ' + (error instanceof Error ? error.message : String(error)),
+          ...upgradeValue(assessment),
+          context,
+        },
+      }
+    }
+    return {
+      // Incomplete evidence was still delivered, and says so (exit 2 is the same
+      // semantics the incident command uses): a pending candidate is not success.
+      code: assessment.complete ? EXIT.ok : EXIT.stopped,
+      value: { command: 'upgrade', status: 'assessed', ...upgradeValue(assessment), evidence: { directory, files }, context },
+    }
+  }
+
+  throw new UsageError('unknown command ' + JSON.stringify(command ?? '') + '; expected context, config, baseline, incident or upgrade assess')
 }
 
 /**

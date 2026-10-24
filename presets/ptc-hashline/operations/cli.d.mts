@@ -3,6 +3,7 @@ import type { BaselineReport } from './baseline.mjs'
 import type { DescribedConfig } from './config.mjs'
 import type { InvocationVerdict } from './context.mjs'
 import type { IncidentReport, IncidentIssueRegistration } from './incidents.mjs'
+import type { PatchDecision, UpgradeAssessment } from './upgrades.mjs'
 
 export const EXIT: { ok: 0; stopped: 2; refused: 3 }
 
@@ -14,6 +15,8 @@ export interface CliEnvironment {
   env: Record<string, string | undefined>
   sessionsRoot?: string
   stateDir?: string
+  /** Metadata provider override: the default is the real read-only registry/ref query. */
+  query?: (component: string) => Promise<Record<string, unknown>[]>
 }
 
 export interface ResolvedEnvironment {
@@ -55,13 +58,43 @@ export interface IncidentValue {
   target?: { session: string; cwd: string }
 }
 
+/** The upgrade command's answer: one read-only assessment and the files it wrote. */
+export interface UpgradeValue {
+  command: 'upgrade'
+  /** 'incomplete' means the analysis finished but its files could not be written. */
+  status: 'assessed' | 'incomplete' | 'read-only' | 'stopped'
+  reason?: string
+  conclusion?: UpgradeAssessment['conclusion']
+  summary?: string
+  complete?: boolean
+  verified?: boolean
+  pendingVerification?: boolean
+  conclusions?: UpgradeAssessment['conclusions']
+  components?: {
+    component: string
+    conclusion: UpgradeAssessment['conclusion']
+    recommended: boolean
+    verified: boolean
+    pendingVerification: boolean
+    baseline: string
+    patches: { file: string; decision: PatchDecision }[]
+  }[]
+  target?: UpgradeAssessment['target']
+  scope?: UpgradeAssessment['scope']
+  manualActions?: string[]
+  gaps?: string[]
+  evidence?: { directory: string; files: { assessment: string; report: string; sources: string } }
+  context: { eligible: boolean; status: string; reason?: string }
+}
+
 /** One command's answer: the argv's first token selects the value shape. */
-export type CliValue = ContextValue | ConfigValue | BaselineValue | IncidentValue
+export type CliValue = ContextValue | ConfigValue | BaselineValue | IncidentValue | UpgradeValue
 
 export function run(argv: ['context', ...string[]], environment?: CliEnvironment): Promise<{ code: number; value: ContextValue }>
 export function run(argv: ['config', ...string[]], environment?: CliEnvironment): Promise<{ code: number; value: ConfigValue }>
 export function run(argv: ['baseline', ...string[]], environment?: CliEnvironment): Promise<{ code: number; value: BaselineValue }>
 export function run(argv: ['incident', ...string[]], environment?: CliEnvironment): Promise<{ code: number; value: IncidentValue }>
+export function run(argv: ['upgrade', ...string[]], environment?: CliEnvironment): Promise<{ code: number; value: UpgradeValue }>
 export function run(argv: string[], environment?: CliEnvironment): Promise<{ code: number; value: CliValue }>
 
 export function main(argv: string[]): Promise<number>

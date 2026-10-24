@@ -84,9 +84,9 @@ start, a seq gap with no bounds given, inverted/negative/non-integer bounds
 and a source whose header names another session. Each of those must produce
 INCOMPLETE or a refusal — never a pass.
 
-## The operations skills (ticket 01: invocation and baseline)
+## The operations skills (invocation, baseline, incidents, upgrade assessment)
 
-Six suites cover the two user-invoked operations skills. Their claim boundary is
+The suites below cover the two user-invoked operations skills. Their claim boundary is
 stated once here: they mount the shipped SKILL ROWS through the real
 `@deepseek-ai/dsh-agent-preset-registry`, which composes an EntryTree through
 the real `@deepseek-ai/cordis-plugin-loader` under a real `createScope`
@@ -140,6 +140,27 @@ standing in for the registry.
   `mayApproveUpgrade: false`; a `--user-report` it supplies is marked
   `userReport.source: subagent` with `standsForUser: false` — an agent message is
   never the user's consent.
+- `operations-upgrade-assessment.spec.ts` — UPG-01/02/08/11. The read-only
+  update assessment: every query lands in `sources.json` with its query time,
+  channel (release / prerelease / commit) and status, and a failed query is
+  `unverified` — never "the latest" — capping the conclusion at `defer`. The
+  four conclusions override in one direction (`insufficient-evidence` >
+  `defer` > `recommend-candidate` > `no-upgrade`), and only three verified
+  stable channels with no newer version reach `no-upgrade`. Each local patch
+  marker is decided keep / redo / delete from the CANDIDATE package's own bytes,
+  with a reason per item; an undecidable item defers instead of guessing. The
+  official DSH gets impact areas and manual steps only, and a real official
+  install stays byte-identical. A key baseline that is unknown (this checkout
+  cannot resolve the official host) still yields a report, marked
+  `pendingVerification` and never "verified". The whole run writes exactly
+  three files under `<evidence>/upgrades/<stamp>/`, leaves the maintenance
+  worktree identical, and neither an incident run nor a wrong-preset run starts
+  it or queries anything. Exit 0 is exercised through a bundle fixture that
+  really carries all three components, in a child process. A component is capped
+  at `defer` while ANY of its three channels is unverified (an unchecked
+  pre-release or branch head could still hide something newer), an unready bound
+  dependency defers even when the baseline cannot be compared, and a write
+  failure reports `incomplete` (exit 2) rather than a usage error.
 - `operations-pack.spec.ts` — PACK-01's entry slice. `pnpm pack`, a real
   install into an unrelated project, and resolution + execution from a foreign
   working directory. An engine the install does not carry reports `unknown`,
