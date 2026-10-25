@@ -1,0 +1,44 @@
+{
+  "id": "custom-model-probe",
+  "kind": "probe",
+  "limits": [
+    "Single-point starter case only; does not establish model benefit or support promotion."
+  ],
+  "provider": {
+    "plugin": "@deepseek-ai/dsh-llm-deepseek-api-key",
+    "credentialEnv": "DEEPSEEK_API_KEY",
+    "config": {
+      "apiKeyEnv": "DEEPSEEK_API_KEY"
+    }
+  },
+  "model": {
+    "provider": "deepseek-official",
+    "model": null,
+    "parameters": {
+      "maxTokens": 4096
+    }
+  },
+  "comparison": ["stock-edit", "hashline-default", "hashline-fallback"],
+  "samples": { "repetitions": 1, "seed": 7 },
+  "order": "interleaved",
+  "budget": {
+    "maxModelRequests": null,
+    "maxTotalTokens": null,
+    "timeoutMs": 120000
+  },
+  "passConditions": {
+    "minFirstCandidateCorrect": null,
+    "maxTotalTokensPerTask": null
+  },
+  "tasks": [
+    {
+      "id": "status-update",
+      "family": "single-point",
+      "class": "known-applicable",
+      "batchBoundary": "first-edit-program",
+      "initial": { "account.txt": "status=pending\nowner=example\n" },
+      "expected": { "account.txt": "status=active\nowner=example\n" },
+      "prompt": "In account.txt change status from pending to active. Preserve the other content."
+    }
+  ]
+}

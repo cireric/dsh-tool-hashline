@@ -94,6 +94,7 @@ export function validateBatch(batch) {
   if (batch.attempt > 0 && typeof batch.retryOf !== 'string') {
     throw new CountingError('EVAL_COUNTING_RETRY', 'attempt ' + batch.attempt + ' of "' + batch.targetId + '" must name the attempt it retries')
   }
+  if (batch.attempt > 0 && batch.outcome === 'first-correct') throw new CountingError('EVAL_COUNTING_RETRY', 'a retry cannot be first-correct')
   if (!OUTCOMES.includes(batch.outcome)) {
     throw new CountingError('EVAL_COUNTING_OUTCOME', 'batch outcome "' + String(batch.outcome) + '" is not one of ' + OUTCOMES.join(', '))
   }
@@ -113,7 +114,7 @@ export function validateCost(cost) {
   for (const field of COST_FIELDS) {
     const value = cost[field]
     if (value === undefined) throw new CountingError('EVAL_COUNTING_COST', 'cost field ' + field + ' is missing; use "unknown" when it cannot be measured')
-    if (value !== 'unknown' && typeof value !== 'number') throw new CountingError('EVAL_COUNTING_COST', 'cost field ' + field + ' must be a number or "unknown"')
+    if (value !== 'unknown' && (typeof value !== 'number' || !Number.isFinite(value) || value < 0)) throw new CountingError('EVAL_COUNTING_COST', 'cost field ' + field + ' must be finite and non-negative or "unknown"')
   }
 }
 
@@ -138,4 +139,28 @@ export function reportSkeleton(targets) {
     batches: [],
     costs: Object.fromEntries(COST_FIELDS.map(field => [field, 'unknown'])),
   }
+}
+
+/** Task-level outcome counts; per-file adoption needs a separate target annotation. */
+export function summarizeRuns(runs, arms) {
+  return Object.fromEntries(arms.map(arm => {
+    const group = runs.filter(run => run.arm === arm)
+    const sum = field => group.length && group.every(r => Number.isFinite(r.trace?.costs?.[field])) ? group.reduce((n, r) => n + r.trace.costs[field], 0) : 'unknown'
+    return [arm, {
+      scheduled: group.length,
+      statuses: Object.fromEntries(['PASS', 'FAIL', 'GAP', 'BLOCKED', 'CANCELLED'].map(s => [s, group.filter(r => r.status === s).length])),
+      finalCorrect: group.filter(r => r.finalCorrect === true).length,
+      finalUnknown: group.filter(r => r.finalCorrect === 'unknown').length,
+      observedEditFailures: group.reduce((n, r) => n + (r.trace?.failures ?? 0), 0),
+      observedRefusals: group.reduce((n, r) => n + (r.trace?.calls?.filter(c => c.name === 'edit' && c.execution === 'refused').length ?? 0), 0),
+      observedToolAccepted: group.reduce((n, r) => n + (r.trace?.calls?.filter(c => c.name === 'edit' && c.isError === false).length ?? 0), 0),
+      changedOnDisk: group.filter(r => r.final?.changed === true).length,
+      observedRecoveries: group.filter(r => r.trace?.recovered).length,
+      partialTasks: group.filter(r => r.partialTask).length,
+      firstCandidateCorrect: group.every(r => typeof r.trace?.firstCandidateCorrect === 'boolean') ? group.filter(r => r.trace.firstCandidateCorrect).length : 'unknown',
+      candidateRetries: group.every(r => Number.isSafeInteger(r.trace?.retries)) ? group.reduce((n, r) => n + r.trace.retries, 0) : 'unknown',
+      perTargetAdoption: 'unknown',
+      costs: Object.fromEntries(COST_FIELDS.map(f => [f, sum(f)])),
+    }]
+  }))
 }

@@ -1,104 +1,53 @@
 # 默认编辑策略：推广评测方案
 
-- 日期：2026-10-25（r2）。r1 是 2026-10-24 的「对照评测方案与运行驱动（票据 10）」，本文并入并改写为整体方案。
-- 依据：[SRS §7](../specs/2026-10-24-hashline-default-editing.md)、[实施计划 r1](2026-10-24-hashline-default-editing-implementation-plan.md)（M6）。
-- 状态：**推广评测方案已定稿；尚无已执行的正式冻结对照。** 后续已有独立 [E3 真实模型冒烟](../acceptance/2026-10-25-default-edit-policy-effectiveness-e3-01.md)，它不属于本方案 S1 正式对照，也不证明推广收益。
-- 不授权：真实模型运行、目标切换、宿主重启或发布（均需用户当次明确同意）。
+2026-10-25，r3。依据[默认策略 SRS §7](../specs/2026-10-24-hashline-default-editing.md)与[协议补充](../specs/2026-10-25-real-model-evaluation-protocol.md)。本轮实现与验收见[实施计划](2026-10-25-real-model-evaluation-implementation-plan.md)、[报告](../acceptance/2026-10-25-real-model-evaluation.md)。尚无正式冻结的真实模型对照，不授权付费执行、目标切换、重启或发布。
 
-## 1. 这份方案覆盖什么
+## 1. S0 → S1 → S2
 
-整体评测 = 从「能不能跑」到「该不该推广」的完整链路，分三个阶段。SRS §7.1 要求「执行前发布并冻结评测方案」，指的是这一整条链路，而不是某一个实现切片。
-
-| 阶段 | 目的 | 产出 | 可否用于推广结论 |
-|---|---|---|---|
-| S0 探针 | 测可行性、成本量级、模型是否会卡死或绕过 | 探针报告 | **否** |
-| S1 正式对照 | SRS §7.3 的完整对照 | 正式报告 | 是（唯一依据） |
-| S2 推广判定 | 按冻结条件判「推广 / 收窄 / 证据不足」 | 结论段 | 是 |
-
-**为什么要有 S0**：SRS §7.1 禁止「看完结果再定阈值」。正式协议的预算与阈值只能凭经验猜——猜低了跑不完，猜高了白烧钱。S0 是在冻结正式协议**之前**取得这些量的唯一诚实方式。S0 与 S1 是两份独立冻结的协议，因此不存在「同一份协议事后改分母」。
-
-## 2. 冻结什么（SRS §7.1 的九项，逐项对照实现）
-
-SRS §7.1 列出九项必须在执行前冻结的内容。下表说明每一项由什么承载，以及**驱动是否真的强制**——不把「写了字段」当成「校验过了」。
-
-| SRS §7.1 要求 | 协议字段 | 驱动强制？ | 说明 |
-|---|---|---|---|
-| 实际依赖及补丁 | `dependencies` | 仅要求存在 | 驱动不校验版本或补丁摘要；由 §5 的独立核对负责 |
-| 模型与参数 | `model.provider` / `.model` / `.parameters` | 是 | 三者缺一即拒绝冻结 |
-| 工具配置 | — | **否（已知缺口）** | 协议目前无该字段，见 §7 |
-| 任务初始内容 | `tasks[].initial` | 是 | 非空字符串 |
-| 独立预期结果 | `tasks[].expected` | 是 | 非空字符串 |
-| 样本与重复安排 | `samples.repetitions` / `.seed` | 是 | 正整数 |
-| 执行顺序 | `order` | 是 | 非空 |
-| 预算 | `budget.maxModelRequests` / `.maxTotalTokens` | 是 | 正整数 |
-| 正确性/成本通过条件 | `passConditions.minFirstCandidateCorrect` / `.maxTotalTokensPerTask` | 是 | 数值 |
-
-另有三项驱动强制、SRS 未单列但 S0/S1 必需：`id`、`createdAt`、`comparison`（≥2 臂）、`tasks`（非空）。
-
-**具体数值不在本文编造**：模型、重复数、预算与阈值由维护者在执行前给出。驱动只保证「给了就能钉住、缺了就不许跑」。
-
-## 3. 任务覆盖（SRS §7.3）
-
-正式协议必须覆盖 13 个族：single-point / repeated-fragment / multi-site / consecutive-edits / external-change / unrelated-long-line / target-long-line / restricted-degradation / large-rewrite / already-satisfied / creation / user-override / special-tool。
-
-每个任务必须给出 `initial`（初始内容）与 `expected`（独立预期）；**用实际 diff 判正确，不用工具成功或模式名称判正确**。
-
-S0 探针可只覆盖子集，但必须声明它不证明什么。当前驱动**未实现** kind 区分（见 §7），因此 S0 协议在补上该能力前无法通过 `freeze`。
-
-## 4. 计数口径（SRS §7.2，实现为检查）
-
-- 四类目标互斥：known-applicable / declared-exception / no-change-needed / applicability-unknown。
-- 已知适用采用率 = 首次尝试 Hashline 的已知适用目标 / 已知适用目标总数；非 Hashline、未尝试、方式 unknown **均留在分母**。
-- 分母为零记「不适用」（`adoptionRate: null`），不记 0% 或 100%。
-- 批次必须声明 `attempt`；`attempt > 0` 必须给出 `retryOf`——这是「修正不得事后并入首批」的执行点。
-- 成本未测到必须写字符串 `"unknown"`，不接受缺项或伪造的 0。
-- 另记全程 Hashline / 非 Hashline / 混合 / 未尝试 / unknown 五态，不以首笔代表全程。
-
-## 5. 执行前的独立核对（驱动之外，必须另行确认）
-
-驱动只校验协议与报告的形状与口径，**不证明**下列事实。S1 开始前必须另行确认并写进报告：
-
-1. `dependencies` 与实际解析一致：引擎版本、物理 realpath、补丁标记（读解析后的构建文件，不认版本号）。
-2. 工具配置与冻结值一致：read 的 caps、edit 的 mode、policy 是否挂载。
-3. 两臂差异只有一处：policy 行挂载与否；其余 preset 行必须相同。
-4. 独立会话、独立工作目录、相同初始内容。
-
-## 6. 用法
-
-1. 写 `protocol.json`。
-2. `pnpm eval:freeze protocol.json --out frozen.json`——缺项即 exit 2，并列出每一处缺口。
-3. 按冻结顺序与重复安排在独立会话执行。
-4. 按 §4 口径填 `report.json`。
-5. `pnpm eval:check frozen.json report.json`——分母不符、批次错标、成本伪造均 exit 2。
-6. 结论只能落在「建议推广 / 建议收窄默认范围 / 证据不足」三者之一；仅采用率提高不构成收益。
-
-## 7. 已知缺口（补齐前不得执行 S0/S1）
-
-下表的驱动、安装包与凭据可用性记录方案制定时的环境，本轮文档整理未重新检查凭据或安装状态。后续固定适配器宿主回归与独立 E3 冒烟已执行，见[当前索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)；它们不证明正式对照驱动已就绪。开始 S0/S1 前须重新核对下列缺口。
-
-| 缺口 | 影响 | 补齐方式 |
+| 阶段 | 目的 | 产出与结论边界 |
 |---|---|---|
-| 无可用驱动 | 无法跑 preset 会话 | headless bundle 不组合 agent-preset registry（`headless/cordis.patch.yml` 中 `agent-preset` 匹配数 0），源码明确拒绝 preset 会话（`headless/src/index.ts:219`）；只有 web-app 组合它。路线见 §8 |
-| 无 kind 字段 | S0 探针无法冻结 | 协议加 kind（probe / formal），probe 必须声明其 limits |
-| 无「工具配置」字段 | SRS §7.1 该项未被强制 | 协议加 `tools` 字段并由驱动校验，或由 §5 第 2 条独立核对并在报告声明 |
-| `dependencies` 仅存在性 | 补丁未生效不会被发现 | §5 第 1 条独立核对 |
-| 无 LLM provider 包 | 本仓库无法发真实请求 | `node_modules/@deepseek-ai/dsh-llm-deepseek` 不存在（checkout 内有源码） |
-| 无模型凭据 | 同上 | 环境内 `DEEPSEEK_API_KEY` / `OPENAI_API_KEY` / `DSH_API_KEY` 均 unset |
+| S0 probe | 测可行性、成本量级、模型停滞/绕过，形成正式预算的依据 | 独立冻结 probe，声明 limits；不能证明收益或支持推广 |
+| S1 formal | 按 SRS §7.3 执行完整冻结对照 | 必须先补齐下列正式执行 GAP；失败和取消不移出分母 |
+| S2 判定 | 按预先冻结条件建议推广、收窄范围或证据不足 | 正确性、返工和总成本均须有证据；高采用率本身不构成收益 |
 
-## 8. 驱动路线（待用户选择）
+S0 与 S1 使用不同协议，不能根据正式结果事后修改模型、预算、分母或阈值。独立 [E3 冒烟](../acceptance/2026-10-25-default-edit-policy-effectiveness-e3-01.md)不并入 S1，本轮多帧复核也不是新增实验。
 
-1. **手动在 Web UI 跑**：可跑，但人工记录引入偏差，且拿不到自动 token 读数。
-2. **给 headless 加 preset 支持**：改 DSH 上游，违反本仓库「不改官方框架」原则，需用户明确同意。
-3. **基于 `agent-loop-testkit` 的进程内驱动**：插件侧，符合原则；需 provider 包与凭据；约 1–2 天。
+## 2. 已有冻结和执行机制
 
-## 9. 现状
+| 条件 | 当前实现与限制 |
+|---|---|
+| kind / limits | probe 允许任务子集并须声明 limits；formal 要求全部 13 族 |
+| 依赖与补丁 | identity 读取实际解析包/运行文件/资源摘要、源 patch、实际补丁标记、单物理引擎、lockfile 与宿主环境；执行前及每样本前拒绝漂移 |
+| 工具配置 | 同一原始 preset 派生三臂并冻结摘要；PTC、Intent gate、persona 保持相同；工具面不同，不等于纯 policy 消融 |
+| 模型与参数 | provider/model 与 AgentOptions 支持参数被冻结；真实请求逐项核对并记录实际参数，未支持参数拒绝 |
+| 任务与 expected | 相对路径→内容；预期独立编写，整树字节校验、独立初始摘要、候选快照与最终 diff；额外文件判错 |
+| 样本与执行顺序 | 独立 cwd/Session；按 seed 旋转臂顺序、重复数和任务清单完整留证 |
+| 成本与预算 | 使用可用 usage（总输入包含缓存），缺失 unknown 并停止后续请求；请求上限在 llm/stream 边界，provider 内部 HTTP 重试 unknown；token 上限是观测停止阈值 |
+| 批次 | first-edit-program：第一段包含 edit 的 run_code 为首批，允许同程序多次 replace；后续含 edit 程序为重试，保留独立 checkpoint。task-end 兼容模式的首次正确/重试 unknown |
+| 检查 | eval:check 从冻结输入、原始事件、回执、初始/候选快照和最终文件重新计算；accepted 不等于推广通过 |
 
-- 协议：**未冻结任何正式协议**。
-- 本推广方案运行：**零次正式对照调用**；另有独立 E3 真实模型冒烟，不计入本方案结果。
-- S0 探针草案（5 族、deepseek-v4.1-flash、100 请求 / 1.2M tokens）保存在被忽略的 `.scratch/hashline-default-editing/probe/`，未入库、未执行，且因 §7 的 kind 缺口当前无法冻结。
+协议形状与[执行命令](../../scripts/evaluation/README.md)各维护一处。具体真实模型、次数、预算、费用上限和阈值由维护者在实验前给出；固定夹具的数值不能沿用为获批真实实验参数。
 
-## 10. 边界
+## 3. 任务覆盖与口径
 
-- 工程通过（票据 09）不等于推广通过；本方案不预判收益。
-- 历史使用观察不是已完成 A/B；样本少或环境不可比时只报观察，不作统计推广。
-- 推广结论不替代目标切换的当次用户授权。
+formal 覆盖 single-point / repeated-fragment / multi-site / consecutive-edits / external-change / unrelated-long-line / target-long-line / restricted-degradation / large-rewrite / already-satisfied / creation / user-override / special-tool。例外和冲突场景按其独立 expected 判断，拒绝不等同于错误写入。
+
+SRS §7.2 原计数规则继续有效：四类适用性互斥，已知适用分母不删除非 Hashline 或失败目标；首选和全程模式分开；首批正确、最终正确、工具接受、实际变更分开；正常首读不算返工；一个 PTC 程序不按内层 edit 数重复计模型往返；未测字段 unknown。当前 run summary 是任务级结果；没有逐“文件＋修改目标”的映射时采用率保持 unknown，不能拿任务 class 冒充逐目标分母。
+
+## 4. 剩余正式执行 GAP
+
+| 缺口 | 当前边界与下一步 |
+|---|---|
+| 真实 provider / 凭据 / 明确预算 | 本轮隔离安装可解析官方 provider 包，但未配置真实凭据和执行路由；固定适配器零真实请求。以后只在独立安装提供固定 provider 和凭据引用，另获执行批准 |
+| 真实模型进程内验证 | 三臂固定适配器已验证装配；provider 实际请求、usage 及取消收费边界尚无本轮真实证据 |
+| 逐目标采用与恢复分类 | 已有 payload、选定模式、成功模式、拒绝码、调用/候选重试、任务部分落盘；跨文件目标映射和按需补读/返工分类待补，不能自动给正式采用率 |
+| 漂移/专用工具等控制端注入 | 协议能冻结任务族，但 runner 不会自动实施外部变更或专用工具夹具，需独立预置控制器并冻结注入时点/内容 |
+| 子会话归并 | 根 Session 可独立配对；发现委派记 GAP，子轨迹尚未自动并入每任务报告。预算仍覆盖隔离宿主所有 llm/stream 请求 |
+| 平台与纯策略消融 | 本轮 Windows；macOS/Linux 未执行。三臂不等同原 auto vs policy 的单变量实验，若要纯策略因果结论须另冻配置 |
+| 推广判定 | 无自动 S2 判定；即使 formal 能冻结，缺指标或可比性不足仍只能证据不足 |
+
+## 5. 驱动选择结论
+
+沿用已有完整宿主验收的官方 boot、registry/loader、生产 AgentLoop 和进程 PTC。agent-loop-testkit 能挂真实 loop，但不装配完整 preset、provider、持久化或 PTC；在已有 host 装配上再挂一次 testkit 不是必要步骤。headless CLI 不支持 preset 的历史限制没有被修改；进程内组合只禁用 headless 启动入口、LLM title 和遥测，复用官方 Web host 的禁用覆盖与子代理模型服务。
+
+未修改官方 DSH 源码、read/edit/preset、依赖版本或日常 profile。任何工程测试、固定夹具或历史轨迹复核都不能证明真实模型收益；后续获得推广依据仍不等于获准目标切换。

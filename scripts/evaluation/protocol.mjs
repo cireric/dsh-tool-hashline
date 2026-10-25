@@ -16,6 +16,8 @@ import { readFileSync } from 'node:fs'
 /** Fields a protocol MUST declare before a run may start (SRS §7.1). */
 export const REQUIRED_FIELDS = [
   'id',
+  'kind',
+  'tools',
   'createdAt',
   'comparison',
   'model',
@@ -71,7 +73,7 @@ export const protocolHash = protocol => createHash('sha256').update(canonicalJso
 export function canonicalJson(value) {
   if (value === null || typeof value !== 'object') return JSON.stringify(value) ?? 'null'
   if (Array.isArray(value)) return '[' + value.map(canonicalJson).join(',') + ']'
-  const keys = Object.keys(value).sort()
+  const keys = Object.keys(value).filter(key => !['undefined', 'function', 'symbol'].includes(typeof value[key])).sort()
   return '{' + keys.map(key => JSON.stringify(key) + ':' + canonicalJson(value[key])).join(',') + '}'
 }
 
@@ -90,6 +92,28 @@ const isObject = value => typeof value === 'object' && value !== null && !Array.
 export function protocolGaps(protocol) {
   const gaps = []
   if (!isObject(protocol)) return ['the protocol must be an object']
+  if (!['probe', 'formal'].includes(protocol.kind)) gaps.push('kind must be probe or formal')
+  if (protocol.kind === 'probe' && (!Array.isArray(protocol.limits) || protocol.limits.length === 0 || protocol.limits.some(x => typeof x !== 'string' || !x.trim()))) gaps.push('probe requires non-empty limits; no promotion claim')
+  for (const field of ['model', 'samples', 'budget', 'passConditions', 'dependencies', 'tools']) {
+    if (!isObject(protocol[field])) gaps.push(field + ' must be an object')
+  }
+  if (isObject(protocol.dependencies) && !isObject(protocol.dependencies.packages)) gaps.push('dependencies must carry captured packages/patches/resources/environment identity')
+  if (isObject(protocol.dependencies)) {
+    for (const field of ['packages', 'patches', 'resources', 'inputs', 'profileInputs', 'driverInputs', 'environment']) {
+      if (!isObject(protocol.dependencies[field])) gaps.push('dependencies.' + field + ' must be a captured object')
+    }
+    for (const field of ['readEngine', 'editEngine']) if (typeof protocol.dependencies[field] !== 'string' || !protocol.dependencies[field]) gaps.push('dependencies.' + field + ' must be a resolved path')
+  }
+  if (isObject(protocol.tools)) {
+    for (const field of ['presetHash', 'providerPlugin', 'providerConfig', 'credentialEnv', 'arms']) {
+      if (protocol.tools[field] === undefined) gaps.push('tools.' + field + ' is required')
+    }
+    if (!isObject(protocol.tools.arms) || (Array.isArray(protocol.comparison) && protocol.comparison.some(arm => !protocol.tools.arms[arm]))) gaps.push('tools.arms must freeze each comparison configuration hash')
+    if (!isObject(protocol.tools.providerConfig)) gaps.push('tools.providerConfig must be an object')
+    const secrets = value => Array.isArray(value) ? value.some(secrets) : isObject(value) && Object.entries(value).some(([key, v]) => ((/key|token|secret|password|authorization/iu.test(key) && !/Env$/u.test(key)) || secrets(v)))
+    if (secrets(protocol.tools.providerConfig)) gaps.push('literal credentials forbidden; use credential env references')
+    if (typeof protocol.tools.credentialEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(protocol.tools.credentialEnv)) gaps.push('tools.credentialEnv must name an environment variable')
+  }
   for (const field of REQUIRED_FIELDS) {
     const value = protocol[field]
     if (value === undefined || value === null) gaps.push('missing required field: ' + field)
@@ -99,6 +123,9 @@ export function protocolGaps(protocol) {
     for (const field of ['provider', 'model', 'parameters']) {
       if (protocol.model[field] === undefined) gaps.push('model.' + field + ' is required')
     }
+    if (!isObject(protocol.model.parameters)) gaps.push('model.parameters must be an object')
+    for (const field of ['provider', 'model']) if (typeof protocol.model[field] !== 'string' || !protocol.model[field].trim()) gaps.push('model.' + field + ' must be non-empty')
+    if (protocol.model.parameters?.maxTokens !== undefined && (!Number.isSafeInteger(protocol.model.parameters.maxTokens) || protocol.model.parameters.maxTokens < 1)) gaps.push('model.parameters.maxTokens must be positive')
   }
   if (isObject(protocol.samples)) {
     for (const field of ['repetitions', 'seed']) {
@@ -112,7 +139,7 @@ export function protocolGaps(protocol) {
   }
   if (isObject(protocol.passConditions)) {
     for (const field of ['minFirstCandidateCorrect', 'maxTotalTokensPerTask']) {
-      if (typeof protocol.passConditions[field] !== 'number') gaps.push('passConditions.' + field + ' must be a number')
+      if (typeof protocol.passConditions[field] !== 'number' || !Number.isFinite(protocol.passConditions[field]) || protocol.passConditions[field] < 0) gaps.push('passConditions.' + field + ' must be a finite non-negative number')
     }
   }
   if (!Array.isArray(protocol.tasks) || protocol.tasks.length === 0) {
@@ -122,18 +149,31 @@ export function protocolGaps(protocol) {
     protocol.tasks.forEach((task, index) => {
       const at = 'tasks[' + index + ']'
       if (!isObject(task)) { gaps.push(at + ' must be an object'); return }
-      for (const field of ['id', 'family', 'initial', 'prompt', 'expected']) {
+      for (const field of ['id', 'family', 'prompt']) {
         if (typeof task[field] !== 'string' || task[field].trim() === '') gaps.push(at + '.' + field + ' must be a non-empty string')
       }
+      for (const field of ['initial', 'expected']) {
+        if (!isObject(task[field]) || Object.values(task[field]).some(value => typeof value !== 'string' && !(field === 'expected' && value === null))) gaps.push(at + '.' + field + ' must map relative filenames to UTF-8 strings (expected null = absent)')
+        else for (const name of Object.keys(task[field])) {
+          if (!name || name.includes('\\') || name.includes(':') || name.startsWith('/') || name.split('/').some(p => !p || p === '.' || p === '..')) gaps.push(at + ': unsafe task filename ' + name)
+        }
+      }
+      if (!['known-applicable', 'declared-exception', 'no-change-needed', 'applicability-unknown'].includes(task.class)) gaps.push(at + '.class is required')
+      if (!['task-end', 'first-edit-program'].includes(task.batchBoundary)) gaps.push(at + '.batchBoundary must be task-end or first-edit-program')
       if (typeof task.family === 'string') families.add(task.family)
     })
-    for (const family of REQUIRED_TASK_FAMILIES) {
+    if (new Set(protocol.tasks.map(t => t?.id)).size !== protocol.tasks.length) gaps.push('duplicate task ids')
+    for (const family of protocol.kind === 'formal' ? REQUIRED_TASK_FAMILIES : []) {
       if (!families.has(family)) gaps.push('tasks must cover the family "' + family + '" (SRS §7.3)')
     }
   }
   if (!Array.isArray(protocol.comparison) || protocol.comparison.length < 2) {
     gaps.push('comparison must name at least two arms (the current auto and the policy)')
   }
+  if (Array.isArray(protocol.comparison) && (new Set(protocol.comparison).size !== protocol.comparison.length || protocol.comparison.some(arm => !['stock-edit', 'hashline-default', 'hashline-fallback'].includes(arm)))) gaps.push('comparison must contain distinct supported arms')
+  if (protocol.order !== 'interleaved') gaps.push('order must be interleaved (seeded rotation)')
+  if (!Number.isSafeInteger(protocol.budget?.timeoutMs) || protocol.budget.timeoutMs < 1) gaps.push('budget.timeoutMs must be positive')
+  if (isObject(protocol.model?.parameters) && Object.keys(protocol.model.parameters).some(k => !['reasoningEffort', 'maxTokens'].includes(k))) gaps.push('unsupported model parameter; this AgentOptions contract supports reasoningEffort/maxTokens only')
   return gaps
 }
 
@@ -148,8 +188,18 @@ export function freezeProtocol(protocol) {
   if (gaps.length > 0) {
     throw new ProtocolError('EVAL_PROTOCOL_INCOMPLETE', 'the protocol cannot be frozen: ' + gaps.join('; '))
   }
-  const frozen = { ...protocol, frozenAt: new Date().toISOString() }
-  return { ...frozen, protocolHash: protocolHash(protocol) }
+  if ('protocolHash' in protocol || 'frozenAt' in protocol) throw new ProtocolError('EVAL_PROTOCOL_ALREADY_FROZEN', 'author a new protocol without freeze metadata')
+  const body = JSON.parse(JSON.stringify(protocol))
+  return { ...body, frozenAt: new Date().toISOString(), protocolHash: protocolHash(body) }
+}
+
+export function assertFrozenProtocol(parsed) {
+  if (typeof parsed?.protocolHash !== 'string' || typeof parsed?.frozenAt !== 'string') throw new ProtocolError('EVAL_PROTOCOL_NOT_FROZEN', 'freeze the protocol before running')
+  const { protocolHash: recorded, frozenAt, ...body } = parsed
+  if (protocolHash(body) !== recorded) throw new ProtocolError('EVAL_PROTOCOL_DRIFTED', 'protocol changed after freeze')
+  const gaps = protocolGaps(body)
+  if (gaps.length) throw new ProtocolError('EVAL_PROTOCOL_INCOMPLETE', gaps.join('; '))
+  return parsed
 }
 
 /**
@@ -168,14 +218,5 @@ export function loadFrozenProtocol(path) {
   } catch (error) {
     throw new ProtocolError('EVAL_PROTOCOL_UNREADABLE', 'cannot read the protocol at ' + path + ': ' + (error instanceof Error ? error.message : String(error)))
   }
-  if (typeof parsed?.protocolHash !== 'string') {
-    throw new ProtocolError('EVAL_PROTOCOL_NOT_FROZEN', 'the protocol at ' + path + ' carries no protocolHash; freeze it before running')
-  }
-  const { protocolHash: recorded, frozenAt, ...body } = parsed
-  if (protocolHash(body) !== recorded) {
-    throw new ProtocolError('EVAL_PROTOCOL_DRIFTED', 'the protocol at ' + path + ' changed after it was frozen; re-freeze and re-approve the run')
-  }
-  const gaps = protocolGaps(body)
-  if (gaps.length > 0) throw new ProtocolError('EVAL_PROTOCOL_INCOMPLETE', gaps.join('; '))
-  return parsed
+  return assertFrozenProtocol(parsed)
 }

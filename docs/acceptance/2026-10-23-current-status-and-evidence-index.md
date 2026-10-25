@@ -1,6 +1,6 @@
 # 当前验收状态与证据索引
 
-更新日期：2026-10-25。本文汇总已有记录，文件名保留最初建档日期。本轮仅整理文档，未重跑构建、业务测试或宿主验收。历史报告保留各轮结果，以下计数不得合并为同一次执行。
+更新日期：2026-10-25。本文汇总已有记录，文件名保留最初建档日期。本轮新增真实模型评测基础设施的离线开发及独立宿主验收，见本表；没有新增付费模型请求。历史报告保留各轮结果，以下计数不得合并为同一次执行。
 
 ## 当前结论
 
@@ -13,8 +13,10 @@
 | 默认策略 F-01/F-02 | Windows 策略模块地址与 read 指引已修复，见 [fix-01](2026-10-25-default-edit-policy-fix-01.md)；非目标 read 保留原指引 |
 | 默认策略 F-03 / E2 | 父用户来源误拒已修复；[fix-02](2026-10-25-default-edit-policy-fix-02.md)记录定向 27 PASS、扩展完整宿主 32 PASS / 0 FAIL，包含在线/持久化父来源、会话隔离、cwd、catch 与 BOM/MV 边界；完整 E2 仍有缺口 |
 | 块定位说明与诊断 | [块定位修复](2026-10-25-hashline-block-locator-fix.md)记录定向 13 PASS、后续新打包完整宿主 33 PASS / 0 FAIL、九项交付门禁 exit 0，交付 ID 21 PASS / 9 BLOCKED；未实现块解析器 |
-| 真实模型 E3 | [e3-01 冒烟](2026-10-25-default-edit-policy-effectiveness-e3-01.md)：10 个真实模型子会话、64 次请求，样本 1/2 各 3/3 PASS，样本 3 为 2 PASS / 1 FAIL（空格差异），样本 5 PASS，样本 4 BLOCKED；轨迹与 prompt 可见性存在 GAP，dev link 环境不证明打包安装，E3 未整体通过 |
+| 真实模型 E3 | [e3-01 冒烟](2026-10-25-default-edit-policy-effectiveness-e3-01.md)：10 个真实模型子会话、64 次请求，样本 1/2 各 3/3 PASS，样本 3 为 2 PASS / 1 FAIL（空格差异），样本 5 PASS，样本 4 BLOCKED；[多帧复核](2026-10-25-real-model-evaluation.md)恢复全部 10 个子会话事件及调用配对；历史实际模式/部分 usage 仍 unknown，dev link 环境不证明打包安装，E3 未整体通过 |
+| 评测基础设施 | [本轮验收](2026-10-25-real-model-evaluation.md)：probe/formal、身份冻结、三臂真实宿主零费用驱动、候选快照和独立文件校验已验证；完整九项门禁 exit 0，交付 21 PASS / 9 BLOCKED。逐目标映射、子轨迹归并、外部刺激与真实 provider 验证仍有 GAP |
 | 推广收益 E4 | [推广评测方案](../plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)已定稿；尚无已执行的正式冻结对照，独立 E3 冒烟不能替代 S1 对照 |
+| 自定义模型配置 | [配置入口增量](2026-10-25-evaluation-config.md)：JSON 模板 + prepare 自动采集身份/冻结，33 项定向回归通过；实际 CLI 生成、防覆盖、未填项拒绝及无凭据 preflight 已验证，无真实模型请求 |
 | 平台与安装状态 | 上述 10-25 修复验收为 Windows 隔离安装；macOS/Linux 已配置 CI，报告尚无实跑结果。没有据隔离验收切换日常 profile；早期用户确认重启不代表后续修复已装入或复验 |
 
 ## 历史失败与修复关系

@@ -23,15 +23,17 @@ const DRIVER = fileURLToPath(new URL('../../scripts/evaluation/driver.mjs', impo
 /** A complete protocol, so each test can break exactly one thing. */
 const complete = () => ({
   id: 'eval-1',
+  kind: 'formal',
+  tools: { presetHash: 'fixture', providerPlugin: 'fixture', providerConfig: {}, credentialEnv: 'EVAL_KEY', arms: { 'stock-edit': 'a', 'hashline-default': 'b' } },
   createdAt: '2026-10-24T00:00:00Z',
-  comparison: ['auto', 'policy'],
-  model: { provider: 'p', model: 'm', parameters: { temperature: 0 } },
-  dependencies: { dsh: '0.2.1-rc.2', engine: '0.2.1-alpha.4' },
+  comparison: ['stock-edit', 'hashline-default'],
+  model: { provider: 'p', model: 'm', parameters: { maxTokens: 1000 } },
+  dependencies: { packages: { fixture: '0' }, patches: {}, resources: {}, inputs: {}, profileInputs: {}, driverInputs: {}, environment: {}, readEngine: 'fixture', editEngine: 'fixture' },
   samples: { repetitions: 3, seed: 7 },
   order: 'interleaved',
-  budget: { maxModelRequests: 100, maxTotalTokens: 500000 },
+  budget: { maxModelRequests: 100, maxTotalTokens: 500000, timeoutMs: 1000 },
   passConditions: { minFirstCandidateCorrect: 0.8, maxTotalTokensPerTask: 20000 },
-  tasks: (REQUIRED_TASK_FAMILIES as string[]).map((family: string) => ({ id: family, family, initial: 'x', prompt: 'do it', expected: 'y' })),
+  tasks: (REQUIRED_TASK_FAMILIES as string[]).map((family: string) => ({ id: family, family, initial: { 'a.txt': 'x' }, prompt: 'do it', expected: { 'a.txt': 'y' }, class: 'known-applicable', batchBoundary: 'task-end' })),
 })
 
 describe('protocol freezing', () => {
@@ -82,7 +84,8 @@ describe('counting rules', () => {
   it('refuses a retry disguised as a first attempt', () => {
     expect(() => validateBatch({ targetId: 'a', attempt: 0, calls: [1], outcome: 'first-correct', retryOf: 'a' })).toThrow(CountingError)
     expect(() => validateBatch({ targetId: 'a', attempt: 1, calls: [1], outcome: 'first-correct' })).toThrow(CountingError)
-    expect(() => validateBatch({ targetId: 'a', attempt: 1, calls: [1], outcome: 'first-correct', retryOf: 'a' })).not.toThrow()
+    expect(() => validateBatch({ targetId: 'a', attempt: 1, calls: [1], outcome: 'first-correct', retryOf: 'a' })).toThrow(CountingError)
+    expect(() => validateBatch({ targetId: 'a', attempt: 1, calls: [1], outcome: 'eventually-correct', retryOf: 'a' })).not.toThrow()
   })
 
   it('refuses an invented zero cost and demands unknown instead', () => {
@@ -106,6 +109,8 @@ describe('the driver', () => {
       const unknownCosts = Object.fromEntries(['inputTokens', 'outputTokens', 'wallMs', 'modelRequests', 'runCodeCalls', 'innerToolCalls', 'reads', 'verifications'].map(field => [field, 'unknown']))
       writeFileSync(reportPath, JSON.stringify({
         protocolHash: frozen.protocolHash,
+        kind: 'formal',
+        runs: Array.from({ length: 3 }, (_, repeat) => complete().tasks.flatMap((task, index) => Array.from({ length: 2 }, (_, i) => ({ taskId: task.id, repeat, arm: complete().comparison[(7 + repeat + index + i) % 2], status: 'BLOCKED', reason: 'fixture only', finalCorrect: 'unknown' })))).flat(),
         targets: [{ id: 'a', class: 'known-applicable', firstAttempt: 'hashline', mode: 'hashline' }],
         rates: { knownApplicable: 1, adoptionRate: 1 },
         batches: [{ targetId: 'a', attempt: 0, calls: [1], outcome: 'first-correct' }],

@@ -56,6 +56,8 @@ pnpm test:delivery
 
 ## 文档入口
 
+真实模型评测的无凭据验证、三臂隔离宿主冒烟、冻结协议及后续付费实验命令见 [evaluation README](scripts/evaluation/README.md)。运行驱动默认只做 preflight；本轮没有启动真实模型对照，未测成本记 unknown，基础设施通过不代表收益或推广通过。
+
 运行目标包含 Windows、macOS 和 Linux；[CI 矩阵](.github/workflows/policy-contract.yml)使用各系统原生路径与 `file:` URL 回归。已执行平台和未覆盖范围以验收索引为准。read 的 `defaultEditPolicyGuidance` 默认关闭，仅本 preset 开启。
 
 - [文档导航](docs/README.md)：按主题关联规格、ADR、计划与各轮验收。
