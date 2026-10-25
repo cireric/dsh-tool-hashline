@@ -1,5 +1,7 @@
 # Hashline 块定位缺失：归属、性质与修复必要性
 
+> 后续状态（2026-10-25）：说明与诊断已通过[正式补丁及隔离交付验收](../acceptance/2026-10-25-hashline-block-locator-fix.md)。下文记录修复前的研究基线；空 resolver 与旧错误文案不代表修复后产物。块解析能力仍未实现。
+
 日期：2026-10-25（Asia/Shanghai）。调查基线：本仓库 HEAD `66d2a42`、已安装 `@hy-sde-org/dsh-tool-edit` / `dsh-hashline` `0.2.1-alpha.4` 加本地补丁。当前用户的 E3 报告与验收索引改动保留。本次仅研究、纯引擎探针及记录问题，没有修改运行依赖、引擎或目标 profile。
 
 ## 结论

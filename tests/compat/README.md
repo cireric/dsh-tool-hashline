@@ -40,7 +40,7 @@ On every upgrade:
    `.../mv-observation.spec.ts`, part of `pnpm test:integration`). The compat suite
    alone uses a fabricated Agent and cannot see the cwd, MV or BOM regressions.
 
-The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22-ptc-hashline-requirements-spec.md).
+The authoritative contract is [requirements v3 §8.1](../../docs/specs/2026-10-22-ptc-hashline-requirements-spec.md).
 
 ### Default-edit policy module paths and guidance
 

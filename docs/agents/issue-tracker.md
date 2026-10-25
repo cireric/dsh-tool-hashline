@@ -1,6 +1,6 @@
 # Issue tracker: Local Markdown
 
-Local issues, draft specs and raw runtime evidence live under `.scratch/` and are not tracked by Git. Durable requirements and implementation plans belong in `docs/specs/` and `docs/plans/`; existing documents under `docs/spec/` keep their current paths.
+Local issues, draft specs and raw runtime evidence live under `.scratch/` and are not tracked by Git. Durable requirements and implementation plans belong in `docs/specs/` and `docs/plans/`. See [documentation maintenance](documentation.md) for ownership and cleanup rules.
 
 ## Conventions
 
@@ -16,7 +16,7 @@ Raw logs and local tickets are not restored by cloning this repository. Promote 
 
 ## Existing contents
 
-`.scratch/dsh-ptc-roles/` is a copied-out project (it has its own `AGENTS.md`, `docs/`, `preset/`, `scripts/`), not a feature directory. Don't treat it as one, and don't create a feature slug that collides with its name.
+`.scratch/dsh-ptc-roles/`曾保存迁入来源副本，当前 checkout 已不存在；它不是必需的 feature 目录。来源 commit 与资源清单见[基础规格](../specs/2026-10-22-ptc-hashline-requirements-spec.md)和[迁入证据](../evidence/2026-10-22-ptc-gate-inventory.txt)。
 
 ## When a skill says "publish to the issue tracker"
 

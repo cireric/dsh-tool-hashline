@@ -2,8 +2,8 @@
 
 - 日期：2026-10-24；版本：r1。
 - 权威需求：[默认编辑策略 SRS 1.1](../specs/2026-10-24-hashline-default-editing.md)。本文解释实施方案，不另立需求正文。
-- 状态：设计草案已形成，测试 seam 待用户确认；尚未实现、未执行本需求验收。
-- 授权：本轮只编写计划。测试 seam 确认、拆票或 tracker 的 ready-for-agent 标签均不授权开发、安装、目标切换、宿主重启或发布。
+- 状态说明（2026-10-25）：票据 01～08 的[工程切片已交付](../acceptance/2026-10-24-default-edit-policy-engineering.md)，后续 [fix-01](../acceptance/2026-10-25-default-edit-policy-fix-01.md) 与 [fix-02](../acceptance/2026-10-25-default-edit-policy-fix-02.md)已复验；完整 E2、E3 与 E4 尚未完成。正文设计事实按实施前时点阅读，当前缺口见[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。
+- 授权边界：计划与票据状态不自动授权安装、目标切换、宿主重启或发布。历史工程实现不代表真实模型或推广验收已通过。
 
 ## Problem Statement
 

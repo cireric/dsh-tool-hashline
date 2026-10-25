@@ -1,10 +1,10 @@
 # PTC Hashline 运维 Skills 开发实施计划
 
 日期：2026-10-23  
-版本：r6；状态：需求已收敛至权威规格，本文为从属实施参考，尚未授权开发或真实升级。
+版本：r6；状态说明更新于 2026-10-25：两份 skill 及工作流已实现，本文保留设计与实施依据；实际覆盖与缺口见[交付验收](../acceptance/2026-10-24-delivery-acceptance-report.md)。目标切换仍需用户当次明确同意。
 范围：两个仓库内维护、仅对 `ptc-hashline` 生效的 skill；问题取证与三方升级检查/评估/经用户同意后执行。
 
-需求、工作流和验收要求以[需求规格](../specs/2026-10-23-ptc-hashline-operations-skills.md)为准。本文保留技术调查、建议方案、实施顺序与验证方法；与规格不一致时先修订本文，不以本文扩展需求。需求定稿不触发开发，实施仍需用户明确指令。
+需求、工作流和验收要求以[需求规格](../specs/2026-10-23-ptc-hashline-operations-skills.md)为准。本文保留技术调查、建议方案、实施顺序与验证方法；与规格不一致时先修订本文，不以本文扩展需求。后续需求变更仍按规格确认；本计划及已完成验证不自动授权真实升级。
 
 本文已从 `.scratch/ptc-hashline-operations-skills/implementation-plan.md` 迁入版本库，此处为唯一实施计划。
 
@@ -12,7 +12,7 @@
 
 拆票从需求规格的工作流与验收 ID 出发，使用本文 M0—M5 安排依赖顺序；阶段不是必须一一对应的大票。每张实现票引用对应规格条款/验收 ID，并写明可独立验证的交付结果。布局和技术方案可在规格边界内调整，无须把常规实现选择重新当作产品需求。
 
-依据：[根 AGENTS](../../AGENTS.md)、[权威规格](../spec/2026-10-22-ptc-hashline-requirements-spec.md)、[GLOSSARY](../../GLOSSARY.md)、[ADR-0003](../adr/0003-effective-working-directory.md)/[0004](../adr/0004-mv-create-intent-and-snapshot-order.md)/[0005](../adr/0005-bom-preserving-hashline-read.md)。前一设计 `.scratch/ptc-hashline/2026-10-23-operational-observability-and-upgrade-policy.md` 为本地历史讨论，不是实施必需文件；其已确认要求已纳入正式需求与本计划。需求以权威规格及后续用户指令为准。
+依据：[根 AGENTS](../../AGENTS.md)、[权威规格](../specs/2026-10-22-ptc-hashline-requirements-spec.md)、[GLOSSARY](../../GLOSSARY.md)、[ADR-0003](../adr/0003-effective-working-directory.md)/[0004](../adr/0004-mv-create-intent-and-snapshot-order.md)/[0005](../adr/0005-bom-preserving-hashline-read.md)。前一设计 `.scratch/ptc-hashline/2026-10-23-operational-observability-and-upgrade-policy.md` 为本地历史讨论，不是实施必需文件；其已确认要求已纳入正式需求与本计划。需求以权威规格及后续用户指令为准。
 
 ## 2. 设计再验证的结果
 

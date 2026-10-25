@@ -1,8 +1,8 @@
 # 默认编辑策略：推广评测方案
 
 - 日期：2026-10-25（r2）。r1 是 2026-10-24 的「对照评测方案与运行驱动（票据 10）」，本文并入并改写为整体方案。
-- 依据：[SRS §7](2026-10-24-hashline-default-editing.md)、[实施计划 r1](2026-10-24-hashline-default-editing-implementation-plan.md)（M6）。
-- 状态：**方案已定稿；未冻结任何正式协议，未执行任何真实模型运行。**
+- 依据：[SRS §7](../specs/2026-10-24-hashline-default-editing.md)、[实施计划 r1](2026-10-24-hashline-default-editing-implementation-plan.md)（M6）。
+- 状态：**推广评测方案已定稿；尚无已执行的正式冻结对照。** 后续已有独立 [E3 真实模型冒烟](../acceptance/2026-10-25-default-edit-policy-effectiveness-e3-01.md)，它不属于本方案 S1 正式对照，也不证明推广收益。
 - 不授权：真实模型运行、目标切换、宿主重启或发布（均需用户当次明确同意）。
 
 ## 1. 这份方案覆盖什么
@@ -74,6 +74,8 @@ S0 探针可只覆盖子集，但必须声明它不证明什么。当前驱动**
 
 ## 7. 已知缺口（补齐前不得执行 S0/S1）
 
+下表的驱动、安装包与凭据可用性记录方案制定时的环境，本轮文档整理未重新检查凭据或安装状态。后续固定适配器宿主回归与独立 E3 冒烟已执行，见[当前索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)；它们不证明正式对照驱动已就绪。开始 S0/S1 前须重新核对下列缺口。
+
 | 缺口 | 影响 | 补齐方式 |
 |---|---|---|
 | 无可用驱动 | 无法跑 preset 会话 | headless bundle 不组合 agent-preset registry（`headless/cordis.patch.yml` 中 `agent-preset` 匹配数 0），源码明确拒绝 preset 会话（`headless/src/index.ts:219`）；只有 web-app 组合它。路线见 §8 |
@@ -92,7 +94,7 @@ S0 探针可只覆盖子集，但必须声明它不证明什么。当前驱动**
 ## 9. 现状
 
 - 协议：**未冻结任何正式协议**。
-- 运行：**零次真实模型调用**。
+- 本推广方案运行：**零次正式对照调用**；另有独立 E3 真实模型冒烟，不计入本方案结果。
 - S0 探针草案（5 族、deepseek-v4.1-flash、100 请求 / 1.2M tokens）保存在被忽略的 `.scratch/hashline-default-editing/probe/`，未入库、未执行，且因 §7 的 kind 缺口当前无法冻结。
 
 ## 10. 边界

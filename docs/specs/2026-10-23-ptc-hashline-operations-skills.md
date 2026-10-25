@@ -1,10 +1,10 @@
 # PTC Hashline 运维 Skills：需求规格
 
-日期：2026-10-23。状态：需求定稿；D1—D16 及原计划中的工作流行为与验收要求已收敛为本规格，尚未授权开发或真实升级。
+日期：2026-10-23；状态说明更新于 2026-10-25。需求定稿，D1—D16 及工作流已实现；执行范围与未覆盖 ID 见[交付验收](../acceptance/2026-10-24-delivery-acceptance-report.md)。真实升级仍需用户当次明确同意。
 
 本文件是运维 skills 的唯一权威需求正文，包含已确认决策、工作流行为、停止条件和验收要求。[实施计划](../plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)保留技术调查、设计建议与实施顺序，不另行定义需求。后续需求变更先更新本规格，再同步计划及 tickets；常规技术选择不得改变本规格规定的行为。
 
-文档已从本地 `.scratch/ptc-hashline-operations-skills/spec.md` 迁入版本库，此处为唯一需求正文。运行基础见[原有权威规格](../spec/2026-10-22-ptc-hashline-requirements-spec.md)与[当前验收状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。文档迁移不代表批准开发或真实升级。
+文档已从本地 `.scratch/ptc-hashline-operations-skills/spec.md` 迁入版本库，此处为唯一需求正文。运行基础见[原有权威规格](../specs/2026-10-22-ptc-hashline-requirements-spec.md)与[当前验收状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。文档迁移不代表批准开发或真实升级。
 
 ## 已确认决策
 

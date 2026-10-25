@@ -4,6 +4,15 @@
 
 验证基线为 DSH `0.2.1-rc.2`、hashline/tool-edit `0.2.1-alpha.4` 加本地补丁。项目仍为 private bundle；已验证能力与范围见[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
 
+## 项目组成
+
+- `packages/tool-read`：自有普通文本 read，向 PTC 的 canonical value 返回 tag、窗口与后续操作指引。
+- `packages/hashline`、`packages/tool-edit`：上游引擎和编辑工具的精确版本锚点；兼容修复通过 `patches/` 与 pnpm 补丁配置交付。
+- `presets/ptc-hashline`：独立 persona、Intent watchdog、默认编辑策略，以及 `/ptc-hashline-incident`、`/ptc-hashline-upgrade` 两份运维 skill。skill 仅供本 preset 的真实用户显式调用，模型目录不包含且模型加载被拒。
+- `tests/`、`scripts/`：契约回归、安装验证与隔离打包宿主验收。自有 read 的附属测试位于包内。
+
+默认编辑策略要求适用的既有文本更新优先使用 Hashline，受控替代更新需提供依据。运维 skill 的实现和候选验证不代表获准升级；目标切换仍需用户当次明确同意。
+
 ## 安装使用
 
 准备符合 [package.json](package.json) 要求的 Node/pnpm、已构建的 DSH 源码目录，以及一个已初始化的测试 profile。以下路径和 profile 名称替换为实际值：
@@ -43,19 +52,14 @@ pnpm test:delivery
 
 完整默认策略宿主验收另有 `pnpm test:host-policy --pack .scratch/<本轮唯一目录>`：先在独立验证副本运行 `pnpm check` 构建，再由此命令打包安装、通过真实 registry 挂完整 preset，并用固定适配器驱动真实 Agent、子代理和官方进程 PTC。它不调用真实模型，不证明模型纪律或收益；默认保留临时安装和逐条证据。也可传入 `test:delivery --keep` 留下的一次性 `dsh-profile-acceptance` 路径与新留证目录。不要在运行宿主链接的源码树里构建。
 
-2026-10-25 的[修复后宿主验收](docs/acceptance/2026-10-25-default-edit-policy-fix-02.md)扩展后为 32 PASS / 0 FAIL：F-03 父用户来源误拒已修复，覆盖真实在线与持久化父会话及新增 E2 边界；此前 21 PASS / 1 FAIL 保留为历史红测。剩余 E2 子项、macOS/Linux 实跑与真实模型仍待验收。
-
 `check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。`test:delivery` 是真实宿主交付验收：它会 `pnpm pack` 四个交付包、装进一次性 DSH_HOME、用真实 launcher 装配 profile、跑门禁并把逐条证据写进 `docs/acceptance/<日期>-delivery-acceptance-report.md`（耗时数分钟；`--no-gates` 只跑装配与工作流）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
 
 ## 文档入口
 
-运行目标包含 Windows、macOS 和 Linux。跨平台策略回归见 [CI 矩阵](.github/workflows/policy-contract.yml)，固定 Node 24 与 pnpm 11.28.5，分别使用各系统真实原生路径及 `file:` URL 测试。[fix-01 验收](docs/acceptance/2026-10-25-default-edit-policy-fix-01.md)已验证本轮 Windows 修复；macOS/Linux 实机结果待 CI，不以矩阵配置代替执行。read 的 `defaultEditPolicyGuidance` 默认关闭，仅本 preset 开启，其他挂载保留原指引。
+运行目标包含 Windows、macOS 和 Linux；[CI 矩阵](.github/workflows/policy-contract.yml)使用各系统原生路径与 `file:` URL 回归。已执行平台和未覆盖范围以验收索引为准。read 的 `defaultEditPolicyGuidance` 默认关闭，仅本 preset 开启。
 
-- [需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)
-- [默认编辑策略 SRS](docs/specs/2026-10-24-hashline-default-editing.md)、[实施计划](docs/plans/2026-10-24-hashline-default-editing-implementation-plan.md)与[工程验收报告](docs/acceptance/2026-10-24-default-edit-policy-engineering.md)：默认 Hashline、受控降级与验收规则；票据 01～08 的工程切片已实现并验收；[推广评测方案](docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)已定稿（三阶段：探针 → 正式对照 → 推广判定），真实模型对照因缺可用驱动与模型凭据而 BLOCKED（票据 11）
-- [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)
-- [上游功能分析](docs/background/2026-10-23-dsh-hashline-feature-analysis.md)：版本化研究快照，其中建议不代表已批准需求
-- [运维 skills 需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)：incident、升级评估/方案/同意、获准后的隔离候选验证，以及获第二阶段同意后的目标切换与失败回退/交接已实现；真实宿主交付验收见[报告](docs/acceptance/2026-10-24-delivery-acceptance-report.md)（`pnpm test:delivery`）
-- 运维 skill 入口：`/ptc-hashline-incident`、`/ptc-hashline-upgrade`（仅 PTC Hashline Mode 的真实用户显式调用；模型目录不包含、`skill` 工具加载被拒）
+- [文档导航](docs/README.md)：按主题关联规格、ADR、计划与各轮验收。
+- [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)：当前结论、历史失败与修复关系、剩余缺口。
+- [基础规格](docs/specs/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)：功能契约与设计依据。
 
 参与开发前阅读 [AGENTS.md](AGENTS.md)。

@@ -1,6 +1,6 @@
 # dsh hashline 功能分析：社区/上游 vs 本地 dsh-tool-hashline
 
-> **定位：功能盘点与后续方案研究快照（归档整理于 2026-10-23）**。本文记录锁定版本的能力线索、对比及建议，不是当前功能承诺、权威需求或已批准路线图。声明/配置可用不等于本机运行验收；是否实施建议由[正式规格](../spec/2026-10-22-ptc-hashline-requirements-spec.md)及后续已确认需求决定。当前已验证范围见[验收索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。文中代码路径均相对仓库根。
+> **定位：功能盘点与后续方案研究快照（归档整理于 2026-10-23）**。本文记录锁定版本的能力线索、对比及建议，不是当前功能承诺、权威需求或已批准路线图。声明/配置可用不等于本机运行验收；是否实施建议由[正式规格](../specs/2026-10-22-ptc-hashline-requirements-spec.md)及后续已确认需求决定。当前已验证范围见[验收索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。文中代码路径均相对仓库根。
 
 > 生成方式：以本地已安装的社区上游包（`node_modules/@hy-sde-org/dsh-hashline`、
 > `@hy-sde-org/dsh-tool-edit`，版本 **0.2.1-alpha.4**）的 `dist/*.d.ts`、`README.md`、`package.json`、
@@ -45,7 +45,7 @@ hashline 引擎能力，再叠加三层本地增量：**自建 read（mint tag�
 
 ### 1.2 本地对照物
 
-- 规格：[`docs/spec/2026-10-22-ptc-hashline-requirements-spec.md`](../spec/2026-10-22-ptc-hashline-requirements-spec.md)（v3，权威 FR/NFR/决议）。
+- 规格：[`docs/specs/2026-10-22-ptc-hashline-requirements-spec.md`](../specs/2026-10-22-ptc-hashline-requirements-spec.md)（v3，权威 FR/NFR/决议）。
 - 背景选型：[`docs/background/2026-10-22-dsh-hashline-selection-analysis.md`](2026-10-22-dsh-hashline-selection-analysis.md)。
 - 决策：[`docs/adr/0003`](../adr/0003-effective-working-directory.md) / [`0004`](../adr/0004-mv-create-intent-and-snapshot-order.md) / [`0005`](../adr/0005-bom-preserving-hashline-read.md)。
 - 补丁：`patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch`、`patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch`。
@@ -293,6 +293,6 @@ AST/LSP（沿用 tool-edit 自带的可选能力）、图片/PDF/目录/附件 r
 | apply_patch / patch / Codex firstMatch | `dist/apply-patch.d.ts`、`dist/patch.d.ts` |
 | LSP 客户端 / 写通 / TS7 native | `dist/lsp/client.d.ts`、`writethrough.d.ts`、`typescript.d.ts` |
 | noop-loop-guard / session store | `dist/hashline/noop-loop-guard.d.ts`、`store.d.ts` |
-| 本地 FR/NFR/非目标/附录 B | `docs/spec/2026-10-22-ptc-hashline-requirements-spec.md` |
+| 本地 FR/NFR/非目标/附录 B | `docs/specs/2026-10-22-ptc-hashline-requirements-spec.md` |
 | 本地补丁硬化 | `patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch`、`patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch` |
 | 本地预设配置 | `presets/ptc-hashline/preset.patch.yml` |

@@ -17,12 +17,13 @@ Single-context repo:
 /
 ├── GLOSSARY.md
 ├── docs/adr/
-│   ├── 0001-event-sourced-orders.md
-│   └── 0002-postgres-for-write-model.md
-└── src/
+└── packages/
+    ├── tool-read/
+    ├── hashline/
+    └── tool-edit/
 ```
 
-This repo is single-context even though it is a pnpm workspace: `packages/hashline` and `packages/tool-edit` are version anchors with no implementation, so only `packages/tool-read` carries real code. Revisit the layout only if a second package grows its own independent domain vocabulary.
+This repo uses one domain vocabulary across its pnpm workspace. `packages/hashline` and `packages/tool-edit` are version anchors; `packages/tool-read` owns read. `presets/ptc-hashline/` carries the policy, watchdog and operations workflows. Revisit the layout if another area grows its own independent domain vocabulary.
 
 ## Use the glossary's vocabulary
 

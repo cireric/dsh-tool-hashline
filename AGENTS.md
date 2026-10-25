@@ -2,10 +2,12 @@
 
 ## 按任务读取
 
-- 开始修改前读 [README](README.md)、[术语](GLOSSARY.md)和[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)；做调查或验收前先查 `docs/background/`、`docs/acceptance/`、`tests/compat/` 与被忽略的 `.scratch/` 里同题的既有材料，重复取证须在报告里说明与存量的差异。
-- 修改 read/edit/preset：读[权威规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)及相关 [ADR](docs/adr/)。历史交接和研究报告只作背景，不覆盖现行规格。
+- 修改前读 [README](README.md)、[术语](GLOSSARY.md)和[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
+- 调查或验收：查 `docs/background/`、`docs/acceptance/`、`tests/compat/` 与 `.scratch/` 的同题材料；重复取证说明与存量的差异。
+- 修改 read/edit/preset：读[基础规格](docs/specs/2026-10-22-ptc-hashline-requirements-spec.md)及相关 [ADR](docs/adr/)；涉及默认编辑策略另读[策略规格](docs/specs/2026-10-24-hashline-default-editing.md)。
 - 升级 hashline/tool-edit 或宿主：读[兼容矩阵与补丁维护规则](tests/compat/README.md)。
-- 开发运维 skills：读[需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)和[计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)；两份 skill 及其工作流已实现，最近一次真实宿主交付验收见[报告](docs/acceptance/2026-10-24-delivery-acceptance-report.md)。实现完成**不**等于获准真实升级：任何目标切换仍需用户当次明确同意。
+- 开发运维 skills：读[需求](docs/specs/2026-10-23-ptc-hashline-operations-skills.md)和[计划](docs/plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)。
+- 整理文档或清理临时材料：读[文档维护约定](docs/agents/documentation.md)；文档入口见 [docs/README](docs/README.md)。
 
 ## 实现边界
 
@@ -20,6 +22,6 @@
 
 按 README 运行受影响测试；依赖、preset 或运行契约变更需跑完整交付门禁。版本相同不能证明补丁生效，升级须核验实际解析路径、补丁与兼容矩阵。交付类变更另跑 `pnpm test:delivery`：它打包安装、用真实 launcher 装配，并把逐条证据写进 `docs/acceptance/`；不要把注入 runner 或一次性 profile 的结果说成真实升级。
 
-保留用户已有工作树改动；不热改运行中宿主依赖，不自动重启或发布，目标 profile 切换需有用户明确授权。测试结果区分 PASS、FAIL、GAP 与 BLOCKED，不把 skipped、夹具或历史结果扩大为未执行的验收；结论同理——每条结论要能指回已有证据或它的产出点（代码、数据、责任层），指不回的写成待查项。细则见[证据可追溯](docs/agents/evidence-traceability.md)。
+保留用户已有工作树改动；不热改运行中宿主依赖，不自动重启或发布。任何升级目标切换都需用户当次明确同意，候选验证或实现完成不代表获准切换。测试结果区分 PASS、FAIL、GAP 与 BLOCKED，不把 skipped、夹具或历史结果扩大为未执行的验收；每条结论须能指回证据或产出点（代码、数据、责任层），否则记待查项。细则见[证据可追溯](docs/agents/evidence-traceability.md)。
 
 正式新需求/计划放 `docs/specs/`、`docs/plans/`；本地 issue、草稿和原始证据留在被忽略的 `.scratch/`。细则见[issue tracker](docs/agents/issue-tracker.md)、[领域文档约定](docs/agents/domain.md)。
