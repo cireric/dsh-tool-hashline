@@ -98,11 +98,18 @@ The wording assertions are semantic (disk moved / bookkeeping incomplete / may b
 partial / re-read the destination / cause preserved), not a fixed sentence, so a
 future rewrite cannot pass by changing its mind about the state.
 
-Not exercised: `PUT N*` block edits. The app chain wires no tree-sitter
-`blockResolver`; an attempt to pin the no-resolver failure hung the suite, so this
-stays an unexecuted gap (reported as such in the acceptance trace), not a pass. Error-reveal column
-truncation (>512 chars per revealed line) is engine-internal and not driven by
-the read tool; the 40-line reveal cap above is the app-level proxy.
+The adapter ships no syntactic block resolver. The tool-edit patch represents
+that absence explicitly, so `PUT N*:` / `CUT N*` report unavailable rather than
+blaming the language or input. `tests/integration/hashline-block-capability.spec.ts`
+checks the actual tool description, JS/TS/Python/Markdown refusal with no writes,
+explicit replacement/cut, after-block insertion/register-paste lowering, and
+multi-section refusal before any section writes. These cases do not claim to
+implement or validate AST block resolution. Earlier acceptance reports' unrun
+block cases remain historical gaps. The three-OS policy workflow includes this
+suite; configuration alone does not establish an OS pass.
+
+Error-reveal column truncation (>512 chars per revealed line) is engine-internal
+and not driven by the read tool; the 40-line reveal cap above is the app-level proxy.
 
 Known permissive paths are asserted as such; they are not "strict guard" passes.
 

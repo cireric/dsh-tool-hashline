@@ -2,9 +2,15 @@ diff --git a/dist/constants.js b/dist/constants.js
 index ad887bd..8ed3cda 100644
 --- a/a/dist/constants.js
 +++ b/dist/constants.js
-@@ -15,6 +15,13 @@ HEADER FORMS:
+@@ -12,9 +12,17 @@ HEADER FORMS:
+ - PUT N.=M: — replace original inclusive lines N–M with body (body rows)
+-- PUT N*: — replace the syntactic block beginning N (closing line resolved)
++- Block replace/cut (PUT N*: and CUT N*) are unavailable in this build: no
++  syntactic block resolver is configured. Use PUT N.=M: / CUT N.=M with explicit lines.
+ - PUT <N: — insert body rows before line N (PUT <1: = file head)
  - PUT >N: — insert body rows after line N (PUT >$: = file tail)
- - CUT N.=M / CUT N* — delete and capture lines / block; optional @name register
+-- CUT N.=M / CUT N* — delete and capture lines / block; optional @name register
++- CUT N.=M — delete and capture lines; optional @name register
  - REM — delete section file; MV DEST — move/rename section file
 +- PATHS: both the section PATH and a relative MV DEST resolve against the session
 +  working directory — NOT against the section file's own directory, and not
@@ -809,3 +815,42 @@ index 710d873..32da82a 100644
 +}
  //# sourceMappingURL=session.js.map
 \ No newline at end of file
+diff --git a/dist/hashline/block-resolver.js b/dist/hashline/block-resolver.js
+--- a/dist/hashline/block-resolver.js
++++ b/dist/hashline/block-resolver.js
+@@ -1,3 +1,4 @@
+-/** The exported block resolver stub used by the hashline executor. */
+-export const nativeBlockResolver = () => null;
++/** No syntactic block resolver is shipped by this adapter. Let the engine
++ * distinguish unavailable block replacement/cut from input parsing failures. */
++export const nativeBlockResolver = undefined;
+ //# sourceMappingURL=block-resolver.js.map
+diff --git a/dist/hashline/block-resolver.d.ts b/dist/hashline/block-resolver.d.ts
+--- a/dist/hashline/block-resolver.d.ts
++++ b/dist/hashline/block-resolver.d.ts
+@@ -1,19 +1,17 @@
+ /**
+- * Tree-sitter-backed {@link BlockResolver} for the hashline `N*` locator.
++ * Optional {@link BlockResolver} for the hashline `N*` locator.
+  *
+  * The original used `blockRangeAt` from `@oh-my-pi/pi-natives` (a bundled
+- * tree-sitter primitive). The harness has no such native, so this port keeps
+- * the interface and returns `null` (no resolution). The parser degrades to
+- * its plain range interpretation; block extensions authored by the model still
+- * apply through the un-resolved path when possible, and silently-unresolvable
+- * block scopes surface as ordinary mismatch/range errors.
++ * tree-sitter primitive). This adapter ships no block resolver. Undefined
++ * selects the engine's unavailable-capability diagnosis for block replace/cut;
++ * after-block insert/paste retain the engine's existing after-line fallback.
+  *
+  * TODO(tree-sitter): resolve syntactic blocks once a language parser is
+  * available through the harness. Keep the memoized-resolver shape from the
+  * original so a native resolver can drop in here without touching the patcher.
+  * Ported from @oh-my-pi/pi-coding-agent (https://github.com/can1357/oh-my-pi). MIT License. Copyright (c) 2025 Mario Zechner, Copyright (c) 2025-2026 Can Bölük.
+  */
+ import type { BlockResolver } from '@hy-sde-org/dsh-hashline';
+-/** The exported block resolver stub used by the hashline executor. */
+-export declare const nativeBlockResolver: BlockResolver;
++/** The adapter explicitly reports the absence of syntactic block resolution. */
++export declare const nativeBlockResolver: BlockResolver | undefined;
+ //# sourceMappingURL=block-resolver.d.ts.map

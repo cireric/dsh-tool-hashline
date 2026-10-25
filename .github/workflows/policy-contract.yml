@@ -23,6 +23,6 @@ jobs:
       - run: pnpm check
       - run: pnpm test:unit
       - name: Native paths, file URLs, policy rules and read guidance
-        run: pnpm exec vitest run --config vitest.integration.config.ts tests/integration/default-edit-policy packages/tool-read/tests/integration/policy-guidance.spec.ts
+        run: pnpm exec vitest run --config vitest.integration.config.ts tests/integration/default-edit-policy tests/integration/hashline-block-capability.spec.ts packages/tool-read/tests/integration/policy-guidance.spec.ts
       - name: PTC contracts
         run: pnpm exec vitest run --config vitest.ptc.config.ts tests/ptc/default-edit-policy

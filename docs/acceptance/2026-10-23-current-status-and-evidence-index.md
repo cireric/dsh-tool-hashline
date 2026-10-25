@@ -1,10 +1,14 @@
 # 当前验收状态与证据索引
 
+> 2026-10-25 块定位说明修复：[验收报告](2026-10-25-hashline-block-locator-fix.md)。tool-edit 正式补丁明确块替换/剪切不可用并准确诊断，保持显式范围和块后插入/粘贴行为；13 项定向、33 项新打包完整宿主通过，九项交付门禁 exit 0。日常 profile 未切换，macOS/Linux 与真实模型未在本轮执行。
+
 > 2026-10-25 修复增量：[F-03 修复与复验](2026-10-25-default-edit-policy-fix-02.md)：父用户来源改用宿主 observation 与真实委派记录核验；扩展后的新打包完整宿主 32 PASS / 0 FAIL（含在线/持久化父会话、混合整笔拒绝、会话隔离、cwd 变化、catch 语义与 BOM/MV 边界），定向 27 PASS，九项交付门禁 exit 0；交付 ID 21 PASS / 9 BLOCKED。此前完整宿主 21 PASS / 1 FAIL 保留为历史红测。剩余 E2 子项、macOS/Linux 实跑与真实模型仍未完成，日常 profile 未切换。
 
 > 2026-10-25 后续修复：[fix-01 验收](2026-10-25-default-edit-policy-fix-01.md)已修复下面 local-01 的 Windows 模块地址与目标 read 指引问题；pnpm 11.28.5 下正式补丁冻结安装、新增 13 项回归及完整交付门禁均通过。三平台 CI 已配置，macOS/Linux 尚未实际执行；完整 preset、实际后端、真实委派与模型验收继续保留缺口。下方 FAIL 描述保留为修复前历史。
 
 > 2026-10-25 默认编辑策略增量：[实际生效验收 local-01](2026-10-25-default-edit-policy-effectiveness-local-01.md)已在 Windows 隔离副本及 pack 安装执行。当前 FAIL：原生路径使策略模块不可加载；read nextAction 指引与规格不一致。诊断用 file URL 的通过不是产品修复；完整 preset、真实委派/后端及真实模型仍待验，不覆盖下方历史基础能力结果。
+
+> 2026-10-25 真实模型 E3 增量：[冒烟 run 20261025-e3-01](2026-10-25-default-edit-policy-effectiveness-e3-01.md)：10 个真实模型子会话（全部 wb/deepseek-v4.1-flash，64 次请求）。样本 1/2 各 3/3 PASS；样本 3 为 2 PASS / 1 FAIL（"90 天"写成"90天"）；样本 5 PASS（子会话 prompt 可见性记 GAP）；样本 4（明确用户覆盖）BLOCKED，需真实用户会话。逐调用轨迹不可得、read/edit 经 dev link 解析，结论只覆盖本组样本；E3 未整体通过，E4 未触及。
 
 更新日期：2026-10-23。本文是当前维护入口；各历史验收文件保留执行当时的结果，不能把旧 GAP 或旧计数直接当作当前状态。
 

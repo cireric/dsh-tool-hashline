@@ -169,6 +169,23 @@ try {
         assert.equal(disk('chain.txt'), 'one\nTWO\nTHREE\n');
         return { effects: r.effects.length };
     });
+    await test('E2-block-capability-guidance-and-diagnostics', async () => {
+        const description = ctx.get('tools').schemas(agent).find(s => s.name === 'edit')?.description ?? '';
+        assert.match(description, /PUT N\*:[\s\S]*CUT N\*[\s\S]*unavailable/iu);
+        assert.doesNotMatch(description, /closing line resolved/u);
+        write('block-capability.js', 'function sample() {\n  return 1;\n}\n');
+        const r = await run(agent, `const x=await tools.read({file_path:'block-capability.js'});const h='['+x.path+'#'+x.tag+']';const errors=[];for(const op of ['PUT 1*:\\n+replacement','CUT 1*']){try{await tools.edit({input:h+'\\n'+op});errors.push('NOT_REFUSED');}catch(e){errors.push(String(e.message));}}await tools.edit({input:h+'\\nPUT 2.=2:\\n+  return 2;'});const y=await tools.read({file_path:'block-capability.js'});const after=await tools.edit({input:'['+y.path+'#'+y.tag+']\\nPUT >1*:\\n+// inserted'});return {errors,after};`);
+        const value = ok(r);
+        for (const error of value.errors) {
+            assert.match(error, /not available.*no block resolver/iu);
+            assert.doesNotMatch(error, /unsupported language|parse error/iu);
+        }
+        assert.equal(value.errors.length, 2);
+        assert.match(value.after, /plain|after line/iu);
+        assert.equal(disk('block-capability.js'), 'function sample() {\n// inserted\n  return 2;\n}\n');
+        assert.equal(r.effects.length, 2);
+        return { effects: 2, refusedBlockCalls: 2 };
+    });
     const declarations = loaded.layers.find(l => l.packageName === 'dsh-tool-hashline').patches.flatMap(p => p.insert ?? []);
     const target = declarations.find(p => p.config?.id === 'ptc-hashline');
     await test('E2-02-policy-off-full-preset-control', async () => {

@@ -26,6 +26,7 @@ pnpm install:profile --profile "hashline-test" --dsh-checkout "D:/path/to/deepse
 - BOM 保真已验证范围为 Local provider 的 hashline 路径、零或单个 BOM；其它模式与后端不沿用该保证。
 - `read` 会读取全文，4 MiB 是生成 tag 的默认门槛，不是内存上限；截断或无 tag 时按 `nextAction` 处理。
 - seen 是有限守卫，与宿主 observed 策略不同，不是权限边界。
+- 当前不提供语法块定位：`PUT N*:` / `CUT N*` 不可用，使用显式范围 `PUT N.=M:` / `CUT N.=M`。块后形式可能降为普通行后操作，不代表具备块定位能力；检查编辑结果中的警告。
 
 ## 开发验证
 
