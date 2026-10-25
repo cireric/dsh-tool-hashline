@@ -24,6 +24,8 @@ pnpm install:profile --profile "hashline-test" --dsh-checkout "D:/path/to/deepse
 pnpm install:profile --profile "hashline-test" --dsh-checkout "D:/path/to/deepseek-harness"
 ```
 
+依赖使用 pnpm 的默认盘级 store，仓库不声明 `store-dir`、也不在 checkout 内建 store。默认 store 与仓库不在同一卷时（例如 store 在 `C:`、仓库在 `D:`），硬链接无法跨卷，pnpm 改用 `<盘符>:\.pnpm-store` 并打印 `... cannot be hard linked ... Using the store at ...` 的 WARN；那是同卷回退，不是安装失败。`nodeLinker: hoisted` 由 `pnpm-workspace.yaml` 提供，不依赖 `.npmrc`。
+
 安装脚本将本 checkout 的 bundle 与三个包链接到指定 profile，并验证组合和资源解析。安装后手动重新启动该测试宿主，在新会话选择 **PTC Hashline Mode**。
 
 这是开发链接安装：构建和依赖变更会影响使用该 checkout 的宿主，更新前应安排停止使用的窗口。
