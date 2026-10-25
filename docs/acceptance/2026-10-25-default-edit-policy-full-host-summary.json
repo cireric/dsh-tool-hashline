@@ -1,0 +1,186 @@
+{
+  "date": "2026-10-25",
+  "run": "E2-full-host-01",
+  "status": "FAIL",
+  "mounted": true,
+  "sourceDriverSha256": "7d8e1681adb81fbe5283733996c123a14ebae6abb864c43e8b8fc0b9adfa3561",
+  "runtime": {
+    "platform": "win32",
+    "node": "v24.19.0",
+    "ptc": {
+      "isolation": "process",
+      "language": "typescript"
+    },
+    "sandbox": {
+      "mode": "workspace-write",
+      "denied": false,
+      "enforcement": "partial"
+    },
+    "versions": {
+      "@deepseek-ai/dsh": "0.2.1-rc.2",
+      "@hy-sde-org/dsh-tool-edit": "0.2.1-alpha.4",
+      "@hy-sde-org/dsh-hashline": "0.2.1-alpha.4"
+    },
+    "samePhysicalEngine": true,
+    "editorSha256": "33a97758f3664650a722a7dd83650ee97c1cd893a1f875e194e132bad4350bbc",
+    "policySha256": "00f3aa3d83be3b49f131d25d8c186c63b68226d683f3d0fb475d6f53c9d36dff"
+  },
+  "counts": {
+    "passed": 21,
+    "failed": 1,
+    "scriptedAdapterRequests": 56,
+    "realModelRequests": 0,
+    "policyReceipts": 29
+  },
+  "cases": [
+    {
+      "id": "E2-02-managed-refusal-no-write",
+      "status": "PASS",
+      "writeTextAttempts": 0
+    },
+    {
+      "id": "E2-04-continuous-hashline",
+      "status": "PASS",
+      "writeTextAttempts": 2
+    },
+    {
+      "id": "E2-02-policy-off-full-preset-control",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-03-full-prompt-sdk-guidance",
+      "status": "PASS"
+    },
+    {
+      "id": "E2-05-replace-user-override",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-05-patch-user-override",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-05-apply_patch-user-override",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-06-snapshot-boundary--1",
+      "status": "PASS",
+      "writeTextAttempts": 0,
+      "normalizedUtf8Bytes": 4194303
+    },
+    {
+      "id": "E2-06-snapshot-boundary-0",
+      "status": "PASS",
+      "writeTextAttempts": 1,
+      "normalizedUtf8Bytes": 4194304
+    },
+    {
+      "id": "E2-06-snapshot-boundary-1",
+      "status": "PASS",
+      "writeTextAttempts": 1,
+      "normalizedUtf8Bytes": 4194305
+    },
+    {
+      "id": "E2-06-target-window-degradation",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-06-unrelated-window-refusal",
+      "status": "PASS",
+      "writeTextAttempts": 0
+    },
+    {
+      "id": "E2-07-mixed-create-update-refused-before-write",
+      "status": "PASS",
+      "writeTextAttempts": 0
+    },
+    {
+      "id": "E2-07-payload-mutual-exclusion",
+      "status": "PASS",
+      "writeTextAttempts": 0
+    },
+    {
+      "id": "E2-08-read-evidence-external-drift",
+      "status": "PASS",
+      "writeTextAttempts": 0
+    },
+    {
+      "id": "E2-12-partial-program-effects-retained",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-09-real-delegation-own-read-and-persona-override",
+      "status": "PASS"
+    },
+    {
+      "id": "E2-09-real-parent-user-override-lineage",
+      "status": "FAIL",
+      "error": "code run failed (exception): ToolCallError: [EDIT_POLICY_USER_SOURCE] sessionId \"e2-parent-1792894038156\" is neither this session nor its delegating parent. A user request from an unrelated session does not authorize this edit."
+    },
+    {
+      "id": "E2-10-official-standard-preset-isolation",
+      "status": "PASS"
+    },
+    {
+      "id": "E2-11-create-empty-fill-delete",
+      "status": "PASS",
+      "writeTextAttempts": 2
+    },
+    {
+      "id": "E2-11-bom-crlf-hashline-move",
+      "status": "PASS",
+      "writeTextAttempts": 1
+    },
+    {
+      "id": "E2-11-whitespace-and-consecutive-bom-refused",
+      "status": "PASS",
+      "writeTextAttempts": 0
+    }
+  ],
+  "parentOverride": {
+    "parentLive": true,
+    "headerParentMatches": true,
+    "parentSessionProperty": "undefined",
+    "originalUserMatchCount": 1,
+    "errorCode": "EDIT_POLICY_USER_SOURCE",
+    "diskAfter": "old\n",
+    "writeTextAttempts": 0
+  },
+  "E2Coverage": {
+    "E2-01": "PASS (installed full preset loader and physical engine)",
+    "E2-02": "PASS",
+    "E2-03": "GAP (full prompt/SDK/long-line pass; full-scope no-session path not executed)",
+    "E2-04": "PASS",
+    "E2-05": "PASS (all three alternative modes, actual current-session user fixture)",
+    "E2-06": "GAP (actual snapshot N-1/N/N+1 and target/unrelated columns pass; not every output-window subcase)",
+    "E2-07": "GAP (mixed create/update and one conflicting payload pass; not every pair/request topology)",
+    "E2-08": "GAP (external file drift pass; cwd/config changes and actual retry-race/cancel not driven here)",
+    "E2-09": "FAIL (own read isolation/persona/delegation pass; valid parent user override rejected)",
+    "E2-10": "GAP (full policy-off and official standard same-process controls pass; lifecycle remount not driven)",
+    "E2-11": "GAP (creation/empty/delete/BOM+CRLF move and whitespace/double-BOM pass; not all preservation/conflict cases)",
+    "E2-12": "GAP (real process catch/uncaught/partial-effects pass; not all cancellation/unknown cases)"
+  },
+  "boundaries": [
+    "Actual installed full target preset mounted through official registry/loader, with real AgentLoop, Session persistence, subagent tools and Node process PTC.",
+    "Deterministic adapter and synthetic user-source fixtures; realModelRequests=0. No model-behavior/value evidence.",
+    "Base+headless host plus official Web host tool-disable overlays, preset registry and subagent-model-selection-settings. No target preset row removed or replaced.",
+    "Application entrypoints, automatic LLM titles and telemetry disabled in the test host. No daily profile switch/restart.",
+    "PTC returns workspace-write with enforcement=partial; not a stronger isolation guarantee.",
+    "Creation-shaped edit retains upstream observation refusal; truly new content is created with stock write.",
+    "Only writeText attempts are instrumented. Do not infer all possible side-effect absence from final bytes alone."
+  ],
+  "remaining": {
+    "E3": "BLOCKED (no real-model run)",
+    "E4": "BLOCKED (no frozen real-model comparison)",
+    "macOS": "GAP (not run)",
+    "linux": "GAP (not run)",
+    "dailyProfile": "NOT_TOUCHED"
+  }
+}

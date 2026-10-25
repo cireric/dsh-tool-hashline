@@ -230,7 +230,7 @@ export async function createPolicyHarness(options: PolicyHarnessOptions = {}): P
   ;(agent as unknown as { ctx: Context }).ctx = scope.ctx
   /** Mount the preset's rows into one agent scope (also used by the remount case). */
   const mountRows = async (target: Context): Promise<void> => {
-    await target.plugin(ToolRead, options.read ?? {})
+    await target.plugin(ToolRead, { defaultEditPolicyGuidance: options.policyModule !== undefined, ...options.read })
     await target.plugin(ToolEdit, {
       mode: 'auto',
       formatOnWrite: false,

@@ -101,14 +101,15 @@ diff --git a/dist/index.js b/dist/index.js
 index 64c9e49..4faf43a 100644
 --- a/a/dist/index.js
 +++ b/dist/index.js
-@@ -1,5 +1,6 @@
+@@ -1,5 +1,7 @@
  import z from '@deepseek-ai/schemastery';
  import { defineTool } from '@deepseek-ai/dsh-tools';
 +import { pathToFileURL } from 'node:url';
++import { isAbsolute } from 'node:path';
  import { FsError } from '@deepseek-ai/dsh-fs';
  import { APPLY_PATCH_SCHEMA_DESCRIPTIONS, EDIT_TOOL_DESCRIPTION, HASHLINE_SCHEMA_DESCRIPTIONS, PATCH_SCHEMA_DESCRIPTIONS, REPLACE_SCHEMA_DESCRIPTIONS, } from "./constants.js";
  import { fileDiffsFromMeta } from "./details.js";
-@@ -9,10 +10,10 @@ import { executeHashlineSingle } from "./hashline/execute.js";
+@@ -9,10 +11,10 @@ import { executeHashlineSingle } from "./hashline/execute.js";
  import { executePatchEntry } from "./patch.js";
  import { expandApplyPatchToEntries } from "./apply-patch.js";
  import { executeReplace } from "./replace.js";
@@ -121,7 +122,7 @@ index 64c9e49..4faf43a 100644
  /** Runtime configuration schema for the `edit` tool. */
  export const Config = z.object({
      mode: z.union(['auto', 'hashline', 'replace', 'patch', 'apply_patch']).default('hashline'),
-@@ -25,6 +26,7 @@ export const Config = z.object({
+@@ -25,6 +27,7 @@ export const Config = z.object({
      lspCommand: z.string().default(DEFAULT_LSP_COMMAND),
      typescriptNative: z.object({ command: z.string().default('tsc') }),
      description: z.string(),
@@ -129,7 +130,7 @@ index 64c9e49..4faf43a 100644
  });
  /** Resolve the schema defaults into the runtime config handed to sessions. */
  export function resolveConfig(config) {
-@@ -39,6 +41,7 @@ export function resolveConfig(config) {
+@@ -39,6 +42,7 @@ export function resolveConfig(config) {
          lspCommand: config.lspCommand ?? DEFAULT_LSP_COMMAND,
          ...config.typescriptNative === undefined ? {} : { typescriptNative: config.typescriptNative },
          ...config.description === undefined ? {} : { description: config.description },
@@ -137,7 +138,7 @@ index 64c9e49..4faf43a 100644
      };
  }
  // ═══════════════════════════════════════════════════════════════════════════
-@@ -228,6 +231,55 @@ function requirePath(args) {
+@@ -228,6 +232,55 @@ function requirePath(args) {
          throw new Error('Parameter `path` is required and must be a string');
      return value;
  }
@@ -193,7 +194,7 @@ index 64c9e49..4faf43a 100644
  /** Whether an error is the fs layer's concurrent-mutation refusal. */
  export function isStaleVersionError(error) {
      if (error instanceof FsError)
-@@ -239,17 +291,45 @@ export function isStaleVersionError(error) {
+@@ -239,17 +292,45 @@ export function isStaleVersionError(error) {
   * @param ctx - the plugin context; registrations are effects scoped to it.
   * @param config - resolved runtime configuration.
   */
@@ -242,7 +243,7 @@ index 64c9e49..4faf43a 100644
      ctx.tools.register(defineTool({
          name: 'edit',
          description,
-@@ -262,6 +342,48 @@ function registerEditTool(ctx, config, provider) {
+@@ -262,6 +343,48 @@ function registerEditTool(ctx, config, provider) {
              replace_all: { type: 'boolean', description: REPLACE_SCHEMA_DESCRIPTIONS.replace_all },
              edits: { type: 'array', description: PATCH_SCHEMA_DESCRIPTIONS.edits },
              input: { type: 'string', description: `${APPLY_PATCH_SCHEMA_DESCRIPTIONS.input}. ${HASHLINE_SCHEMA_DESCRIPTIONS.input}` },
@@ -291,7 +292,7 @@ index 64c9e49..4faf43a 100644
          },
          output: {
              schema: { type: 'string' },
-@@ -292,6 +414,21 @@ function registerEditTool(ctx, config, provider) {
+@@ -292,6 +415,21 @@ function registerEditTool(ctx, config, provider) {
              try {
                  const mode = dispatchMode(resolved, args);
                  const record = args;
@@ -313,7 +314,7 @@ index 64c9e49..4faf43a 100644
                  const run = () => {
                      switch (mode) {
                          case 'replace':
-@@ -307,17 +444,38 @@ function registerEditTool(ctx, config, provider) {
+@@ -307,17 +445,38 @@ function registerEditTool(ctx, config, provider) {
                      }
                  };
                  try {
@@ -355,7 +356,7 @@ index 64c9e49..4faf43a 100644
                      throw error;
                  }
              }
-@@ -341,12 +499,78 @@ function registerEditTool(ctx, config, provider) {
+@@ -341,12 +500,80 @@ function registerEditTool(ctx, config, provider) {
          presentResult: (args, result) => presentResult(args, result, resolveConfig(config)),
      }));
  }
@@ -375,7 +376,9 @@ index 64c9e49..4faf43a 100644
 +    const address = resolved.contentPolicyModule;
 +    if (address === undefined)
 +        return undefined;
-+    const url = /^[a-zA-Z][a-zA-Z0-9+.-]*:/u.test(address) ? address : pathToFileURL(address).href;
++    // Native absolute paths (including Windows drive/UNC paths) are files,
++    // not URL schemes. Node handles escaping and platform path semantics.
++    const url = isAbsolute(address) || !/^[a-zA-Z][a-zA-Z0-9+.-]*:/u.test(address) ? pathToFileURL(address).href : address;
 +    let module;
 +    try {
 +        module = await import(url);
@@ -435,7 +438,7 @@ index 64c9e49..4faf43a 100644
      const resolved = resolveConfig(config);
      if (!Number.isFinite(resolved.fuzzyThreshold) || resolved.fuzzyThreshold <= 0 || resolved.fuzzyThreshold > 1) {
          throw new Error('tool-edit: fuzzyThreshold must be in (0, 1]');
-@@ -359,6 +583,10 @@ export function apply(ctx, config) {
+@@ -359,6 +586,10 @@ export function apply(ctx, config) {
          ...resolved.typescriptNative === undefined ? {} : { typescriptNative: resolved.typescriptNative },
      });
      ctx.effect(() => () => { void provider.dispose(); });

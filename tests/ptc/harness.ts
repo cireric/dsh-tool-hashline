@@ -80,7 +80,7 @@ export async function createPtcHarness(options: PtcHarnessOptions = {}): Promise
   if (options.policy !== false) await ctx.plugin(FsPolicy)
   const runtime = new ToolRuntime(ctx, { mode: 'ptc' })
   await ctx.plugin(InProcessPtcRuntime)
-  await ctx.plugin(ToolRead, options.read ?? {})
+  await ctx.plugin(ToolRead, { defaultEditPolicyGuidance: options.policyModule !== undefined, ...options.read })
   await ctx.plugin(ToolEdit, {
     mode: 'auto',
     ...options.policyModule === undefined ? {} : { contentPolicyModule: options.policyModule },

@@ -1,0 +1,28 @@
+name: Default edit policy contracts
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  policy-contract:
+    strategy:
+      fail-fast: false
+      matrix:
+        os: [windows-latest, macos-latest, ubuntu-latest]
+    runs-on: ${{ matrix.os }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 24
+      - uses: pnpm/action-setup@v4
+        with:
+          version: 11.28.5
+      - run: pnpm install --frozen-lockfile
+      - run: pnpm check
+      - run: pnpm test:unit
+      - name: Native paths, file URLs, policy rules and read guidance
+        run: pnpm exec vitest run --config vitest.integration.config.ts tests/integration/default-edit-policy packages/tool-read/tests/integration/policy-guidance.spec.ts
+      - name: PTC contracts
+        run: pnpm exec vitest run --config vitest.ptc.config.ts tests/ptc/default-edit-policy

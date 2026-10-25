@@ -58,23 +58,31 @@ export function readCallCitation(callId: string | null): string {
  * A truncated window never claims that re-reading with the same config reveals
  * the rest of a long line.
  * @param input - the read outcome facts.
+ * @param policyGuidance - opt in only where the default-edit policy is mounted.
  * @returns guidance text, or `null` when the window is complete and tagged.
  */
-export function nextActionFor(input: NextActionInput): string | null {
+export function nextActionFor(input: NextActionInput, policyGuidance = false): string | null {
   if (!input.hasSession) {
+    if (policyGuidance) return 'This read has no agent session, so no tag was minted and the managed editor cannot verify its context. Stop and establish the editing session, then read the target again. Missing session context does not authorize a fallback.'
     return 'This read has no agent session, so it cannot share a hashline snapshot and no tag was minted. Use the edit tool\'s replace mode (path + old_string + new_string) or patch mode (path + edits) instead.'
   }
   if (input.empty) {
     return 'This file is empty, so there is no hashline content to tag. Use the write tool to create its contents.'
   }
   if (input.exceedsSnapshotLimit) {
-    return `This file\'s normalized text is ${input.snapshotMaxBytes} bytes or more, so it was not snapshotted and no tag was minted. Use the edit tool\'s replace or patch mode instead, declaring a "snapshot-limit" fallback for this target${readCallCitation(input.readCallId)}.`
+    const prefix = `This file's normalized text is ${input.snapshotMaxBytes} bytes or more, so it was not snapshotted and no tag was minted.`
+    if (policyGuidance) return `${prefix} A "snapshot-limit" fallback for this target requires complete original content from an authorized source, unique target identification and the required text/byte preservation${readCallCitation(input.readCallId)}. Only then may replace or patch be used. Stop if these conditions cannot be verified.`
+    return `${prefix} Use the edit tool's replace or patch mode instead.`
   }
   if (input.truncatedLines) {
-    return `Some returned lines were column-truncated at ${input.maxLineLength} characters, so they are not usable as seen lines. Read again with a larger maxLineLength${input.byteCapped ? ' and maxBytes' : ''} (a config change needs a remount); or use the edit tool\'s replace or patch mode for the truncated range, declaring a "window-limit" fallback with this read\'s citation and the ranges you are changing${readCallCitation(input.readCallId)}. Repeating this read with the same config will not reveal the rest of those lines.`
+    const prefix = `Some returned lines were column-truncated at ${input.maxLineLength} characters, so they are not usable as seen lines.`
+    if (policyGuidance) return `${prefix} Page with offset/limit when that can supply complete target anchors and context. Only a target range that cannot be completed this way can use a "window-limit" fallback; it also requires complete original content from an authorized source and the required text/byte preservation${readCallCitation(input.readCallId)}. Declare only the affected ranges. Repeating this read will not reveal the rest of those lines. Stop if sufficient content cannot be obtained; do not change tool configuration.`
+    return `${prefix} Raise maxLineLength${input.byteCapped ? ' and maxBytes' : ''} in the tool-read config, remount, then read again; or use the edit tool's replace or patch mode. Repeating this read with the same config will not reveal the rest of those lines.`
   }
   if (input.zeroLines && input.byteCapped) {
-    return `The output byte cap (${input.maxBytes}) is smaller than the next displayed line, so this window returned no lines. Read again at the same offset with a larger maxBytes (and maxLineLength if lines are also truncated); or use the edit tool\'s replace or patch mode, declaring a "window-limit" fallback with this read\'s citation and the ranges you are changing${readCallCitation(input.readCallId)}.`
+    const prefix = `The output byte cap (${input.maxBytes}) is smaller than the next displayed line, so this window returned no lines.`
+    if (policyGuidance) return `${prefix} No complete anchor was returned. A "window-limit" fallback is limited to target ranges that offset/limit cannot complete and requires complete original content from an authorized source and the required text/byte preservation${readCallCitation(input.readCallId)}. Declare only the affected ranges. Stop if sufficient content cannot be obtained; repeating this window does not help and does not authorize changing tool configuration.`
+    return `${prefix} Raise maxBytes (and maxLineLength if lines are also truncated) in the tool-read config, remount, then read again at the same offset; or use the edit tool's replace or patch mode.`
   }
   return null
 }

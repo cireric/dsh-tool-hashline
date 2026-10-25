@@ -5,6 +5,7 @@ describe('resolveConfig', () => {
   it('mirrors the host defaults', () => {
     expect(resolveConfig()).toEqual({
       enabled: true,
+      defaultEditPolicyGuidance: false,
       snapshotMaxBytes: 4_194_304,
       maxBytes: 51_200,
       limit: 2000,
@@ -14,8 +15,9 @@ describe('resolveConfig', () => {
   })
 
   it('accepts explicit values, including enabled:false', () => {
-    expect(resolveConfig({ enabled: false, limit: 10, maxLineLength: 20, maxBytes: 30, snapshotMaxBytes: 40 })).toEqual({
+    expect(resolveConfig({ enabled: false, defaultEditPolicyGuidance: true, limit: 10, maxLineLength: 20, maxBytes: 30, snapshotMaxBytes: 40 })).toEqual({
       enabled: false,
+      defaultEditPolicyGuidance: true,
       limit: 10,
       maxLineLength: 20,
       maxBytes: 30,

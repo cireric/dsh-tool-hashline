@@ -33,6 +33,8 @@ export interface Config {
   limit?: number
   /** Per-line character cap, same semantics as the host's `readMaxLineLength`. */
   maxLineLength?: number
+  /** Enable the managed default-edit policy's guidance in this registration only. */
+  defaultEditPolicyGuidance?: boolean
 }
 
 /** Config after defaulting and validation. */
@@ -42,6 +44,7 @@ export interface ResolvedConfig {
   maxBytes: number
   limit: number
   maxLineLength: number
+  defaultEditPolicyGuidance: boolean
 }
 
 function positiveInteger(value: number, key: string): number {
@@ -62,6 +65,7 @@ function positiveInteger(value: number, key: string): number {
 export function resolveConfig(config: Config = {}): ResolvedConfig {
   return {
     enabled: config.enabled !== false,
+    defaultEditPolicyGuidance: config.defaultEditPolicyGuidance === true,
     snapshotMaxBytes: positiveInteger(config.snapshotMaxBytes ?? DEFAULT_SNAPSHOT_MAX_BYTES, 'snapshotMaxBytes'),
     maxBytes: positiveInteger(config.maxBytes ?? DEFAULT_MAX_BYTES, 'maxBytes'),
     limit: positiveInteger(config.limit ?? DEFAULT_LIMIT, 'limit'),

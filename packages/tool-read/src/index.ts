@@ -218,7 +218,7 @@ export function apply(ctx: Context, config: Config = {}): void {
         // this call's own registry id, so the policy can look the fact up rather
         // than trusting a model-authored byte count.
         readCallId: session === undefined || empty ? null : exec.callId,
-      })
+      }, caps.defaultEditPolicyGuidance)
       // The provisional fact is published BEFORE the result settles; the registry
       // reports the authoritative outcome afterwards, and only a SUCCESSFUL one
       // (see the `tools/result` listener below) promotes it to usable evidence.

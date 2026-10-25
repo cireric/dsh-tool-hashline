@@ -47,10 +47,10 @@ describe('nextActionFor', () => {
   })
 
   it('prints the read citation a program can hand back, and only where a reason needs one', () => {
-    const snapshot = nextActionFor({ ...base, exceedsSnapshotLimit: true })
+    const snapshot = nextActionFor({ ...base, exceedsSnapshotLimit: true }, true)
     expect(snapshot).toContain('snapshot-limit')
     expect(snapshot).toContain('readCallId: call-7')
-    const window = nextActionFor({ ...base, truncatedLines: true })
+    const window = nextActionFor({ ...base, truncatedLines: true }, true)
     expect(window).toContain('window-limit')
     expect(window).toContain('readCallId: call-7')
     // Nothing to cite: no citation is printed at all.

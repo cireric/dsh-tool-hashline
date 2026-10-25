@@ -42,6 +42,26 @@ On every upgrade:
 
 The authoritative contract is [requirements v3 §8.1](../../docs/spec/2026-10-22-ptc-hashline-requirements-spec.md).
 
+### Default-edit policy module paths and guidance
+
+The tool-edit patch also loads the optional default-edit policy. It recognizes
+native absolute paths with Node's `isAbsolute` **before** testing URL schemes,
+then converts filesystem paths with `pathToFileURL`. Windows drive/UNC paths,
+POSIX paths on macOS/Linux and existing `file:` URLs must retain their native
+semantics; do not replace this with manual slash/URL escaping.
+
+`tests/integration/default-edit-policy-module-address.spec.ts` exercises actual
+native absolute/relative paths and file URLs, including spaces, Unicode, `#` and
+`%`, through the real editor on each running OS. Missing modules stay fail closed.
+The Windows/macOS/Linux CI matrix in `.github/workflows/policy-contract.yml`
+runs these cases and the managed read/PTC contracts. Matrix configuration alone
+is not evidence that a particular OS run passed.
+
+The read option `defaultEditPolicyGuidance` defaults to false; only the managed
+preset enables it. Preserve the unconfigured read's original guidance when
+updating dependencies or policy integration. The real read contract is covered
+by `packages/tool-read/tests/integration/policy-guidance.spec.ts`.
+
 ## What the suite pins (`guard.spec.ts` + `mv-snapshot-order.spec.ts`)
 
 `guard.spec.ts` runs a real `ToolRuntime` over the upstream `edit` and the upstream store.

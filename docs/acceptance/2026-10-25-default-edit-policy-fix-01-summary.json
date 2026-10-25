@@ -1,0 +1,175 @@
+{
+  "runId": "20261025-fix-01",
+  "date": "2026-10-25",
+  "platform": "win32",
+  "node": "v24.19.0",
+  "pnpm": "11.28.5",
+  "findings": {
+    "F-01": "PASS (Windows native/file URL real editor and packed installation)",
+    "F-02": "PASS (opt-in canonical/rendered read guidance, legacy control)"
+  },
+  "red": {
+    "failed": 8,
+    "passed": 5
+  },
+  "green": {
+    "failed": 0,
+    "passed": 13
+  },
+  "delivery": {
+    "gates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "verdicts": {
+      "SCOPE-01": "PASS",
+      "SCOPE-02": "PASS",
+      "SCOPE-03": "PASS",
+      "SCOPE-04": "PASS",
+      "SCOPE-05": "PASS",
+      "SCOPE-06": "PASS",
+      "SCOPE-07": "PASS",
+      "PACK-01": "PASS",
+      "INC-01": "PASS",
+      "INC-02": "BLOCKED",
+      "INC-03": "BLOCKED",
+      "INC-04": "BLOCKED",
+      "INC-05": "PASS",
+      "INC-06": "PASS",
+      "INC-07": "PASS",
+      "CONFIG-01": "PASS",
+      "UPG-01": "PASS",
+      "UPG-02": "BLOCKED",
+      "UPG-03": "PASS",
+      "UPG-04": "PASS",
+      "UPG-05": "BLOCKED",
+      "UPG-06": "PASS",
+      "UPG-07": "PASS",
+      "UPG-08": "BLOCKED",
+      "UPG-09": "BLOCKED",
+      "UPG-10": "BLOCKED",
+      "UPG-11": "BLOCKED",
+      "UPG-12": "PASS",
+      "UPG-13": "PASS",
+      "REG-01": "PASS"
+    }
+  },
+  "inputs": {
+    "pnpm-lock.yaml": {
+      "sha256": "991174455b8df693779c8b4a678201e9bb8c829884545f337e67af480f27b9db",
+      "matchesTestedTree": true
+    },
+    "patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch": {
+      "sha256": "22be5b94b4f3ae03b6f0b056b4f8ee2f203ac52bb187ad8e8818dc8292797fba",
+      "matchesTestedTree": true
+    },
+    "packages/tool-read/src/config.ts": {
+      "sha256": "0f2478c5647c2c61533e521da567a4865db8585949f26781fcf06158e55603b6",
+      "matchesTestedTree": true
+    },
+    "packages/tool-read/src/index.ts": {
+      "sha256": "7734ef7fae4288dcb08a3deee94687eb48da5a723b529f2d330b9f8f8d44dcb3",
+      "matchesTestedTree": true
+    },
+    "packages/tool-read/src/next-action.ts": {
+      "sha256": "1829491df182d80e1cb6257e51d8efff3cd905f634de5297b5181bf1a1c9662a",
+      "matchesTestedTree": true
+    },
+    "presets/ptc-hashline/preset.patch.yml": {
+      "sha256": "be099e048d23cb26c3ba812846222a453ea6693121d0b1f3b8bf1a8c4e62a295",
+      "matchesTestedTree": true
+    },
+    "scripts/check-preset.mjs": {
+      "sha256": "75d3170c5baf2ecbb372bdbdbf50908f0c456ac0528abbae29ea07a61384c1d0",
+      "matchesTestedTree": true
+    },
+    "tests/integration/edit-policy-harness.ts": {
+      "sha256": "1f4c14acda813fac0732d8d9eb58f94d7aa3a27faf6799b9af3dbae758f84519",
+      "matchesTestedTree": true
+    },
+    "tests/ptc/harness.ts": {
+      "sha256": "8e8fcfc81555acface6e46e24ee6b6c1b9707cea150ea46a49fe89af2113b60c",
+      "matchesTestedTree": true
+    },
+    "tests/integration/default-edit-policy-module-address.spec.ts": {
+      "sha256": "dbf7685524e28b63ddba72be5d96de9c84510ab76035ceef57755f71f40425b4",
+      "matchesTestedTree": true
+    },
+    "packages/tool-read/tests/integration/policy-guidance.spec.ts": {
+      "sha256": "3f300b262c062b4089cdbd4ec2d8c459cbccb145647337941761aed55268f3cf",
+      "matchesTestedTree": true
+    },
+    "packages/tool-read/tests/unit/config.spec.ts": {
+      "sha256": "272d3f94e7062a4b487604166c697da6ef93734edd45f0ee713dc72b00091b98",
+      "matchesTestedTree": true
+    },
+    "packages/tool-read/tests/unit/next-action.spec.ts": {
+      "sha256": "1b8835ca4f7e1d67105bd7c402eb270eeccd01b389426409cf8427ac94f10b64",
+      "matchesTestedTree": true
+    },
+    ".github/workflows/policy-contract.yml": {
+      "sha256": "999b5bdbe6e24c1a43b0342085567ee35d5bd61e45ca249c5c13bfe4b9505db2",
+      "matchesTestedTree": true
+    }
+  },
+  "installed": {
+    "samePhysicalEngine": true,
+    "editorSha256": "33a97758f3664650a722a7dd83650ee97c1cd893a1f875e194e132bad4350bbc",
+    "policySha256": "00f3aa3d83be3b49f131d25d8c186c63b68226d683f3d0fb475d6f53c9d36dff"
+  },
+  "crossPlatform": {
+    "windows": "PASS (local execution)",
+    "macOS": "GAP (CI configured; not executed here)",
+    "linux": "GAP (CI configured; not executed here)"
+  },
+  "boundaries": [
+    "No daily profile switched, original node_modules/dist not refreshed.",
+    "No real-model request or full preset/actual PTC backend/subagent validation in this run.",
+    "The packed-policy probe mounts a scoped read/edit subset from actual installed assets; it is not a full-preset proof.",
+    "Delivery has 9 BLOCKED operations IDs outside its scope; every listed regression gate exited 0.",
+    "CI workflow added locally, not pushed or run."
+  ]
+}

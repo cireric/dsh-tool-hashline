@@ -7,8 +7,8 @@
  * `contentPolicyModule`. A registration without it keeps the upstream behavior
  * byte for byte.
  *
- * Contract with the editor (plain data only; this module imports nothing, so a
- * packed install runs it with nothing beside Node itself):
+ * Contract with the editor (plain data only; imports only its shipped sibling,
+ * so a packed install runs it with nothing beside Node itself):
  *
  *   createPolicy({ ctx, config }) -> {
  *     version,
@@ -24,6 +24,8 @@
  * model-authored byte count, tag or version.
  * @module dsh-tool-hashline/presets/ptc-hashline/policy/default-edit-policy
  */
+
+import { resolveUserSourceEvents, userTextOf } from './user-source.mjs'
 
 /** Receipt/format version, reported in every policy error and receipt. */
 export const POLICY_VERSION = '1'
@@ -451,52 +453,14 @@ export function createPolicy({ ctx, config }) {
   const verifyUserOverride = async context => {
     const { session, cwd, fallback, targetPath, signal, mode, emptyTarget } = context
     const source = fallback.userSource
-    const events = typeof session.snapshotEvents === 'function' ? session.snapshotEvents() : undefined
-    if (events === undefined) {
+    const currentEvents = typeof session.snapshotEvents === 'function' ? session.snapshotEvents() : undefined
+    if (currentEvents === undefined) {
       throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'this session does not expose its own event log, so a user citation cannot be verified here. Ask the user to restate the override in this session, or use Hashline.')
     }
-    /** The text a user-typed message carries, or undefined for any other event. */
-    const userTextOf = event => {
-      if (event?.type !== 'user/message' || event.data?.source?.kind !== 'user') return undefined
-      return (event.data?.content ?? [])
-        .filter(part => part?.type === 'text')
-        .map(part => part.text)
-        .join('')
-    }
+    const events = await resolveUserSourceEvents({ ctx, session, events: currentEvents, source, signal })
     /** The user message this citation resolves to. */
     let event
-    /** The character range the quote occupies in that message (never mutated onto the args). */
-    let resolvedStart
-    let resolvedEnd
-    // A cited session id must be this session or its real delegating parent; an
-    // unrelated session's message is not the user's authorization for this task.
-    const ownId = session.id ?? session.header?.id
-    const parentSession = session.parentSession
-    if (source.sessionId !== undefined && source.sessionId !== ownId) {
-      if (parentSession === undefined || parentSession?.id !== source.sessionId) {
-        throw new EditPolicyError(
-          'EDIT_POLICY_USER_SOURCE',
-          'sessionId "' + source.sessionId + '" is neither this session nor its delegating parent. A user request from an unrelated session does not authorize this edit.',
-        )
-      }
-      const parentEvents = typeof parentSession.snapshotEvents === 'function' ? parentSession.snapshotEvents() : undefined
-      if (parentEvents === undefined) {
-        throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the parent session\'s messages cannot be read here, so a parent citation cannot be verified. Ask the user to restate the override in this session.')
-      }
-      const parentMatches = parentEvents.filter(entry => (userTextOf(entry) ?? '').includes(source.quote))
-      if (parentMatches.length !== 1) {
-        throw new EditPolicyError(
-          'EDIT_POLICY_USER_SOURCE',
-          'the quoted text matches ' + parentMatches.length + ' message(s) in the parent session; it must match exactly one user message that this task was delegated from.',
-        )
-      }
-      event = parentMatches[0]
-      // The registry deep-freezes the parsed arguments, so the resolved range is
-      // carried in locals instead of being written back onto the citation.
-      resolvedStart = (userTextOf(event) ?? '').indexOf(source.quote)
-      resolvedEnd = resolvedStart + source.quote.length
-    }
-    if (event === undefined && Number.isInteger(source.eventSeq)) {
+    if (Number.isInteger(source.eventSeq)) {
       event = events.find(entry => entry?.seq === source.eventSeq)
       if (event === undefined) {
         throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'eventSeq ' + source.eventSeq + ' does not name an event in this session.')
@@ -524,16 +488,17 @@ export function createPolicy({ ctx, config }) {
         )
       }
       event = matches[0]
-      resolvedStart = (userTextOf(event) ?? '').indexOf(source.quote)
-      resolvedEnd = resolvedStart + source.quote.length
     }
     const text = userTextOf(event) ?? ''
-    const start = resolvedStart ?? source.start ?? text.indexOf(source.quote)
-    const end = resolvedEnd ?? source.end ?? start + source.quote.length
+    const start = source.start ?? text.indexOf(source.quote)
+    const end = source.end ?? start + source.quote.length
     if (start < 0 || end > text.length) {
       throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the declared character range ' + start + '..' + end + ' runs outside eventSeq ' + event.seq + ' (' + text.length + ' characters).')
     }
     const quoted = text.slice(start, end)
+    if (quoted !== source.quote) {
+      throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the cited event/range does not match the declared quote. Cite the original user text exactly.')
+    }
     if (quoted.trim() === '') {
       throw new EditPolicyError('EDIT_POLICY_USER_SOURCE', 'the cited range of eventSeq ' + event.seq + ' is blank, so it quotes no request.')
     }

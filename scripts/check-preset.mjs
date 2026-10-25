@@ -74,6 +74,7 @@ require_('tool-read', entry => {
     if (entry.config?.[key] !== value) fail('tool-read.' + key + ' must be ' + value)
   }
   if (entry.config?.snapshotMaxBytes !== 4194304) fail('tool-read.snapshotMaxBytes must be 4194304')
+  if (entry.config?.defaultEditPolicyGuidance !== true) fail('tool-read.defaultEditPolicyGuidance must be true for the managed preset')
   const stock = byId.get('tool-fs')?.config ?? {}
   for (const [key] of Object.entries(CAPS)) {
     const stockKey = 'read' + key[0].toUpperCase() + key.slice(1)
@@ -178,6 +179,13 @@ for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 's
 // so it must exist and stay on the same builtin-only surface as the operations
 // runtime: a policy that imported a host package would break a packed install.
 const policyFile = join('presets/ptc-hashline/policy', 'default-edit-policy.mjs')
+const userSourceFile = join('presets/ptc-hashline/policy', 'user-source.mjs')
+if (!existsSync(join(repo, userSourceFile))) fail('missing user-source policy helper: ' + userSourceFile)
+else {
+  for (const match of read(userSourceFile).matchAll(/from '([^']+)'/gu)) {
+    if (!match[1].startsWith('node:') && !match[1].startsWith('./')) fail(userSourceFile + ' imports a non-builtin module: ' + match[1])
+  }
+}
 if (!existsSync(join(repo, policyFile))) fail('missing default-edit policy module: ' + policyFile)
 else {
   const text = read(policyFile)

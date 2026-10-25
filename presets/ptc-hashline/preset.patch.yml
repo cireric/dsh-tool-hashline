@@ -111,6 +111,7 @@
               maxLineLength: 2000
               maxBytes: 51200
               snapshotMaxBytes: 4194304
+              defaultEditPolicyGuidance: true
 
           - id: tool-edit
             name: '@dsh-tool-hashline/tool-edit'

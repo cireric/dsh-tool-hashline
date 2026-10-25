@@ -40,9 +40,15 @@ pnpm test:profile
 pnpm test:delivery
 ```
 
+完整默认策略宿主验收另有 `pnpm test:host-policy --pack .scratch/<本轮唯一目录>`：先在独立验证副本运行 `pnpm check` 构建，再由此命令打包安装、通过真实 registry 挂完整 preset，并用固定适配器驱动真实 Agent、子代理和官方进程 PTC。它不调用真实模型，不证明模型纪律或收益；默认保留临时安装和逐条证据。也可传入 `test:delivery --keep` 留下的一次性 `dsh-profile-acceptance` 路径与新留证目录。不要在运行宿主链接的源码树里构建。
+
+2026-10-25 的[修复后宿主验收](docs/acceptance/2026-10-25-default-edit-policy-fix-02.md)扩展后为 32 PASS / 0 FAIL：F-03 父用户来源误拒已修复，覆盖真实在线与持久化父会话及新增 E2 边界；此前 21 PASS / 1 FAIL 保留为历史红测。剩余 E2 子项、macOS/Linux 实跑与真实模型仍待验收。
+
 `check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。`test:delivery` 是真实宿主交付验收：它会 `pnpm pack` 四个交付包、装进一次性 DSH_HOME、用真实 launcher 装配 profile、跑门禁并把逐条证据写进 `docs/acceptance/<日期>-delivery-acceptance-report.md`（耗时数分钟；`--no-gates` 只跑装配与工作流）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
 
 ## 文档入口
+
+运行目标包含 Windows、macOS 和 Linux。跨平台策略回归见 [CI 矩阵](.github/workflows/policy-contract.yml)，固定 Node 24 与 pnpm 11.28.5，分别使用各系统真实原生路径及 `file:` URL 测试。[fix-01 验收](docs/acceptance/2026-10-25-default-edit-policy-fix-01.md)已验证本轮 Windows 修复；macOS/Linux 实机结果待 CI，不以矩阵配置代替执行。read 的 `defaultEditPolicyGuidance` 默认关闭，仅本 preset 开启，其他挂载保留原指引。
 
 - [需求规格](docs/spec/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)
 - [默认编辑策略 SRS](docs/specs/2026-10-24-hashline-default-editing.md)、[实施计划](docs/plans/2026-10-24-hashline-default-editing-implementation-plan.md)与[工程验收报告](docs/acceptance/2026-10-24-default-edit-policy-engineering.md)：默认 Hashline、受控降级与验收规则；票据 01～08 的工程切片已实现并验收；[推广评测方案](docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)已定稿（三阶段：探针 → 正式对照 → 推广判定），真实模型对照因缺可用驱动与模型凭据而 BLOCKED（票据 11）

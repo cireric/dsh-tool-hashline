@@ -1,0 +1,345 @@
+{
+  "date": "2026-10-25",
+  "issue": "F-03",
+  "status": "PASS",
+  "pnpm": "11.28.5",
+  "platform": "Windows",
+  "sources": [
+    {
+      "file": "presets/ptc-hashline/policy/default-edit-policy.mjs",
+      "sha256": "95a049d84a4914d12101b982f17975044307769a76593bf5fec6887c3ba0cda2",
+      "testedTreeSha256": "95a049d84a4914d12101b982f17975044307769a76593bf5fec6887c3ba0cda2"
+    },
+    {
+      "file": "presets/ptc-hashline/policy/user-source.mjs",
+      "sha256": "1e415c889c88ac565f77fd6758cb7fa02eca3132b29bcdce77382e267abc6e0b",
+      "testedTreeSha256": "1e415c889c88ac565f77fd6758cb7fa02eca3132b29bcdce77382e267abc6e0b"
+    },
+    {
+      "file": "scripts/check-preset.mjs",
+      "sha256": "561af009c14712a0ea7241ed4999e1aad4a8a372b68c9ae34ee323f44fc71001",
+      "testedTreeSha256": "561af009c14712a0ea7241ed4999e1aad4a8a372b68c9ae34ee323f44fc71001"
+    },
+    {
+      "file": "scripts/test-default-edit-host.mjs",
+      "sha256": "8176b5ddad5d0b3ddecd6650feebec99b4f83f02b1ad831e4226d7563d52aa8a",
+      "testedTreeSha256": "8176b5ddad5d0b3ddecd6650feebec99b4f83f02b1ad831e4226d7563d52aa8a"
+    },
+    {
+      "file": "tests/integration/default-edit-policy-parent-source.spec.ts",
+      "sha256": "852d0e90895d11c9f5b47f78f21a31fcb7c3edb4247cbe43b4fe3b2366ff24a5",
+      "testedTreeSha256": "852d0e90895d11c9f5b47f78f21a31fcb7c3edb4247cbe43b4fe3b2366ff24a5"
+    },
+    {
+      "file": "tests/integration/default-edit-policy-module-address.spec.ts",
+      "sha256": "8759c61b0f4746a893de1a5f40d301a41f223b9b8c4187dd6ba60fd40da06212",
+      "testedTreeSha256": "8759c61b0f4746a893de1a5f40d301a41f223b9b8c4187dd6ba60fd40da06212"
+    },
+    {
+      "file": "pnpm-lock.yaml",
+      "sha256": "991174455b8df693779c8b4a678201e9bb8c829884545f337e67af480f27b9db",
+      "testedTreeSha256": "991174455b8df693779c8b4a678201e9bb8c829884545f337e67af480f27b9db"
+    }
+  ],
+  "targeted": {
+    "files": 3,
+    "passed": 27,
+    "failed": 0,
+    "newParentSourceTests": 15
+  },
+  "fullHost": {
+    "counts": {
+      "PASS": 32
+    },
+    "cases": [
+      {
+        "effects": 0,
+        "id": "E2-02-managed-refusal-no-write",
+        "status": "PASS"
+      },
+      {
+        "effects": 2,
+        "id": "E2-04-continuous-hashline",
+        "status": "PASS"
+      },
+      {
+        "effects": 1,
+        "id": "E2-02-policy-off-full-preset-control",
+        "status": "PASS"
+      },
+      {
+        "nextAction": "Some returned lines were column-truncated at 2000 characters, so they are not usable as seen lines. Page with offset/limit when that can supply complete target anchors and context. Only a target range that cannot be completed this way can use a \"window-limit\" fallback; it also requires complete original content from an authorized source and the required text/byte preservation (readCallId: e2-script-7:ptc:1). Declare only the affected ranges. Repeating this read will not reveal the rest of those lines. Stop if sufficient content cannot be obtained; do not change tool configuration.",
+        "id": "E2-03-full-prompt-sdk-guidance",
+        "status": "PASS"
+      },
+      {
+        "mode": "replace",
+        "effects": 1,
+        "id": "E2-05-replace-user-override",
+        "status": "PASS"
+      },
+      {
+        "mode": "patch",
+        "effects": 1,
+        "id": "E2-05-patch-user-override",
+        "status": "PASS"
+      },
+      {
+        "mode": "apply_patch",
+        "effects": 1,
+        "id": "E2-05-apply_patch-user-override",
+        "status": "PASS"
+      },
+      {
+        "bytes": 4194303,
+        "tagged": true,
+        "effects": 0,
+        "id": "E2-06-snapshot-boundary--1",
+        "status": "PASS"
+      },
+      {
+        "bytes": 4194304,
+        "tagged": false,
+        "effects": 1,
+        "id": "E2-06-snapshot-boundary-0",
+        "status": "PASS"
+      },
+      {
+        "bytes": 4194305,
+        "tagged": false,
+        "effects": 1,
+        "id": "E2-06-snapshot-boundary-1",
+        "status": "PASS"
+      },
+      {
+        "effects": 1,
+        "id": "E2-06-target-window-degradation",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-06-unrelated-window-refusal",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-07-mixed-create-update-refused-before-write",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-07-limited-and-ordinary-update-refused-as-one-request",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-07-payload-mutual-exclusion",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-08-read-evidence-external-drift",
+        "status": "PASS"
+      },
+      {
+        "oldCwd": "D:\\Project\\source\\__TEST__\\dsh-plugins\\dsh-tool-hashline\\.scratch\\hashline-default-editing\\effectiveness\\20261025-fix-02\\tree\\.scratch\\host-e2-residual-r5\\workspace-8j6Ook\\cwd-first",
+        "currentCwd": "D:\\Project\\source\\__TEST__\\dsh-plugins\\dsh-tool-hashline\\.scratch\\hashline-default-editing\\effectiveness\\20261025-fix-02\\tree\\.scratch\\host-e2-residual-r5\\workspace-8j6Ook\\cwd-second",
+        "effects": 0,
+        "id": "E2-08-effective-cwd-change-invalidates-read-evidence",
+        "status": "PASS"
+      },
+      {
+        "effects": 1,
+        "id": "E2-12-partial-program-effects-retained",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "innerRefusal": "[EDIT_POLICY_FALLBACK_REQUIRED] the request updates existing non-empty content of \"caught.txt\" without a declared degradation. Use Hashline (input with [path#tag] from your latest read) for it, or declare a fallback with one of snapshot-limit, window-limit, user-override and its evidence. Nothing was written.",
+        "id": "E2-12-caught-refusal-remains-visible-with-successful-outer-call",
+        "status": "PASS"
+      },
+      {
+        "childId": "09fb757e-73c5-40d6-a048-9c34daeb68d5",
+        "id": "E2-09-real-delegation-own-read-and-persona-override",
+        "preset": "ptc-hashline",
+        "headerParent": "e2-parent-1792897589850",
+        "parentSessionProperty": "undefined",
+        "personaOverridden": true,
+        "policyVisible": true,
+        "status": "PASS"
+      },
+      {
+        "childId": "6bf5c032-787c-4a30-9b60-5b533cee9709",
+        "id": "E2-09-real-parent-user-override-lineage",
+        "status": "PASS"
+      },
+      {
+        "id": "E2-09-parent-quote-without-guessed-session-id",
+        "status": "PASS"
+      },
+      {
+        "id": "E2-09-model-delegation-is-not-new-human-authorization",
+        "status": "PASS"
+      },
+      {
+        "id": "E2-09-lineage-without-delegation-record-is-refused",
+        "status": "PASS"
+      },
+      {
+        "parentAbsentFromMemory": true,
+        "id": "E2-09-persisted-parent-without-live-agent",
+        "status": "PASS"
+      },
+      {
+        "nativePreset": "standard",
+        "targetPreset": "ptc-hashline",
+        "id": "E2-10-official-standard-preset-isolation",
+        "status": "PASS"
+      },
+      {
+        "firstSession": "e2-1792897602312-jh8e8108ji",
+        "secondSession": "e2-1792897602316-nn1xjicv8e",
+        "effects": 0,
+        "id": "E2-10-interleaved-target-sessions-do-not-share-read-facts",
+        "status": "PASS"
+      },
+      {
+        "effects": 2,
+        "creationBoundary": "create-shaped edit retains the existing host observation refusal; truly new content created by stock write",
+        "id": "E2-11-create-empty-fill-delete",
+        "status": "PASS"
+      },
+      {
+        "effects": 1,
+        "byteFidelityClaim": "content only for replace mode; BOM-preserving guarantee is limited to hashline path",
+        "id": "E2-11-single-bom-empty-fill",
+        "status": "PASS"
+      },
+      {
+        "effects": 1,
+        "id": "E2-11-bom-crlf-hashline-move",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-11-move-destination-conflict-does-not-overwrite",
+        "status": "PASS"
+      },
+      {
+        "effects": 0,
+        "id": "E2-11-whitespace-and-consecutive-bom-refused",
+        "status": "PASS"
+      }
+    ],
+    "installed": {
+      "readEntry": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\delivery-LIuKMP\\dsh-home\\profiles\\acceptance\\node_modules\\@dsh-tool-hashline\\tool-read\\dist\\index.js",
+      "editEntry": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\delivery-LIuKMP\\dsh-home\\profiles\\acceptance\\node_modules\\@dsh-tool-hashline\\tool-edit\\dist\\index.js",
+      "upstreamEdit": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\delivery-LIuKMP\\dsh-home\\profiles\\acceptance\\node_modules\\@hy-sde-org\\dsh-tool-edit\\dist\\index.js",
+      "engineFromRead": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\delivery-LIuKMP\\dsh-home\\profiles\\acceptance\\node_modules\\@hy-sde-org\\dsh-hashline\\dist\\index.js",
+      "engineFromEdit": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\delivery-LIuKMP\\dsh-home\\profiles\\acceptance\\node_modules\\@hy-sde-org\\dsh-hashline\\dist\\index.js",
+      "samePhysicalEngine": true,
+      "policySha256": "95a049d84a4914d12101b982f17975044307769a76593bf5fec6887c3ba0cda2",
+      "editorSha256": "33a97758f3664650a722a7dd83650ee97c1cd893a1f875e194e132bad4350bbc",
+      "versions": {
+        "@deepseek-ai/dsh": "0.2.1-rc.2",
+        "@hy-sde-org/dsh-tool-edit": "0.2.1-alpha.4",
+        "@hy-sde-org/dsh-hashline": "0.2.1-alpha.4"
+      }
+    },
+    "userSourceSha256": "1e415c889c88ac565f77fd6758cb7fa02eca3132b29bcdce77382e267abc6e0b",
+    "ptc": {
+      "isolation": "process",
+      "language": "typescript"
+    },
+    "realModelRequests": 0,
+    "scriptedLlmRequests": 89
+  },
+  "delivery": {
+    "counts": {
+      "PASS": 21,
+      "BLOCKED": 9
+    },
+    "gates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "blocked": [
+      "INC-02",
+      "INC-03",
+      "INC-04",
+      "UPG-02",
+      "UPG-05",
+      "UPG-08",
+      "UPG-09",
+      "UPG-10",
+      "UPG-11"
+    ]
+  },
+  "evidence": {
+    "commands": ".scratch/hashline-default-editing/effectiveness/20261025-fix-02/commands.jsonl",
+    "host": ".scratch/hashline-default-editing/effectiveness/20261025-fix-02/tree/.scratch/host-e2-residual-r5/host-result.json",
+    "delivery": ".scratch/hashline-default-editing/effectiveness/20261025-fix-02/tree/.scratch/delivery-e2-final-r5/"
+  },
+  "priorRuns": {
+    "host-e2-residual": "FAIL: short-file fixture had no read citation; corrected in next run",
+    "host-e2-residual-r2": "PASS: 29 cases",
+    "host-e2-residual-r3": "PASS: 31 cases",
+    "host-e2-residual-r4": "FAIL: cwd fixture did not restore the agent cwd; corrected in next run",
+    "host-e2-residual-r5": "PASS",
+    "delivery-e2-final": "FAIL: isolated profile could not auto-discover sibling DSH CLI; corrected by explicitly setting DSH_CLI",
+    "delivery-e2-final-cli": "PASS",
+    "delivery-e2-final-r5": "PASS"
+  },
+  "remaining": {
+    "macOS": "GAP",
+    "Linux": "GAP",
+    "remainingE2Subcases": "GAP",
+    "realModelE3E4": "BLOCKED",
+    "dailyProfile": "not switched"
+  },
+  "scope": "Verified host delegation ancestry and original user text; no semantic NLP authorization, read/seen sharing, or later-parent-request task association inferred."
+}
