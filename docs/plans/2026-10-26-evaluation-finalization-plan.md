@@ -1,5 +1,7 @@
 # 剩余四个工作包的有界恢复
 
+> 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
+
 2026-10-26，用户在[收口](../acceptance/2026-10-26-project-closeout.md)后明确要求继续完成四项核心工作，并要求通过文件自行配置 BASE_URL、Provider 和模型 ID。恢复范围仅为下表，原三类扩展缺口继续保留；日常推荐 PTC、Hashline 可选与暂停默认推广的决定不变。完成标准是可审计的结果和有边界的结论，不要求证明 Hashline 胜出。
 
 | 工作包 | 有限产出和验收 | 执行边界 |
@@ -30,3 +32,7 @@
 ### S0 后续无费用审计
 
 [模式/提示审计](../acceptance/2026-10-26-evaluation-payload-prompt-audit.md)已交付：新增冻结 editPayloadVersion=2，坏 header 不再误标 apply_patch，旧报告继续按原版本复核；真实 SDK/可见结果核对未发现明确格式冲突，三次无工具响应均正常 stop。297 项单元、类型及固定 Provider 18 项宿主验证通过，新增真实模型请求 0。原 S0 FAIL 保留，未启动 S1；不为追求通过自动改提示或付费重跑。
+
+## 本轮处置
+
+用户确认[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)：已交付工作保留、S0 FAIL 与 GAP 不变；第四包 S1/S2 延期未执行。本轮收尾不宣称四包实验验收全部完成，后续按需重启须有明确问题、新冻结条件及费用授权。

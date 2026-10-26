@@ -1,6 +1,6 @@
 # 真实模型评测最小实现
 
-> 2026-10-26 当前安排：用户在[收口](../acceptance/2026-10-26-project-closeout.md)后授权[有界恢复四个核心工作包](../plans/2026-10-26-evaluation-finalization-plan.md)。日常推荐、默认推广暂停与原 FAIL/GAP/BLOCKED 不变；真实模型由用户手动配置，未自动启动付费执行。
+> 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
 
 本轮开发授权仅覆盖离线开发、测试及隔离交付验证；不包含付费请求、日常 profile 切换或上游升级。复用默认策略 SRS §7、E1–E4 和 S0–S2，结果见同日 real-model-evaluation 验收报告。
 
@@ -52,3 +52,5 @@
 ### S0 后续无费用审计
 
 [模式/提示审计](../acceptance/2026-10-26-evaluation-payload-prompt-audit.md)已交付：新增冻结 editPayloadVersion=2，坏 header 不再误标 apply_patch，旧报告继续按原版本复核；真实 SDK/可见结果核对未发现明确格式冲突，三次无工具响应均正常 stop。297 项单元、类型及固定 Provider 18 项宿主验证通过，新增真实模型请求 0。原 S0 FAIL 保留，未启动 S1；不为追求通过自动改提示或付费重跑。
+
+当前迭代按[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)收尾；工程与审计交付保留，S0 FAIL 被接受为有效结果，S1/S2 延期未执行，不将延期计为完成。

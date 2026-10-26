@@ -2,7 +2,7 @@
 
 复用 [SRS §7](../../docs/specs/2026-10-24-hashline-default-editing.md)、[S0–S2 方案](../../docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)。本目录是维护者主动运行的离线工具，不随 bundle 发布，也不新增常驻遥测。
 
-**2026-10-26 有界恢复四个核心工作包。** 用户选择手动填写连接文件；用户已明确授权仅执行[首轮真实 S0](../../docs/acceptance/2026-10-26-evaluation-real-s0-modelscope.md)，推理中超时 GAP；再次授权的[完整 S0 第二轮](../../docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)已执行 9 项，结果 FAIL；未启动 S1，默认推广仍暂停。原 FAIL/GAP/BLOCKED 及[收口记录](../../docs/acceptance/2026-10-26-project-closeout.md)保留，当前范围见[恢复计划](../../docs/plans/2026-10-26-evaluation-finalization-plan.md)。
+**2026-10-26 本轮评测收尾、停止扩样。** 用户接受[完整 S0 第二轮](../../docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)的 FAIL，后续离线审计完成；按[阶段决策](../../docs/acceptance/2026-10-26-evaluation-stage-decision.md)转为按需维护，S1/S2 延期未执行。下列工具与配置保留供今后有明确问题及新费用授权时复用，不构成自动续跑安排。
 
 ## 手动连接与有界实验
 

@@ -1,0 +1,126 @@
+{
+  "date": "2026-10-26",
+  "decision": "stop expansion; maintain on demand",
+  "basis": "user accepted the recommendation after reviewing real S0 FAIL and offline audit",
+  "additionalRealModelRequests": 0,
+  "corePackages": [
+    {
+      "id": 1,
+      "disposition": "assembled-request capture implemented and validated; transport/mode gaps retained"
+    },
+    {
+      "id": 2,
+      "disposition": "bounded design and reusable configuration delivered; formal execution budget not approved"
+    },
+    {
+      "id": 3,
+      "disposition": "S0 fully executed, FAIL; diagnosis and audit delivered"
+    },
+    {
+      "id": 4,
+      "status": "GAP",
+      "disposition": "S1/S2 deferred and not executed; not claimed complete"
+    }
+  ],
+  "s0": {
+    "status": "FAIL",
+    "samples": 9,
+    "requests": 28,
+    "totalTokens": 398176,
+    "arms": {
+      "hashline-default": {
+        "samples": 3,
+        "finalCorrect": 2,
+        "requests": 11,
+        "totalTokens": 164431,
+        "states": {
+          "GAP": 2,
+          "FAIL": 1
+        },
+        "firstCandidate": {
+          "correct": 0,
+          "incorrect": 2,
+          "unknown": 1
+        }
+      },
+      "hashline-fallback": {
+        "samples": 3,
+        "finalCorrect": 1,
+        "requests": 7,
+        "totalTokens": 103638,
+        "states": {
+          "GAP": 1,
+          "FAIL": 2
+        },
+        "firstCandidate": {
+          "correct": 0,
+          "incorrect": 1,
+          "unknown": 2
+        }
+      },
+      "stock-edit": {
+        "samples": 3,
+        "finalCorrect": 3,
+        "requests": 10,
+        "totalTokens": 130107,
+        "states": {
+          "PASS": 3
+        },
+        "firstCandidate": {
+          "correct": 3,
+          "incorrect": 0,
+          "unknown": 0
+        }
+      }
+    }
+  },
+  "usageLedger": {
+    "scope": "separate runs for spending evidence only, not pooled experimental samples",
+    "firstCancelledRequest": {
+      "requests": 1,
+      "totalTokens": "unknown"
+    },
+    "singleDiagnostic": {
+      "requests": 1,
+      "totalTokens": 14827
+    },
+    "completedS0": {
+      "requests": 28,
+      "totalTokens": 398176
+    },
+    "actualCombinedTotalTokens": "unknown",
+    "monetaryCost": "unknown"
+  },
+  "resumptionRequires": [
+    "concrete use case and decision-changing research question",
+    "prospectively frozen comparison, metrics and repeats",
+    "explicit new provider/model/parameter and cost authorization",
+    "fresh protocol/output; existing S0 prerequisite before S1 or an explicitly revised plan"
+  ],
+  "retainedGaps": [
+    "whole-run HTTP wire and internal HTTP count",
+    "malformed-input target attribution and execution mode",
+    "general shell/multiple targets",
+    "independent model latency and other cancellation points",
+    "cross-platform validation",
+    "prior cancelled-request usage and monetary billing"
+  ],
+  "sources": [
+    {
+      "path": "docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-summary.json",
+      "sha256": "c8e27a2d4eb083e85739f124e18dc71b6b80fb80cfe6fe99d33f6f949d1eceb1"
+    },
+    {
+      "path": "docs/acceptance/2026-10-26-evaluation-s0-diagnosis-summary.json",
+      "sha256": "fe856b3d5dc3edf976c9184300139ec670f50a24a7c23bbfd24ffd8f2ad81e3b"
+    },
+    {
+      "path": "docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-02-summary.json",
+      "sha256": "66ed3281fca3371cd0fffa9de1f44a5089a1097332ebc442eaa01be9c538301e"
+    },
+    {
+      "path": "docs/acceptance/2026-10-26-evaluation-payload-prompt-audit-summary.json",
+      "sha256": "f2d4d853ce84a8d3affe8f497cfeae221f6f566b0a3519e8ca09d8015ec53e30"
+    }
+  ]
+}

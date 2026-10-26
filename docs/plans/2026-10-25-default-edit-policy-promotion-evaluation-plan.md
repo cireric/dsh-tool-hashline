@@ -1,6 +1,6 @@
 # 默认编辑策略：推广评测方案
 
-> 2026-10-26 当前安排：用户在[收口](../acceptance/2026-10-26-project-closeout.md)后授权[有界恢复四个核心工作包](../plans/2026-10-26-evaluation-finalization-plan.md)。日常推荐、默认推广暂停与原 FAIL/GAP/BLOCKED 不变；真实模型由用户手动配置，未自动启动付费执行。
+> 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
 
 2026-10-26，r5（保留原建档路径）。依据[默认策略 SRS §7](../specs/2026-10-24-hashline-default-editing.md)与[协议补充](../specs/2026-10-25-real-model-evaluation-protocol.md)。基础实现见[实施计划](2026-10-25-real-model-evaluation-implementation-plan.md)、[前轮报告](../acceptance/2026-10-25-real-model-evaluation.md)；逐目标/会话树/刺激的本轮边界见[阶段验收](../acceptance/2026-10-26-evaluation-next-stage.md)。尚无正式冻结的真实模型对照，不授权付费执行、目标切换、重启或发布。
 

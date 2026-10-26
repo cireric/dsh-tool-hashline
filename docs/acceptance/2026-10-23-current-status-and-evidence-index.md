@@ -2,12 +2,13 @@
 
 更新日期：2026-10-26。本文汇总已有记录，文件名保留最初建档日期。本轮补充离线实现与用户授权的真实 S0 首轮，见本表；新一轮 S0 已完整执行 9 项，整体 FAIL，未启动 S1；原超时轮保留 GAP。历史报告保留各轮结果，以下计数不得合并为同一次执行。
 
-**当前安排：用户已授权有界恢复四个核心评测包。** 见[恢复计划](../plans/2026-10-26-evaluation-finalization-plan.md)；真实模型连接已由用户配置并明确授权仅执行 S0；首轮超时 GAP 后经用户新授权执行第二轮，完整 S0 FAIL，未自动续跑或启动 S1。日常推荐 PTC、Hashline 手动可选及暂停默认推广的决定不变，历史[收口记录](2026-10-26-project-closeout.md)保留。原 FAIL/GAP/BLOCKED 不变。
+**当前安排：本轮评测按用户确认的[阶段决策](2026-10-26-evaluation-stage-decision.md)收尾，停止扩样并转为按需维护。** 完整 S0 已执行但 FAIL，后续离线审计完成；S1/S2 延期未执行，不计作完成或通过。日常推荐 PTC、Hashline 手动可选及暂停默认推广不变；原 FAIL/GAP/BLOCKED 与历史证据保留。
 
 ## 当前结论
 
 | 主题 | 当前依据与证明范围 |
 |---|---|
+| 本轮阶段决策 | [决策记录](2026-10-26-evaluation-stage-decision.md)：接受 S0 失败并停止扩样；已交付实现与审计保留复用，S1/S2 延期未执行。两个候选问题按需立项，不以未获 PASS 作为继续花费理由 |
 | S0 后续模式/提示审计 | [本轮验收](2026-10-26-evaluation-payload-prompt-audit.md)：version=2 消除坏 header→apply_patch 误标，actualMode 仍 unknown；旧真实报告继续复核且未改写。6 个 Hashline 首请求均有方括号指引，三个无工具响应正常 stop，未发现明确提示冲突。297 项单元、类型与固定宿主 18 项/45 请求通过；新增真实请求 0，S0 FAIL 不变 |
 | 完整真实 S0 第二轮 | [本轮验收](2026-10-26-evaluation-real-s0-modelscope-02.md)：9 项全部执行，28/28 请求对账与独立重放、总 Token 398,176；3 PASS / 3 GAP / 3 FAIL，最终 6/9 正确。stock-edit 3/3 正确，两 Hashline 臂分别 2/3 与 1/3；Hashline 首次条件失败，S0 FAIL 后停止，未启动 S1，不外推普遍收益 |
 | S0 诊断与单请求复验 | [本轮诊断](2026-10-26-evaluation-s0-diagnosis.md)：确认原推理控制未发送，修复 cap 枚举误拒；追加一次 low/max_tokens 请求约 46.2 秒返回工具调用，usage 14,827 Token。未执行工具，完整 S0 仍 GAP。291 项单元及类型通过，未启动 S1 |
