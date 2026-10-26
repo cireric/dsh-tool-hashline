@@ -21,7 +21,7 @@
 
 ## 背景与维护规则
 
-- 背景研究：[10-22 选型](background/2026-10-22-dsh-hashline-selection-analysis.md)、[10-23 功能盘点](background/2026-10-23-dsh-hashline-feature-analysis.md)、[10-24 实现路线](background/2026-10-24-hashline-implementation-landscape.md)。它们保留研究时点的版本、观察和建议，不覆盖现行规格。
+- 背景研究：[10-22 选型](background/2026-10-22-dsh-hashline-selection-analysis.md)、[10-23 功能盘点](background/2026-10-23-dsh-hashline-feature-analysis.md)、[10-24 实现路线](background/2026-10-24-hashline-implementation-landscape.md)、[10-26 评测代码分析](background/2026-10-26-real-model-evaluation-code-analysis.md)。它们保留研究时点的版本、观察和建议，不覆盖现行规格。
 - 迁入证据：[PTC gate 资源清单](evidence/2026-10-22-ptc-gate-inventory.txt)。
 - 开发细则：[证据可追溯](agents/evidence-traceability.md)、[本地 issue](agents/issue-tracker.md)、[票据状态](agents/triage-labels.md)、[领域用语](agents/domain.md)、[文档维护与清理](agents/documentation.md)。
 
