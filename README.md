@@ -4,6 +4,8 @@
 
 验证基线为 DSH `0.2.1-rc.2`、hashline/tool-edit `0.2.1-alpha.4` 加本地补丁。项目仍为 private bundle；已验证能力与范围见[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
 
+**项目状态（2026-10-26）：本阶段已收口，保留按需维护。** 日常推荐 PTC Mode，PTC Hashline Mode 保留为手动可选方案；默认推广与通用评测扩建暂停。现有功能、测试和历史证据保留，后续范围与恢复条件见[收口记录](docs/acceptance/2026-10-26-project-closeout.md)。该决定没有修改日常 DSH profile 或 preset 实现，不代表收益验证通过。
+
 ## 项目组成
 
 - `packages/tool-read`：自有普通文本 read，向 PTC 的 canonical value 返回 tag、窗口与后续操作指引。
@@ -11,7 +13,7 @@
 - `presets/ptc-hashline`：独立 persona、Intent watchdog、默认编辑策略，以及 `/ptc-hashline-incident`、`/ptc-hashline-upgrade` 两份运维 skill。skill 仅供本 preset 的真实用户显式调用，模型目录不包含且模型加载被拒。
 - `tests/`、`scripts/`：契约回归、安装验证与隔离打包宿主验收。自有 read 的附属测试位于包内。
 
-默认编辑策略要求适用的既有文本更新优先使用 Hashline，受控替代更新需提供依据。运维 skill 的实现和候选验证不代表获准升级；目标切换仍需用户当次明确同意。
+选用本 preset 时，其内部默认编辑策略要求适用的既有文本更新优先使用 Hashline，受控替代更新需提供依据。运维 skill 的实现和候选验证不代表获准升级；目标切换仍需用户当次明确同意。
 
 ## 安装使用
 

@@ -2,6 +2,8 @@
 
 复用 [SRS §7](../../docs/specs/2026-10-24-hashline-default-editing.md)、[S0–S2 方案](../../docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)。本目录是维护者主动运行的离线工具，不随 bundle 发布，也不新增常驻遥测。
 
+**2026-10-26 收口：保留复用，暂停主动扩建与默认推广。** 下列命令继续可用，文中的后续实验仅是操作参考，没有待自动执行的真实模型安排。原始 FAIL/GAP/BLOCKED 保留；延期工作和恢复条件见[收口记录](../../docs/acceptance/2026-10-26-project-closeout.md)。
+
 ## 无凭据验证
 
 ```powershell

@@ -1,0 +1,241 @@
+{
+  "date": "2026-10-26",
+  "authorization": "User accepted the recommendation and explicitly requested project closeout.",
+  "implementationCommit": "116ece1",
+  "scopeStatus": "phase-closed; maintenance-on-demand",
+  "recommendation": {
+    "dailyMode": "PTC Mode",
+    "hashline": "manual opt-in",
+    "defaultPromotion": "paused-by-user-decision",
+    "evaluationExpansion": "paused-by-user-decision"
+  },
+  "runtimeChangeDuringDocumentationCloseout": false,
+  "dailyProfileChanged": false,
+  "dependenciesUpgraded": false,
+  "hostRestarted": false,
+  "published": false,
+  "remotePushed": false,
+  "realModelRequestsDuringCloseout": 0,
+  "deletedEvidence": [],
+  "reportEvidenceLevel": "user-provided-report-snapshots; raw logs and checkers not independently rerun",
+  "reports": [
+    {
+      "file": "round-1-report.md",
+      "source": "D:/Project/source/__TEST__/default/docs/inbox/tetris-ab/final-report.md",
+      "bytes": 28829,
+      "sha256": "e3e5c96680abd9b35295f3e56a5083a1619469746bfc6a45aa5f5904a2126b74",
+      "copiedVerbatim": true,
+      "archive": "docs/evidence/tetris-ab/round-1-report.md",
+      "sourceAndArchiveMatch": true
+    },
+    {
+      "file": "round-2-report.md",
+      "source": "D:/Project/source/__TEST__/default/docs/inbox/tetris-ab-v2/report.md",
+      "bytes": 14104,
+      "sha256": "7d5aecec74bf16ed312f15b339e5775dc4f8977a5d548e7dea5354fb8b128a04",
+      "copiedVerbatim": true,
+      "archive": "docs/evidence/tetris-ab/round-2-report.md",
+      "sourceAndArchiveMatch": true
+    }
+  ],
+  "validatedSources": [
+    {
+      "file": "scripts/evaluation/host.mjs",
+      "sha256": "6c940da1276b5f428c598566b1ff52117886615e4673d7e0d060751e8551a529",
+      "unchanged": true
+    },
+    {
+      "file": "scripts/evaluation/review-design.mjs",
+      "sha256": "b8c062bbfa12bcfe9aa38ff42eea4673e9e8c7508e9eea04b191a23ee9f0f4d8",
+      "unchanged": true
+    },
+    {
+      "file": "tests/unit/evaluation-design-review.spec.ts",
+      "sha256": "ba58e11fa05b82594d0b0c487494fec1374c0572185f9e9e3cec209d518b2f8d",
+      "unchanged": true
+    }
+  ],
+  "lastImplementationVerification": {
+    "reference": "2026-10-26-evaluation-design-review-summary.json",
+    "tests": {
+      "files": 11,
+      "passed": 197,
+      "failed": 0,
+      "newReviewCases": 8,
+      "typesExit": 0
+    },
+    "smoke": {
+      "samples": 18,
+      "status": "PASS",
+      "accounting": {
+        "status": "PASS",
+        "streamRequests": 45,
+        "capturedRequests": 45,
+        "gaps": []
+      }
+    },
+    "deliveryGates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "deliveryVerdicts": {
+      "SCOPE-01": "PASS",
+      "SCOPE-02": "PASS",
+      "SCOPE-03": "PASS",
+      "SCOPE-04": "PASS",
+      "SCOPE-05": "PASS",
+      "SCOPE-06": "PASS",
+      "SCOPE-07": "PASS",
+      "PACK-01": "PASS",
+      "INC-01": "PASS",
+      "INC-02": "BLOCKED",
+      "INC-03": "BLOCKED",
+      "INC-04": "BLOCKED",
+      "INC-05": "PASS",
+      "INC-06": "PASS",
+      "INC-07": "PASS",
+      "CONFIG-01": "PASS",
+      "UPG-01": "PASS",
+      "UPG-02": "BLOCKED",
+      "UPG-03": "PASS",
+      "UPG-04": "PASS",
+      "UPG-05": "BLOCKED",
+      "UPG-06": "PASS",
+      "UPG-07": "PASS",
+      "UPG-08": "BLOCKED",
+      "UPG-09": "BLOCKED",
+      "UPG-10": "BLOCKED",
+      "UPG-11": "BLOCKED",
+      "UPG-12": "PASS",
+      "UPG-13": "PASS",
+      "REG-01": "PASS"
+    },
+    "reexecutedDuringDocumentationCloseout": false
+  },
+  "deferredCorePackages": [
+    "actual request prompt/tool/SDK evidence",
+    "formal tasks, repetitions and metric interpretation",
+    "real Provider S0 validation",
+    "formal S1 comparison and S2 benefit judgment"
+  ],
+  "deferredExtensions": [
+    "shell/multi-target attribution and generic behavior",
+    "separate latency and additional cancellation/external-process coverage",
+    "unexecuted platforms"
+  ],
+  "historicalBlockedIds": [
+    "INC-02",
+    "INC-03",
+    "INC-04",
+    "UPG-02",
+    "UPG-05",
+    "UPG-08",
+    "UPG-09",
+    "UPG-10",
+    "UPG-11"
+  ],
+  "localEvidenceRetained": [
+    {
+      "file": ".scratch/real-model-evaluation/20261026-design-review/logs/evaluation-final.log",
+      "exists": true,
+      "sha256": "3a3c08323a37f19a30e120b967189392ff8f3752aa9ce8663f4a675b4e083430"
+    },
+    {
+      "file": ".scratch/real-model-evaluation/20261026-design-review/logs/types-final.log",
+      "exists": true,
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "file": ".scratch/real-model-evaluation/20261026-design-review/logs/cli.json",
+      "exists": true,
+      "sha256": "4171a5645f9c3e273094bc4e3f7e81fe3f9fe219ffa92015d0b8a5a3cda0db7c"
+    },
+    {
+      "file": ".scratch/real-model-evaluation/20261026-design-review/logs/delivery.log",
+      "exists": true,
+      "sha256": "bda24cfb148ed4001611e171787e3a7f28820bf22f329aa29626a6153d7866ce"
+    },
+    {
+      "file": ".scratch/real-model-evaluation/20261026-design-review/smoke/report.json",
+      "exists": true,
+      "sha256": "d526fa8eed929dfd104bfbabe378beae501e84b74eed1c2fd36d7f112a96a63f"
+    },
+    {
+      "file": ".scratch/real-model-evaluation/20261026-suite-host/blocked-install.json",
+      "exists": true,
+      "sha256": "c15382bea50a023da619b669bb834781b652b1c86b7e2aad419dd3f5a214d158"
+    },
+    {
+      "file": ".scratch/real-model-evaluation/20261026-suite-host/host-02/report.json",
+      "exists": true,
+      "sha256": "d0ee52dccffb7e50d2723542ba9e9346b856661143cac61ec8bb8a082bc539ed"
+    }
+  ],
+  "checks": {
+    "links": {
+      "checkedMarkdown": 15,
+      "broken": []
+    },
+    "diff": {
+      "workingTreeExit": 0,
+      "stagedExit": 0
+    },
+    "gitBlobArchiveHashes": [
+      {
+        "file": "docs/evidence/tetris-ab/round-1-report.md",
+        "sha256": "e3e5c96680abd9b35295f3e56a5083a1619469746bfc6a45aa5f5904a2126b74",
+        "matchesManifest": true
+      },
+      {
+        "file": "docs/evidence/tetris-ab/round-2-report.md",
+        "sha256": "7d5aecec74bf16ed312f15b339e5775dc4f8977a5d548e7dea5354fb8b128a04",
+        "matchesManifest": true
+      }
+    ],
+    "onlyDocumentationStaged": true
+  },
+  "releaseAction": "local commits only; no tag or deployment"
+}

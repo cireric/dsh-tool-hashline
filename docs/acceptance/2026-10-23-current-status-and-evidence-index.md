@@ -2,10 +2,13 @@
 
 更新日期：2026-10-26。本文汇总已有记录，文件名保留最初建档日期。本轮补充逐目标/会话树/刺激的离线实现及独立宿主证据，见本表；没有新增付费模型请求。历史报告保留各轮结果，以下计数不得合并为同一次执行。
 
+**当前安排：本阶段已收口，保留按需维护。** 用户已确认日常推荐 PTC Mode、Hashline 手动可选，暂停默认推广和主动评测扩建；研究缺口退出当前交付待办，事实状态保持不变。处置、来源与恢复条件见[收口记录](2026-10-26-project-closeout.md)。日常 profile 与既有 preset 契约未修改。
+
 ## 当前结论
 
 | 主题 | 当前依据与证明范围 |
 |---|---|
+| 项目收口 | [收口验收与延期清单](2026-10-26-project-closeout.md)：最后实现已提交为 116ece1；[两轮用户报告](../evidence/tetris-ab/README.md)按原文与摘要归档。当前证据不支持默认推广；不宣称机制普遍优劣、正式 S0/S1/S2 通过或所有 GAP 已解决 |
 | 基础 read/edit、cwd、persona | 已实现并有回归，见[运行修复](2026-10-23-runtime-fix-acceptance.md) |
 | MV 与快照次序 | 创建意图、不覆盖、部分成功、磁盘先于快照已修复，见[MV 验收](2026-10-23-mv-observation-acceptance.md)与 [ADR-0004](../adr/0004-mv-create-intent-and-snapshot-order.md) |
 | BOM | Local provider 的 hashline 路径支持零/单 BOM，连续 BOM 拒绝，见[BOM 验收](2026-10-23-bom-and-snapshot-repair-acceptance.md)与 [ADR-0005](../adr/0005-bom-preserving-hashline-read.md) |

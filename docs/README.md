@@ -4,10 +4,13 @@
 
 **当前实现、验收范围和剩余缺口统一见[当前状态与证据索引](acceptance/2026-10-23-current-status-and-evidence-index.md)。** 文件名保留最初建档日期，正文注明更新日期。历史报告中的“当前”指执行当时。
 
+2026-10-26 已按用户决定[收口为按需维护](acceptance/2026-10-26-project-closeout.md)，默认推广与评测扩建暂停；旧计划的后续工作已延期，原 FAIL/GAP/BLOCKED 保留。[两轮外部 A/B 报告快照](evidence/tetris-ab/README.md)仅作决策参考。
+
 ## 按主题阅读
 
 | 主题 | 需求与决策 | 实施与证据 |
 |---|---|---|
+| 收口与按需维护 | [收口计划](plans/2026-10-26-project-closeout-plan.md) | [收口记录](acceptance/2026-10-26-project-closeout.md)、[报告归档](evidence/tetris-ab/README.md)；日常推荐 PTC，Hashline 可选，未自动切换配置 |
 | PTC、read/tag/edit、窗口与 seen | [基础规格 v3](specs/2026-10-22-ptc-hashline-requirements-spec.md)、[ADR-0001](adr/0001-inherit-bounded-seen-guard.md)、[ADR-0002](adr/0002-own-ptc-gate-assets.md) | [初期追溯](acceptance/2026-10-23-acceptance-traceability.md)、[运行修复](acceptance/2026-10-23-runtime-fix-acceptance.md) |
 | cwd、MV、BOM、快照次序 | [ADR-0003](adr/0003-effective-working-directory.md)、[0004](adr/0004-mv-create-intent-and-snapshot-order.md)、[0005](adr/0005-bom-preserving-hashline-read.md) | [MV 验收](acceptance/2026-10-23-mv-observation-acceptance.md)、[BOM 验收](acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)、[兼容矩阵](../tests/compat/README.md) |
 | 运维 skills | [需求](specs/2026-10-23-ptc-hashline-operations-skills.md)、[实施计划](plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md) | [真实宿主交付报告](acceptance/2026-10-24-delivery-acceptance-report.md)及同名 summary.json |

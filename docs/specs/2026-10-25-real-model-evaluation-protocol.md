@@ -1,5 +1,7 @@
 # 真实模型评测协议补充
 
+> 2026-10-26 当前安排：已按用户决定[收口为按需维护](../acceptance/2026-10-26-project-closeout.md)，默认推广与主动评测扩建暂停。下文保留原方案及各阶段结果；未完成研究项已延期，不再作为本次交付待办，FAIL/GAP/BLOCKED 不变。
+
 2026-10-25 建档，2026-10-26 补充逐目标、会话树、请求对账与冻结刺激。承接[默认编辑策略 SRS §7](2026-10-24-hashline-default-editing.md)，仅细化维护者评测数据和离线执行契约；不改变日常工具、策略或升级授权。基础实现见[实施计划](../plans/2026-10-25-real-model-evaluation-implementation-plan.md)和[前轮验收](../acceptance/2026-10-25-real-model-evaluation.md)，后续边界见[阶段验收](../acceptance/2026-10-26-evaluation-next-stage.md)。
 
 ## 冻结输入

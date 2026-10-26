@@ -1,5 +1,7 @@
 # PTC Hashline 默认编辑策略实施计划
 
+> 2026-10-26 当前安排：已按用户决定[收口为按需维护](../acceptance/2026-10-26-project-closeout.md)，默认推广与主动评测扩建暂停。下文保留原方案及各阶段结果；未完成研究项已延期，不再作为本次交付待办，FAIL/GAP/BLOCKED 不变。
+
 - 日期：2026-10-24；版本：r1。
 - 权威需求：[默认编辑策略 SRS 1.1](../specs/2026-10-24-hashline-default-editing.md)。本文解释实施方案，不另立需求正文。
 - 状态说明（2026-10-25）：票据 01～08 的[工程切片已交付](../acceptance/2026-10-24-default-edit-policy-engineering.md)，后续 [fix-01](../acceptance/2026-10-25-default-edit-policy-fix-01.md) 与 [fix-02](../acceptance/2026-10-25-default-edit-policy-fix-02.md)已复验；完整 E2、E3 与 E4 尚未完成。正文设计事实按实施前时点阅读，当前缺口见[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。
