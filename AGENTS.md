@@ -25,3 +25,10 @@
 保留用户已有工作树改动；不热改运行中宿主依赖，不自动重启或发布。任何升级目标切换都需用户当次明确同意，候选验证或实现完成不代表获准切换。测试结果区分 PASS、FAIL、GAP 与 BLOCKED，不把 skipped、夹具或历史结果扩大为未执行的验收；每条结论须能指回证据或产出点（代码、数据、责任层），否则记待查项。细则见[证据可追溯](docs/agents/evidence-traceability.md)。
 
 正式新需求/计划放 `docs/specs/`、`docs/plans/`；本地 issue、草稿和原始证据留在被忽略的 `.scratch/`。细则见[issue tracker](docs/agents/issue-tracker.md)、[领域文档约定](docs/agents/domain.md)。
+
+## 技能与验收判据
+
+- **完成前验证**：报告完成、修复或通过，提交 Commit/PR，或转入下一开发任务前，使用会话提供的 `verification-before-completion`。技能未提供时仍须执行下述验证，不虚报技能已调用。
+- **验证证据**：以最终 Git Diff 和任务验收条件为准，记录适用检查的命令、退出码与覆盖范围，并检查意外修改。同一份未变化的最终 Diff 可复用本轮证据；后续修改须补跑受影响检查。验证失败后修复并复核；无法执行或未覆盖的项按上文记录 FAIL/GAP/BLOCKED 及原因，只声明证据支持的结果。
+- **验证范围**：代码变更按 README 和上文门禁条件验证；纯文档变更按[文档维护约定](docs/agents/documentation.md)检查链接、来源和 Diff，无需构建宿主链接树。
+- **审查意见**：收到具体代码审查意见时，使用会话提供的 `receiving-code-review`；未提供该技能时仍逐条核对源码、需求、架构和兼容约束。每条意见归为 ACCEPT（有效，完成修复与受影响验证）、REJECT（不成立，说明依据）或 CLARIFY（证据不足，记录待查点）。没有具体意见时无需启动该技能。
