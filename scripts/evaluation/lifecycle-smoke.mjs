@@ -31,7 +31,7 @@ export async function lifecycleSmoke(profile, out) {
         id: 'offline-lifecycle-' + scenario, kind: 'probe', limits: ['Fixed adapter and fixture-driven follow-up/cancellation only; zero real model requests, no provider billing claims.'], createdAt: new Date().toISOString(),
         comparison: ['stock-edit', 'hashline-default', 'hashline-fallback'], model: { provider: 'eval-fixture', model: 'fixture', parameters: {} }, dependencies, tools,
         samples: { repetitions: 1, seed: cancelled ? Number(scenario.at(-1)) : 3 }, order: 'interleaved', budget: { maxModelRequests: 40, maxTotalTokens: 100, timeoutMs: 20000 },
-        passConditions: { minFirstCandidateCorrect: 1, maxTotalTokensPerTask: 100 }, tasks: [task],
+        passConditions: { semantics: 'per-arm-count-and-per-run-tokens-v1', minFirstCandidateCorrect: 1, maxTotalTokensPerTask: 100 }, tasks: [task],
       })
       const directory = path.join(out, scenario)
       const report = await runEvaluation(protocol, { profile, out: directory, execute: true, signal: controller.signal,
@@ -72,6 +72,7 @@ export async function lifecycleSmoke(profile, out) {
       assert(requests.every(o => !o.afterCancellation))
       if (!cancelled) {
         assert.equal(report.status, 'PASS')
+        assert.equal(report.conditions.status, 'PASS')
         assert.equal(report.accounting.status, 'PASS')
         assert.equal(observations.filter(o => o.kind === 'followup').length, 3)
         for (const run of report.runs) {
@@ -86,6 +87,7 @@ export async function lifecycleSmoke(profile, out) {
         }
       } else {
         assert.equal(report.status, 'GAP')
+        assert.equal(report.conditions.status, 'GAP')
         assert(report.runs.every(r => r.status === 'CANCELLED'))
         assert.equal(report.runs.filter(r => r.sessionId).length, 1)
         assert.deepEqual(observations.filter(o => o.kind !== 'request').map(o => o.kind), ['cancel', 'aborted', 'settled'])

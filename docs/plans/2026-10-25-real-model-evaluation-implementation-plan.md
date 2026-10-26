@@ -22,3 +22,5 @@
 同日[生命周期计划](2026-10-26-evaluation-lifecycle-plan.md)补齐实际同进程 fork 去重与子流取消的固定 Provider 端到端证据，见[验收](../acceptance/2026-10-26-evaluation-lifecycle.md)。正式执行器未变；创建中/工具中取消、外部进程及真实 provider 计费仍待验证。
 
 随后[apply_patch 计划](2026-10-26-evaluation-apply-patch-plan.md)补齐无移动、完整受管解析回执的文件归属，见[验收](../acceptance/2026-10-26-evaluation-apply-patch.md)。73 项回归及最终 18 例宿主组通过；首轮新建和空文件换行不符仍各保留 FAIL，未据此扩大工具能力或真实模型结论。
+
+依据后续代码分析调整优先级，[条件判定计划](2026-10-26-evaluation-verdict-plan.md)已完成 v1 绝对阈值消费者、覆盖统计和 check/judge 分离，见[验收](../acceptance/2026-10-26-evaluation-verdict.md)。94 项回归及预先冻结的实际宿主判读场景有证据；旧协议不追认条件通过。相对收益、计时/提示公平性和真实模型 probe 仍未完成。

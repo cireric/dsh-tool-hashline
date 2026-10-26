@@ -11,6 +11,7 @@ import { treeState, verifyTree, writeExpectedDiff } from './evidence.mjs'
 import { analyzeEvidence } from './analysis.mjs'
 import { unavailableTargets } from './targets.mjs'
 import { requestAccounting } from './accounting.mjs'
+import { summarizeCoverage, evaluateConditions } from './verdict.mjs'
 
 export function schedule(protocol) {
   const result = []
@@ -44,7 +45,7 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
   const originalCwd = process.cwd(), originalHome = process.env.DSH_HOME, originalTelemetry = process.env.DSH_TELEMETRY_DISABLED
   process.env.DSH_HOME = path.join(out, 'dsh-home')
   process.env.DSH_TELEMETRY_DISABLED = '1'
-  const report = { protocolHash: protocol.protocolHash, kind: protocol.kind, runs: [], requests: [], requestRefusals: [], status: 'GAP', claims: 'No promotion conclusion; unmeasured fields remain unknown. PASS is limited to the recorded task and evidence scope.' }
+  const report = { evaluationVersion: 1, protocolHash: protocol.protocolHash, kind: protocol.kind, runs: [], requests: [], requestRefusals: [], status: 'GAP', claims: 'Task/evidence status and frozen conditions are separate. Conditions do not establish model benefit or promotion; wallMs is live sample-slot time including evaluator overhead, not independently reconstructed model latency.' }
   let host, activeRoot
   const budget = { requests: 0, tokens: 0, unknown: false }
   try {
@@ -109,6 +110,8 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
   } finally {
     try { await host?.dispose() } finally {
       report.summary = summarizeRuns(report.runs, protocol.comparison)
+      report.coverage = summarizeCoverage(report.runs, protocol.comparison)
+      report.conditions = evaluateConditions(protocol, report.runs)
       report.accounting = requestAccounting(report)
       if (report.status === 'PASS' && report.accounting.status !== 'PASS') report.status = 'GAP'
       report.budget = { requests: budget.requests, boundary: 'llm/stream', providerHttpRequests: 'unknown', totalTokens: budget.unknown ? 'unknown' : budget.tokens, knownTokens: budget.tokens, unknown: budget.unknown }

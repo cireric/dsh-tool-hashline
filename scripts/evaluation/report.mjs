@@ -10,12 +10,25 @@ import { readSessionEvidence } from './session-tree.mjs'
 import { unavailableTargets } from './targets.mjs'
 import { sha256 } from './stimuli.mjs'
 import { requestAccounting } from './accounting.mjs'
+import { summarizeCoverage, evaluateConditions, CONDITION_SEMANTICS } from './verdict.mjs'
 
 export function checkRunReport(protocol, report, directory) {
   const problems = []
   if (report.protocolHash !== protocol.protocolHash || report.kind !== protocol.kind) problems.push('protocol identity/kind mismatch')
   const expected = schedule(protocol)
   if (!Array.isArray(report.runs) || report.runs.length !== expected.length) return [...problems, 'missing scheduled runs; failures must remain in denominator']
+  if (report.evaluationVersion !== undefined && report.evaluationVersion !== 1) problems.push('unsupported evaluation version')
+  if (protocol.passConditions?.semantics === CONDITION_SEMANTICS && report.evaluationVersion !== 1) problems.push('frozen v1 conditions require evaluationVersion 1')
+  if (report.evaluationVersion === 1 || report.coverage || report.conditions) {
+    if (!report.coverage || protocolHash(report.coverage) !== protocolHash(summarizeCoverage(report.runs, protocol.comparison))) problems.push('coverage recomputation mismatch')
+    if (!report.conditions || protocolHash(report.conditions) !== protocolHash(evaluateConditions(protocol, report.runs))) problems.push('conditions recomputation mismatch')
+  }
+  if (report.evaluationVersion === 1) {
+    if (!report.accounting || !report.budget) problems.push('missing request accounting')
+    let status = report.runs.some(r => r.status === 'FAIL') ? 'FAIL' : report.runs.every(r => r.status === 'PASS') ? 'PASS' : 'GAP'
+    if (status === 'PASS' && requestAccounting(report).status !== 'PASS') status = 'GAP'
+    if (report.status !== status) problems.push('task/evidence status recomputation mismatch')
+  }
   if (report.accounting) {
     const accounting = requestAccounting(report)
     if (protocolHash(accounting) !== protocolHash(report.accounting) || (report.status === 'PASS' && accounting.status !== 'PASS') || report.budget?.requests !== accounting.streamRequests) problems.push('stream/session accounting mismatch')
@@ -28,6 +41,7 @@ export function checkRunReport(protocol, report, directory) {
     if (!['PASS', 'FAIL', 'GAP', 'BLOCKED', 'CANCELLED'].includes(run.status)) problems.push('invalid run status at ' + i)
     if (!run.sessionId) {
       if (!['BLOCKED', 'CANCELLED'].includes(run.status) || run.finalCorrect !== 'unknown') problems.push('unexecuted run claims result at ' + i)
+      if (report.evaluationVersion === 1 && run.trace) problems.push('unexecuted run claims trace at ' + i)
       const task = protocol.tasks.find(t => t.id === item.taskId)
       if (task.targets?.length && protocolHash(run.targetEvaluation) !== protocolHash(unavailableTargets(task))) problems.push('unexecuted target denominator mismatch at ' + i)
       return

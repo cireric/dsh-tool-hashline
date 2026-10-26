@@ -5,7 +5,7 @@
 ## 无凭据验证
 
 ```powershell
-pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts
+pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts
 # 在独立副本构建，然后获得打包安装；保留输出中的一次性 profile 路径。
 pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
@@ -22,6 +22,8 @@ node scripts/evaluation/lifecycle-smoke.mjs <disposable-profile> .scratch/<runId
 ```
 
 该入口在三臂分别验证非空的真实 fork 继承前缀和子会话部分落盘后取消。父回合完成后追加测试提示、等待中的适配器取消均由该测试入口显式编排，不是 formal 任务能力。`lifecycle.json` 保存后续提示边界、实际适配器请求、取消确认及空闲状态；四组协议各自保留原始证据并运行 checker。取消组包含一个实际执行样本及两个未执行 CANCELLED 样本，评测报告预期为 GAP、缺 usage 为 unknown；测试断言通过不把它改成任务 PASS，也不证明真实 Provider 的取消计费。
+
+同一新安装先运行 smoke.mjs 放入匹配夹具后，可用 `node scripts/evaluation/verdict-smoke.mjs <disposable-profile> .scratch/<runId>/verdict` 验证判读链。它在执行前分别冻结三份协议：正常阈值、零 Token 上限、task-end 不测首次候选；真实宿主均正确改文件，但 judge 应分别给出 PASS/FAIL/GAP，退出码 0/2/2。所有 usage 来自固定夹具，不证明真实成本。
 
 ## 后续真实模型实验（本轮未执行）
 
@@ -63,11 +65,27 @@ node scripts/evaluation/run.mjs .scratch/<runId>/frozen.json <disposable-profile
 # 仅在另获执行批准后添加 --execute（可能产生 API 费用）。
 node scripts/evaluation/run.mjs .scratch/<runId>/frozen.json <disposable-profile> .scratch/<runId>/results --execute
 pnpm eval:check .scratch/<runId>/results/protocol.json .scratch/<runId>/results/report.json
+# 证据一致后，独立判定冻结条件；只读，不请求模型。
+node scripts/evaluation/driver.mjs judge .scratch/<runId>/results/protocol.json .scratch/<runId>/results/report.json
 ```
 
 `results` 必须尚不存在且父目录已存在；取消用 Ctrl+C。首次执行会在一次性 profile 内生成唯一的空 root YAML，以确保派生 preset 的 bare module 解析来自该安装。日常 profile 不接受；不重启任何宿主。
 
 请求上限按实际 `llm/stream` 边界累计（含子会话）；usage 不可得就停止后续付费请求。token 上限是收到该请求 usage 后的停止阈值，**不是服务端费用硬限额**；单个在途请求可能越界。正式付费执行必须同时设置 provider 的费用上限、`model.parameters.maxTokens` 和 timeout；取消也不保证 provider 不对已提交请求收费。
+
+## 冻结条件判定
+
+新模板在 passConditions 声明 `semantics: "per-arm-count-and-per-run-tokens-v1"`。`minFirstCandidateCorrect` 是每臂首次候选正确的最小**样本数量**，不是比例；`maxTotalTokensPerTask` 是每个任务×重复×臂样本的**整树总 Token 上限**，不是整臂总量或均值。两者均须是非负整数，自行按实验目标冻结；旧配置不会自动迁移。
+
+报告将三层结果分开：run 的 `status` 是任务/取证结果，`conditions` 是逐臂冻结阈值，`coverage` 保存已测与未知。`run.mjs` 的退出码继续表示执行/取证状态；`check` 只读重算证据一致性，真实 FAIL/GAP 报告也可被接受；`judge` 先 check 再判定，只有任务/取证与条件同时 PASS 才退出 0，其余 FAIL/GAP 为 2。条件通过仅覆盖这两个绝对条件，不证明优于其它臂、统计收益或 S2 推广通过。
+
+未知始终在计划分母：首次正确的 `correct/incorrect/measured/unknown/denominator` 与 `rateOnMeasured/rateBounds` 同时显示；单看已测率不能判通过。上下界是未知全错/全对的范围，不是置信区间。成本的 `knownSum` 必须与 measured/unknown 一起读，存在未知时不能当完整成本。已知首次正确的最高可能值仍不足要求，或某个已知样本 Token 超限时 FAIL；其余有未知则 GAP；全部测得且满足才 PASS。
+
+旧冻结件缺 semantics 时 `judge` 返回 GAP / semantics-not-frozen，不追认历史阈值通过。可继续核对旧工件；新执行需重新 prepare/freeze，因为驱动源码也属于冻结身份。新报告 evaluationVersion=1 必须包含 coverage/conditions，checker 会重算并拒绝篡改或缺失；旧 summary 保留原口径和检查路径。
+
+当前首次正确条件针对每臂全部计划样本，没有任务子集字段。task-end、无需编辑或仅 write 的任务可能没有可测的首次候选，因而使 formal 条件保持 GAP。完整正式实验前仍须冻结首次候选指标的适用范围；不能事后排除未知，也不能仅据本轮单点条件测试宣布全族正式评测已就绪。
+
+checker 与执行端共用解释函数，提供工件与报告一致性检查，不是独立统计 oracle。wallMs 仍为包含身份复核、准备、快照与 diff 等开销的现场样本耗时；checker 不独立重建该值，也不重装配 promptHash/ptc，不应把这些字段当已独立核验的模型延迟或公平性证明。
 
 ## 产物和判读
 

@@ -26,7 +26,7 @@ try {
     model: { provider: 'eval-fixture', model: 'fixture', parameters: {} },
     dependencies: captureIdentity(profile, 'evaluation-fixture-provider'), tools: await captureTools(profile, 'evaluation-fixture-provider', 'EVAL_FIXTURE_KEY'),
     samples: { repetitions: 1, seed: 7 }, order: 'interleaved', budget: { maxModelRequests: 60, maxTotalTokens: 200, timeoutMs: 20000 },
-    passConditions: { minFirstCandidateCorrect: 1, maxTotalTokensPerTask: 100 },
+    passConditions: { semantics: 'per-arm-count-and-per-run-tokens-v1', minFirstCandidateCorrect: 1, maxTotalTokensPerTask: 100 },
     tasks: [
       { id: 'single', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'Change x to y in a.txt.' },
       { id: 'multi', family: 'multi-site', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n', 'b.txt': 'x\n' }, expected: { 'a.txt': 'y\n', 'b.txt': 'z\n' }, prompt: 'fixture:multi' },
@@ -40,6 +40,7 @@ try {
   if (!report.runs) throw new Error('fixture preflight blocked: ' + report.gaps.join('; '))
   fs.writeFileSync(path.join(out, 'frozen.json'), JSON.stringify(protocol, null, 2) + '\n', { flag: 'wx' })
   const problems = checkRunReport(protocol, report, out)
+  assert.equal(report.conditions.status, 'PASS')
   for (const run of report.runs.filter(r => r.arm === 'hashline-fallback' && r.taskId.startsWith('apply-'))) {
     assert.deepEqual(run.targetEvaluation.unassigned, [])
     assert.equal(run.targetEvaluation.targets[0].firstAttempt, 'non-hashline')

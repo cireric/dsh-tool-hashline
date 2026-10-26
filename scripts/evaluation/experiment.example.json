@@ -27,6 +27,7 @@
     "timeoutMs": 120000
   },
   "passConditions": {
+    "semantics": "per-arm-count-and-per-run-tokens-v1",
     "minFirstCandidateCorrect": null,
     "maxTotalTokensPerTask": null
   },
