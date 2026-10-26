@@ -22,6 +22,8 @@
 
 formal 仍须覆盖原 SRS 的 13 个任务族；probe 可取子集。没有自动推广判定。冻结后身份变化即拒绝，不沿用历史哈希；已有 frozen 输出不覆盖。执行前以及每样本前核对实际安装身份，缺包、补丁不全、引擎不同或身份漂移均停止。
 
+可选 [task-suite.mjs](../../scripts/evaluation/task-suite.mjs) 生成覆盖 13 族的候选输入与独立 expected，输出仍是上述普通便捷配置，不增加协议字段或任务执行权限。候选默认 probe，模型/预算/条件未填；家族齐全只证明配置覆盖，不证明代表性、真实场景触发、中间行为合规或正式实验通过。任务与限制见[使用说明](../../scripts/evaluation/README.md)。
+
 ## 条件判定与未知覆盖
 
 冻结 v1/v2 语义后，逐臂判定上述两个绝对条件，结果写入 report.conditions；它与任务/取证的 report.status 分开。v1=per-arm-count-and-per-run-tokens-v1，其每臂首次分母为全部任务数×重复数；v2=per-arm-cohort-count-and-per-run-tokens-v2，其每臂首次分母为冻结 include 数×重复数。选中样本的失败、取消、BLOCKED 和未测均保留。首次正确只接受可复核的布尔值；Token 上限始终覆盖全部任务的含后代 totalTokens，不用均值掩盖单个超限。

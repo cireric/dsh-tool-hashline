@@ -1,0 +1,187 @@
+{
+  "date": "2026-10-26",
+  "baseCommit": "4cfc3e2",
+  "workingTreeIncrement": true,
+  "evidenceRoot": ".scratch/real-model-evaluation/20261026-task-suite",
+  "sourceHashes": {
+    "scripts/evaluation/task-suite.mjs": "cc3c95e5a17ed3554734896cb418e1c08801c4cb906e26752ce7720521f2e750",
+    "tests/unit/evaluation-task-suite.spec.ts": "31f6bb1640ef4ffa10fa58d3facba43c7134386b14314c91fc8b2fddc6c62e9b"
+  },
+  "isolatedSourceMismatches": [],
+  "generated": {
+    "bytes": 9539127,
+    "hash": "c8310d6a638ea4c9788a931ce827d668ee8742503a2b70052d589cbf7b1b460c",
+    "kind": "probe",
+    "tasks": 13,
+    "families": [
+      "single-point",
+      "repeated-fragment",
+      "multi-site",
+      "consecutive-edits",
+      "external-change",
+      "unrelated-long-line",
+      "target-long-line",
+      "restricted-degradation",
+      "large-rewrite",
+      "already-satisfied",
+      "creation",
+      "user-override",
+      "special-tool"
+    ],
+    "firstIncluded": [
+      "single",
+      "repeated",
+      "multi",
+      "consecutive",
+      "drift",
+      "unrelated-long",
+      "target-long",
+      "snapshot-limit",
+      "rewrite",
+      "override"
+    ],
+    "firstExcluded": [
+      {
+        "taskId": "satisfied",
+        "reason": "Task requires verification without an edit."
+      },
+      {
+        "taskId": "create",
+        "reason": "Creation may use write and has no edit checkpoint."
+      },
+      {
+        "taskId": "generator",
+        "reason": "Project generator is an external tool; edit checkpoint is not the metric."
+      }
+    ],
+    "snapshotInputBytes": 4500015
+  },
+  "frozen": {
+    "protocolHash": "6a0054cbdf662b5c70e5af253dbf0b0c5f8a58fed07b8ddd1ac7a6fc835ae1cf",
+    "fileHash": "cec20ff97c82732fdc127709938cc00f54b710e804cd6a84c05e7bbfb20a3dcd",
+    "kind": "probe",
+    "model": "offline-schema-only-not-a-real-model",
+    "actualTaskExecutions": 0
+  },
+  "cli": {
+    "generationExit": 0,
+    "unfilledExit": 2,
+    "unfilledOutputExists": false,
+    "prepareExit": 0,
+    "preflightExit": 2,
+    "status": "BLOCKED",
+    "gaps": [
+      "credential environment variable unavailable"
+    ],
+    "executed": false,
+    "scheduled": 39,
+    "outputDirectoryExists": false
+  },
+  "tests": {
+    "passed": 136,
+    "failed": 0,
+    "files": 8,
+    "newSuite": 13,
+    "typesExit": 0
+  },
+  "mutation": {
+    "changed": "output flag wx to w",
+    "passed": 12,
+    "failed": 1,
+    "exit": 1,
+    "restoredSuitePassed": 13,
+    "restoredByteForByte": true
+  },
+  "delivery": {
+    "verdicts": {
+      "SCOPE-01": "PASS",
+      "SCOPE-02": "PASS",
+      "SCOPE-03": "PASS",
+      "SCOPE-04": "PASS",
+      "SCOPE-05": "PASS",
+      "SCOPE-06": "PASS",
+      "SCOPE-07": "PASS",
+      "PACK-01": "PASS",
+      "INC-01": "PASS",
+      "INC-02": "BLOCKED",
+      "INC-03": "BLOCKED",
+      "INC-04": "BLOCKED",
+      "INC-05": "PASS",
+      "INC-06": "PASS",
+      "INC-07": "PASS",
+      "CONFIG-01": "PASS",
+      "UPG-01": "PASS",
+      "UPG-02": "BLOCKED",
+      "UPG-03": "PASS",
+      "UPG-04": "PASS",
+      "UPG-05": "BLOCKED",
+      "UPG-06": "PASS",
+      "UPG-07": "PASS",
+      "UPG-08": "BLOCKED",
+      "UPG-09": "BLOCKED",
+      "UPG-10": "BLOCKED",
+      "UPG-11": "BLOCKED",
+      "UPG-12": "PASS",
+      "UPG-13": "PASS",
+      "REG-01": "PASS"
+    },
+    "gates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "caseCounts": {
+      "PASS": 55
+    }
+  },
+  "realModelRequests": 0,
+  "formalExecution": "not-executed",
+  "remaining": [
+    "Full thirteen-family fixed-provider host validation",
+    "Actual intermediate-state and generator-invocation compliance",
+    "Representative task selection, real Provider validation and paid-model authorization",
+    "Relative benefit, prompt fairness and independent timing"
+  ]
+}

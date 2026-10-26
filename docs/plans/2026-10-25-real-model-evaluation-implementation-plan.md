@@ -26,3 +26,5 @@
 依据后续代码分析调整优先级，[条件判定计划](2026-10-26-evaluation-verdict-plan.md)已完成 v1 绝对阈值消费者、覆盖统计和 check/judge 分离，见[验收](../acceptance/2026-10-26-evaluation-verdict.md)。94 项回归及预先冻结的实际宿主判读场景有证据；旧协议不追认条件通过。相对收益、计时/提示公平性和真实模型 probe 仍未完成。
 
 首次指标的任务范围已按[v2 计划](2026-10-26-evaluation-cohort-plan.md)冻结，见[验收](../acceptance/2026-10-26-evaluation-cohort.md)。排除不影响全任务最终文件、Token、取证与调度检查；历史 v1 不迁移。完整 formal 任务集和真实模型执行仍是后续工作。
+
+随后[候选任务集计划](2026-10-26-evaluation-task-suite-plan.md)补齐可复用的 13 族配置生成、独立 expected 和既有 prepare/预检链路，见[验收](../acceptance/2026-10-26-evaluation-task-suite.md)。默认 probe，不覆盖正式实验参数；完整宿主任务执行、分步/生成器行为证据及真实模型验证仍未完成。

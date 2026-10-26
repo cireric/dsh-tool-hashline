@@ -44,7 +44,7 @@ SRS §7.2 原计数规则继续有效：四类适用性互斥，已知适用分�
 | 漂移/专用工具等控制端注入 | 已支持冻结的成功 read 次数→字节前态条件→外部写入，并验证真实宿主三臂失败/恢复；其它时点、权限拒绝、专用工具等控制器仍需补齐 |
 | 子会话归并 | 已归并同进程后代并核对目录来源；[生命周期验证](../acceptance/2026-10-26-evaluation-lifecycle.md)补齐实际非空 fork 前缀去重、子流取消及取消后无新适配器请求。外部进程代理、更多取消时点及真实 provider 取消计费仍无证明 |
 | 平台与纯策略消融 | 本轮 Windows；macOS/Linux 未执行。三臂不等同原 auto vs policy 的单变量实验，若要纯策略因果结论须另冻配置 |
-| 推广判定 | [v1 绝对条件](../acceptance/2026-10-26-evaluation-verdict.md)已有消费者，逐臂首次正确最小数量和逐样本总 Token 上限可查；旧语义保留 GAP。[v2 范围](../acceptance/2026-10-26-evaluation-cohort.md)已支持执行前逐任务 include/exclude，仅缩小首次条件分母；Token、最终文件、调度及全局覆盖仍包含全部任务。完整 formal 任务集尚未执行，不能事后排除 unknown。仍无自动 S2、相对收益或统计推广判定，即使条件 PASS 也不能替代完整证据与可比性 |
+| 推广判定 | [v1 绝对条件](../acceptance/2026-10-26-evaluation-verdict.md)已有消费者，逐臂首次正确最小数量和逐样本总 Token 上限可查；旧语义保留 GAP。[v2 范围](../acceptance/2026-10-26-evaluation-cohort.md)已支持执行前逐任务 include/exclude，仅缩小首次条件分母；Token、最终文件、调度及全局覆盖仍包含全部任务。[13 族候选配置](../acceptance/2026-10-26-evaluation-task-suite.md)已可复用生成与冻结，默认 probe；完整宿主任务集与正式模型实验尚未执行，不能事后排除 unknown。仍无自动 S2、相对收益或统计推广判定，即使条件 PASS 也不能替代完整证据与可比性 |
 
 ## 5. 驱动选择结论
 

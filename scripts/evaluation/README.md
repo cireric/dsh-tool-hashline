@@ -5,7 +5,7 @@
 ## 无凭据验证
 
 ```powershell
-pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts
+pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts
 # 在独立副本构建，然后获得打包安装；保留输出中的一次性 profile 路径。
 pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
@@ -26,6 +26,32 @@ node scripts/evaluation/lifecycle-smoke.mjs <disposable-profile> .scratch/<runId
 同一新安装先运行 smoke.mjs 放入匹配夹具后，可用 `node scripts/evaluation/verdict-smoke.mjs <disposable-profile> .scratch/<runId>/verdict` 验证判读链。它预先冻结九组协议：原三组正常/超限/未知，加上混合 no-op/write 的范围比较、范围外超限/最终错误、空 probe 范围、所选首次未知。每组独立执行并验证 check/judge 退出码；条件或任务失败不会改写为 PASS。所有 usage 来自固定夹具，不证明真实成本。
 
 ## 后续真实模型实验（本轮未执行）
+
+### 复用 13 类候选任务
+
+```powershell
+New-Item -ItemType Directory -Force .scratch/my-suite | Out-Null
+node scripts/evaluation/task-suite.mjs .scratch/my-suite/experiment.json
+```
+
+[task-suite.mjs](task-suite.mjs) 展开确定性的 initial/expected，输出普通可编辑配置，不连接 profile、Provider 或模型，也不执行任务内的生成器。输出文件必须不存在。配置约 9 MiB，主要来自快照门槛场景的两份独立文本；无需把展开文件提交到 Git。之后填写模型、预算、阈值，沿用下文 prepare、默认 run 预检和 check/judge 命令。
+
+该候选集覆盖全部 13 个家族，但默认仍为 probe。每类仅一例，不能据家族齐全宣称代表性或 S1 通过。审阅并冻结正式实验时须另建配置、决定重复量和首次条件范围，不能根据正式结果调阈值或 expected。模型、总请求/Token 预算、两个通过阈值仍为 null；没有默认获批的付费参数。
+
+| 任务 | 具体输入与独立目标 |
+|---|---|
+| single / repeated | 单点更新；仅修改第二个重复片段 |
+| multi / consecutive | 同文件两点加跨文件；先插行核验，再更新后续行 |
+| drift | 首次成功 read 后由既有刺激控制器写入 audit=peer，必须保留竞争者值 |
+| unrelated-long / target-long | 5000 字符长行；前者可分页取得完整目标，后者目标在截断部分 |
+| snapshot-limit | 4 MiB 以上文本，只有首行更新；按真实限制核验合法路径 |
+| rewrite | 129 行内容全部更新，不能只改版本头 |
+| satisfied / create | 核验后不写；真正新建一个文件 |
+| override / generator | 真实用户提示明确 replace 范围；使用项目自带的 generate.mjs 生成产物 |
+
+首次范围预先纳入 10 项，排除 satisfied、create、generator，并保留理由。最终文件与成本仍覆盖全部 13 项；strict Hashline 对例外任务可能失败，不能删除失败样本或把预期结果改成其实际结果。长行和快照场景按当前固定 preset 的 2000 字符列上限、4 MiB 快照门槛设计，实际冻结配置改变后应重新审阅任务。
+
+最终字节检查不能证明 consecutive 的中间核验或 generator 的真实调用；这些要求须另审原始轨迹。专用工具变更的目标模式仍可能 unknown/GAP；生成器产物正确不补造 edit 证据。当前并未运行完整任务集的模型执行，验证范围见[任务集验收](../../docs/acceptance/2026-10-26-evaluation-task-suite.md)。
 
 ### 用配置文件选择模型（推荐）
 
