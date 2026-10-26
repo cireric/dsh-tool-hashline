@@ -1,0 +1,884 @@
+{
+  "date": "2026-10-26",
+  "baseCommit": "ceaa004",
+  "workingTreeIncrement": true,
+  "evidenceRoot": ".scratch/real-model-evaluation/20261026-design-review",
+  "sourceHashes": {
+    "scripts/evaluation/host.mjs": "6c940da1276b5f428c598566b1ff52117886615e4673d7e0d060751e8551a529",
+    "scripts/evaluation/review-design.mjs": "b8c062bbfa12bcfe9aa38ff42eea4673e9e8c7508e9eea04b191a23ee9f0f4d8",
+    "tests/unit/evaluation-design-review.spec.ts": "ba58e11fa05b82594d0b0c487494fec1374c0572185f9e9e3cec209d518b2f8d"
+  },
+  "isolatedSourceMismatches": [],
+  "reviewHash": "372a6426b7b321fecba2cffac3efed93f76ba9bcf7c9a8fadfec07b83b784140",
+  "review": {
+    "version": 1,
+    "scope": "frozen-design-facts-only",
+    "status": "GAP",
+    "protocolHash": "bb8971358fd901a03e718e9944f926d0a5e9719399c702cf599fa1fe0b0d95af",
+    "comparison": {
+      "interpretation": "tool-configuration-comparison",
+      "purePolicyCausality": "not-established",
+      "plugins": [
+        {
+          "id": "agent-instructions",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-agent-instructions",
+              "hash": "6ffed27702cb03a7ecf3a445a8bf492f60976291b3f79b29ce7401954590cbe4",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-agent-instructions",
+              "hash": "6ffed27702cb03a7ecf3a445a8bf492f60976291b3f79b29ce7401954590cbe4",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-agent-instructions",
+              "hash": "6ffed27702cb03a7ecf3a445a8bf492f60976291b3f79b29ce7401954590cbe4",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "command-goal",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-command-goal",
+              "hash": "f14bdc5d84aa3f2ca806ebd3f8eadaba66a089abe79d4de77dd09353a56619f5",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-command-goal",
+              "hash": "f14bdc5d84aa3f2ca806ebd3f8eadaba66a089abe79d4de77dd09353a56619f5",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-command-goal",
+              "hash": "f14bdc5d84aa3f2ca806ebd3f8eadaba66a089abe79d4de77dd09353a56619f5",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "compaction",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "9f0b874a6a50803c27dd8bfa3eb9effea5ff1010f6c5dccc8089f0411e87f434",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "9f0b874a6a50803c27dd8bfa3eb9effea5ff1010f6c5dccc8089f0411e87f434",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "9f0b874a6a50803c27dd8bfa3eb9effea5ff1010f6c5dccc8089f0411e87f434",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "delegation",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "33d81f8b9ad59ffe82f2e247767c6441723689c3abd3290853c589df5a5a55a3",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "33d81f8b9ad59ffe82f2e247767c6441723689c3abd3290853c589df5a5a55a3",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "33d81f8b9ad59ffe82f2e247767c6441723689c3abd3290853c589df5a5a55a3",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "intent-gate-watchdog",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs",
+              "hash": "0d08a06511d2892427fd6ed24d1dcfaea366d55ca5f403ca935a558bdcb1700b",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs",
+              "hash": "0d08a06511d2892427fd6ed24d1dcfaea366d55ca5f403ca935a558bdcb1700b",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs",
+              "hash": "0d08a06511d2892427fd6ed24d1dcfaea366d55ca5f403ca935a558bdcb1700b",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "persona",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-persona",
+              "hash": "f653274323a56350e75b0efad6e19f1b0819f0b6e71526b7ca612813f1b06e47",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-persona",
+              "hash": "f653274323a56350e75b0efad6e19f1b0819f0b6e71526b7ca612813f1b06e47",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-persona",
+              "hash": "f653274323a56350e75b0efad6e19f1b0819f0b6e71526b7ca612813f1b06e47",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "planning",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "0f6ce5b4a3c24b14c3d0e24aa09af7a8665209fdd3f74c57c5d1a46c3fd6d912",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "0f6ce5b4a3c24b14c3d0e24aa09af7a8665209fdd3f74c57c5d1a46c3fd6d912",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "cordis:group",
+              "hash": "0f6ce5b4a3c24b14c3d0e24aa09af7a8665209fdd3f74c57c5d1a46c3fd6d912",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "present",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-present",
+              "hash": "6e4830c5e96be35d869abea28ce13a61fef02458aeab93e18dbc5947bf9d5e4a",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-present",
+              "hash": "6e4830c5e96be35d869abea28ce13a61fef02458aeab93e18dbc5947bf9d5e4a",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-present",
+              "hash": "6e4830c5e96be35d869abea28ce13a61fef02458aeab93e18dbc5947bf9d5e4a",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "ptc-hashline-operations-skills",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-skill-filesystem",
+              "hash": "c1522dd6a234f9efd5a913d5a21f855d10811b83e2f9cf7fbeee72acfa318800",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-skill-filesystem",
+              "hash": "c1522dd6a234f9efd5a913d5a21f855d10811b83e2f9cf7fbeee72acfa318800",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-skill-filesystem",
+              "hash": "c1522dd6a234f9efd5a913d5a21f855d10811b83e2f9cf7fbeee72acfa318800",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "skill-filesystem",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-skill-filesystem",
+              "hash": "2e6fdef910a9a1f7293777a675b6f99fed3e2725ff66abc593a3b1b2087b467b",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-skill-filesystem",
+              "hash": "2e6fdef910a9a1f7293777a675b6f99fed3e2725ff66abc593a3b1b2087b467b",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-skill-filesystem",
+              "hash": "2e6fdef910a9a1f7293777a675b6f99fed3e2725ff66abc593a3b1b2087b467b",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-ask-user",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-ask-user",
+              "hash": "2a7f69ee1c577a680866884621d6a10fa6cb2cb36809f31581ff4b427652df4a",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-ask-user",
+              "hash": "2a7f69ee1c577a680866884621d6a10fa6cb2cb36809f31581ff4b427652df4a",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-ask-user",
+              "hash": "2a7f69ee1c577a680866884621d6a10fa6cb2cb36809f31581ff4b427652df4a",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-bash",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-bash",
+              "hash": "dad2468c7997ebe8495dad71a7d00938cea8efc5a3a23992f3ef354b780fce0f",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-bash",
+              "hash": "dad2468c7997ebe8495dad71a7d00938cea8efc5a3a23992f3ef354b780fce0f",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-bash",
+              "hash": "dad2468c7997ebe8495dad71a7d00938cea8efc5a3a23992f3ef354b780fce0f",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-edit",
+          "identical": false,
+          "configurations": {
+            "stock-edit": {
+              "present": false
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@dsh-tool-hashline/tool-edit",
+              "hash": "1dc25341b75f12aae117f691baf2b6979b61daa9976545f386314e8039954dc9",
+              "settings": {
+                "mode": "hashline"
+              }
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@dsh-tool-hashline/tool-edit",
+              "hash": "6f7b5c06a28c59c96b874cf493af6541cdb1d857d1e396e3f617158c5ba19cc7",
+              "settings": {
+                "mode": "auto"
+              }
+            }
+          }
+        },
+        {
+          "id": "tool-fs",
+          "identical": false,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-fs",
+              "hash": "56e344d580eee474833d8feda0807009617c7e29928ab43217473e86931f41cc",
+              "settings": {
+                "read": true,
+                "edit": true,
+                "readLimit": 2000,
+                "readMaxLineLength": 2000,
+                "readMaxBytes": 51200
+              }
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-fs",
+              "hash": "cea43e8184bd833d018194f735f3bcef18ec90a3621e2ddeb7e09c392f677402",
+              "settings": {
+                "read": false,
+                "edit": false,
+                "readLimit": 2000,
+                "readMaxLineLength": 2000,
+                "readMaxBytes": 51200
+              }
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-fs",
+              "hash": "cea43e8184bd833d018194f735f3bcef18ec90a3621e2ddeb7e09c392f677402",
+              "settings": {
+                "read": false,
+                "edit": false,
+                "readLimit": 2000,
+                "readMaxLineLength": 2000,
+                "readMaxBytes": 51200
+              }
+            }
+          }
+        },
+        {
+          "id": "tool-fs-search",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-fs-search",
+              "hash": "11e235fa0b38ea21e3c73d9e9c2b4cddfc6a4583e57bff522e4a9dda70930eac",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-fs-search",
+              "hash": "11e235fa0b38ea21e3c73d9e9c2b4cddfc6a4583e57bff522e4a9dda70930eac",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-fs-search",
+              "hash": "11e235fa0b38ea21e3c73d9e9c2b4cddfc6a4583e57bff522e4a9dda70930eac",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-goal",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-goal",
+              "hash": "f331442ca6239485be2b85f23fde1af603f9829852ed773bbd2d800e7a84e7bf",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-goal",
+              "hash": "f331442ca6239485be2b85f23fde1af603f9829852ed773bbd2d800e7a84e7bf",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-goal",
+              "hash": "f331442ca6239485be2b85f23fde1af603f9829852ed773bbd2d800e7a84e7bf",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-jobs",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-jobs",
+              "hash": "d06e7b06907d730bc7b40a03b147cc2591f9bcc5084d713cb4612bd97ff9286a",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-jobs",
+              "hash": "d06e7b06907d730bc7b40a03b147cc2591f9bcc5084d713cb4612bd97ff9286a",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-jobs",
+              "hash": "d06e7b06907d730bc7b40a03b147cc2591f9bcc5084d713cb4612bd97ff9286a",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-presentation",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-agent-tool-presentation",
+              "hash": "c0c882fe2ee1d14c5477dc0a8620b20cf09f287012cedf89fe0d18b2aff77d5a",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-agent-tool-presentation",
+              "hash": "c0c882fe2ee1d14c5477dc0a8620b20cf09f287012cedf89fe0d18b2aff77d5a",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-agent-tool-presentation",
+              "hash": "c0c882fe2ee1d14c5477dc0a8620b20cf09f287012cedf89fe0d18b2aff77d5a",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-pwsh",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-pwsh",
+              "hash": "a2f4a180ec9415d73312f5bd9cdc0ff31c7c9128cb5ecdcf6388bd7001b51ca9",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-pwsh",
+              "hash": "a2f4a180ec9415d73312f5bd9cdc0ff31c7c9128cb5ecdcf6388bd7001b51ca9",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-pwsh",
+              "hash": "a2f4a180ec9415d73312f5bd9cdc0ff31c7c9128cb5ecdcf6388bd7001b51ca9",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-read",
+          "identical": false,
+          "configurations": {
+            "stock-edit": {
+              "present": false
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@dsh-tool-hashline/tool-read",
+              "hash": "f6fcbc4ffb052589287e1d9060e6d723e606c798b6f3b5f099af5aaf3b04a410",
+              "settings": {
+                "limit": 2000,
+                "maxLineLength": 2000,
+                "maxBytes": 51200,
+                "snapshotMaxBytes": 4194304
+              }
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@dsh-tool-hashline/tool-read",
+              "hash": "f6fcbc4ffb052589287e1d9060e6d723e606c798b6f3b5f099af5aaf3b04a410",
+              "settings": {
+                "limit": 2000,
+                "maxLineLength": 2000,
+                "maxBytes": 51200,
+                "snapshotMaxBytes": 4194304
+              }
+            }
+          }
+        },
+        {
+          "id": "tool-skill",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-skill",
+              "hash": "de2e9ffae4783166474a0a6b893da69bc7c3b43062178212f7191186d1add330",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-skill",
+              "hash": "de2e9ffae4783166474a0a6b893da69bc7c3b43062178212f7191186d1add330",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-skill",
+              "hash": "de2e9ffae4783166474a0a6b893da69bc7c3b43062178212f7191186d1add330",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-todo",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-todo",
+              "hash": "71379674a2f312162a9fac16f4079979555810a89a024fe94e3d5b24ada5cbaf",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-todo",
+              "hash": "71379674a2f312162a9fac16f4079979555810a89a024fe94e3d5b24ada5cbaf",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-todo",
+              "hash": "71379674a2f312162a9fac16f4079979555810a89a024fe94e3d5b24ada5cbaf",
+              "settings": {}
+            }
+          }
+        },
+        {
+          "id": "tool-web",
+          "identical": true,
+          "configurations": {
+            "stock-edit": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-web",
+              "hash": "038d07119939ef5e486b5fab77e102b7374ae379c3b57ccfe3fc521ed36556d7",
+              "settings": {}
+            },
+            "hashline-default": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-web",
+              "hash": "038d07119939ef5e486b5fab77e102b7374ae379c3b57ccfe3fc521ed36556d7",
+              "settings": {}
+            },
+            "hashline-fallback": {
+              "present": true,
+              "name": "@deepseek-ai/dsh-tool-web",
+              "hash": "038d07119939ef5e486b5fab77e102b7374ae379c3b57ccfe3fc521ed36556d7",
+              "settings": {}
+            }
+          }
+        }
+      ],
+      "pairs": [
+        {
+          "left": "stock-edit",
+          "right": "hashline-default",
+          "changedPlugins": [
+            "tool-edit",
+            "tool-fs",
+            "tool-read"
+          ]
+        },
+        {
+          "left": "stock-edit",
+          "right": "hashline-fallback",
+          "changedPlugins": [
+            "tool-edit",
+            "tool-fs",
+            "tool-read"
+          ]
+        },
+        {
+          "left": "hashline-default",
+          "right": "hashline-fallback",
+          "changedPlugins": [
+            "tool-edit"
+          ]
+        }
+      ]
+    },
+    "model": {
+      "configurationHash": "118196f1811fe16b160472c20221f56324ef55bc58b0f5b31aaa8c5b41b6d651",
+      "frozenSharedAcrossSchedule": true
+    },
+    "tasks": {
+      "count": 13,
+      "repetitions": 1,
+      "scheduledSamples": 39,
+      "families": {
+        "single-point": [
+          "single"
+        ],
+        "repeated-fragment": [
+          "repeated"
+        ],
+        "multi-site": [
+          "multi"
+        ],
+        "consecutive-edits": [
+          "consecutive"
+        ],
+        "external-change": [
+          "drift"
+        ],
+        "unrelated-long-line": [
+          "unrelated-long"
+        ],
+        "target-long-line": [
+          "target-long"
+        ],
+        "restricted-degradation": [
+          "snapshot-limit"
+        ],
+        "large-rewrite": [
+          "rewrite"
+        ],
+        "already-satisfied": [
+          "satisfied"
+        ],
+        "creation": [
+          "create"
+        ],
+        "user-override": [
+          "override"
+        ],
+        "special-tool": [
+          "generator"
+        ]
+      },
+      "frozenInputsSharedByTask": true,
+      "firstCandidateScopeStatus": "frozen-v2",
+      "firstCandidateInclude": [
+        "single",
+        "repeated",
+        "multi",
+        "consecutive",
+        "drift",
+        "unrelated-long",
+        "target-long",
+        "snapshot-limit",
+        "rewrite",
+        "override"
+      ],
+      "firstCandidateExclude": [
+        {
+          "taskId": "satisfied",
+          "reason": "Task requires verification without an edit."
+        },
+        {
+          "taskId": "create",
+          "reason": "Creation may use write and has no edit checkpoint."
+        },
+        {
+          "taskId": "generator",
+          "reason": "Project generator is an external tool; edit checkpoint is not the metric."
+        }
+      ],
+      "perArmFirstDenominator": 10,
+      "perArmFinalAndTokenDenominator": 13
+    },
+    "evidenceLimits": [
+      {
+        "id": "actual-prompt-sdk",
+        "reason": "Row hashes do not independently capture the complete request prompt or generated tool SDK per arm."
+      },
+      {
+        "id": "representativeness",
+        "reason": "Family labels and sample counts do not establish task representativeness or statistical power."
+      },
+      {
+        "id": "latency",
+        "reason": "Recorded wallMs includes evaluator work; independent model and tool latency is not established."
+      },
+      {
+        "id": "causal-benefit",
+        "reason": "No relative benefit or pure-policy causal conclusion follows from frozen absolute conditions."
+      },
+      {
+        "id": "behavior",
+        "reason": "Independent final bytes do not establish all required intermediate behavior or tool-choice compliance."
+      },
+      {
+        "id": "tool-configuration-differences",
+        "reason": "Selected arms have different plugin rows; treat this as a tool-configuration comparison, not a pure-policy ablation."
+      },
+      {
+        "id": "multi-stage-first-candidate",
+        "reason": "An edit-bearing program may be an intentional intermediate stage; review whether first-program correctness measures the intended goal."
+      },
+      {
+        "id": "authored-first-scope",
+        "reason": "Excluded tasks remain in final correctness and cost; exclusion reasons are author declarations, not independently verified applicability."
+      }
+    ],
+    "claims": "Design facts only. GAP is not an execution refusal; no model execution, benefit judgment or promotion authorization."
+  },
+  "cli": {
+    "prepareExit": 0,
+    "reviewExit": 0,
+    "overwriteExit": 2,
+    "originalPreserved": true,
+    "extraFlagExit": 2,
+    "armDrift": {
+      "exit": 2,
+      "error": "design review refused: EVAL_ARM_DRIFT: stock-edit"
+    },
+    "identityDrift": {
+      "exit": 2,
+      "error": "design review refused: EVAL_IDENTITY_DRIFT: resolved environment/configuration changed"
+    },
+    "rejectedOutputsPresent": [],
+    "realModelRequests": 0,
+    "wrongProfile": {
+      "exit": 2,
+      "error": "design review refused: disposable acceptance profile required",
+      "outputExists": false
+    }
+  },
+  "tests": {
+    "files": 11,
+    "passed": 197,
+    "failed": 0,
+    "newReviewCases": 8,
+    "typesExit": 0
+  },
+  "mutation": {
+    "changed": "identical hashes equality inverted",
+    "passed": 7,
+    "failed": 1,
+    "exit": 1,
+    "originalUnchanged": true,
+    "restoredCopyMatchesOriginal": true
+  },
+  "smoke": {
+    "samples": 18,
+    "status": "PASS",
+    "accounting": {
+      "status": "PASS",
+      "streamRequests": 45,
+      "capturedRequests": 45,
+      "gaps": []
+    }
+  },
+  "delivery": {
+    "gates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "verdicts": {
+      "SCOPE-01": "PASS",
+      "SCOPE-02": "PASS",
+      "SCOPE-03": "PASS",
+      "SCOPE-04": "PASS",
+      "SCOPE-05": "PASS",
+      "SCOPE-06": "PASS",
+      "SCOPE-07": "PASS",
+      "PACK-01": "PASS",
+      "INC-01": "PASS",
+      "INC-02": "BLOCKED",
+      "INC-03": "BLOCKED",
+      "INC-04": "BLOCKED",
+      "INC-05": "PASS",
+      "INC-06": "PASS",
+      "INC-07": "PASS",
+      "CONFIG-01": "PASS",
+      "UPG-01": "PASS",
+      "UPG-02": "BLOCKED",
+      "UPG-03": "PASS",
+      "UPG-04": "PASS",
+      "UPG-05": "BLOCKED",
+      "UPG-06": "PASS",
+      "UPG-07": "PASS",
+      "UPG-08": "BLOCKED",
+      "UPG-09": "BLOCKED",
+      "UPG-10": "BLOCKED",
+      "UPG-11": "BLOCKED",
+      "UPG-12": "PASS",
+      "UPG-13": "PASS",
+      "REG-01": "PASS"
+    },
+    "caseCounts": {
+      "PASS": 56
+    }
+  },
+  "realModelRequests": 0,
+  "remaining": [
+    "Actual full request prompts and tool SDK not independently compared",
+    "Task representativeness and formal sample size not established",
+    "First-program metric interpretation for intentional stages needs a prospective design decision",
+    "Independent latency, relative benefit and generic behavior checking not implemented",
+    "Real Provider and real-model experiment not executed"
+  ]
+}

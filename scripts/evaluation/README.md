@@ -5,7 +5,7 @@
 ## 无凭据验证
 
 ```powershell
-pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts tests/unit/evaluation-suite-programs.spec.ts tests/unit/delivery-engine-pins.spec.ts
+pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts tests/unit/evaluation-suite-programs.spec.ts tests/unit/delivery-engine-pins.spec.ts tests/unit/evaluation-design-review.spec.ts
 # 在独立副本构建，然后获得打包安装；保留输出中的一次性 profile 路径。
 pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
@@ -83,6 +83,16 @@ node scripts/evaluation/prepare.mjs .scratch/my-probe/experiment.json <disposabl
 # 只做 preflight；配置文件本身不会触发执行。
 node scripts/evaluation/run.mjs .scratch/my-probe/frozen.json <disposable-profile> .scratch/my-probe/results
 ```
+
+可在执行前生成离线设计审查（无需凭据，不挂载宿主或调用模型）：
+
+```powershell
+node scripts/evaluation/review-design.mjs .scratch/my-probe/frozen.json <disposable-profile> .scratch/my-probe/design-review.json
+```
+
+审查核对当前安装身份、原始 preset 及派生臂哈希，列出实际插件变化、白名单配置、任务家族和首次/全任务分母。只导出摘要及有限 read/edit 设置，不导出整行 persona 或任意配置内容。报告固定保留 GAP：尚无完整实际请求提示/SDK、代表性、独立模型延迟或相对收益证明。退出 0 只表示成功生成审查，身份/配置漂移、防覆盖或参数错误退出 2；它不增加执行审批、不自动修改配置或提供 S2 结论。
+
+候选 consecutive 任务尤其需要预先审查：首个编辑程序可能是任务要求的合规中间状态，不能把其相对最终 expected 的 false 直接当作模型犯错。三臂的插件/工具面不同，也不能把差异仅归因于默认策略。详见[设计审查验收](../../docs/acceptance/2026-10-26-evaluation-design-review.md)。新增脚本会进入 driverInputs，必须重新 prepare，不能沿用旧冻结身份。
 
 prepare 不写配置原文件，不覆盖已有 frozen 输出，也不修改 profile。更换模型或参数后生成另一份 frozen 文件；不要修改已经运行过的冻结协议。下面的手动 identity → protocol → freeze 路线仍可用。
 

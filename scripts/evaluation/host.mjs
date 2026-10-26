@@ -122,12 +122,18 @@ export async function openHost(profile, directory, protocol) {
   } catch (error) { await ctx.fiber.dispose(); throw error }
 }
 
-/** Inspect composition without mounting a host, resolving a model or spending tokens. */
-export async function captureTools(profile, providerPlugin, credentialEnv, providerConfig = {}) {
+/** Load authored plugin rows through the official loader, without mounting a host. */
+export async function capturePresetRows(profile) {
   const req = createRequire(path.join(profile, 'package.json'))
   const boot = await import(pathToFileURL(req.resolve('@deepseek-ai/dsh-app-boot')).href)
   const loaded = boot.loadProfileDirectory('evaluation', profile, req.resolve('@deepseek-ai/dsh/package.json'))
   const rows = loaded.layers.find(l => l.packageName === 'dsh-tool-hashline')?.patches.flatMap(p => p.insert ?? []).find(r => r.config?.id === 'ptc-hashline')?.config.plugins
   if (!rows) throw new Error('EVAL_PRESET_MISSING')
+  return rows
+}
+
+/** Inspect composition without mounting a host, resolving a model or spending tokens. */
+export async function captureTools(profile, providerPlugin, credentialEnv, providerConfig = {}) {
+  const rows = await capturePresetRows(profile)
   return { presetHash: protocolHash(rows), arms: Object.fromEntries(['stock-edit', 'hashline-default', 'hashline-fallback'].map(arm => [arm, protocolHash(armRows(rows, arm))])), providerPlugin, credentialEnv, providerConfig }
 }
