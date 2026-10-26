@@ -1,6 +1,6 @@
 # 真实模型评测协议补充
 
-> 2026-10-26 当前安排：已按用户决定[收口为按需维护](../acceptance/2026-10-26-project-closeout.md)，默认推广与主动评测扩建暂停。下文保留原方案及各阶段结果；未完成研究项已延期，不再作为本次交付待办，FAIL/GAP/BLOCKED 不变。
+> 2026-10-26 当前安排：用户在[收口](../acceptance/2026-10-26-project-closeout.md)后授权[有界恢复四个核心工作包](../plans/2026-10-26-evaluation-finalization-plan.md)。日常推荐、默认推广暂停与原 FAIL/GAP/BLOCKED 不变；真实模型由用户手动配置，未自动启动付费执行。
 
 2026-10-25 建档，2026-10-26 补充逐目标、会话树、请求对账与冻结刺激。承接[默认编辑策略 SRS §7](2026-10-24-hashline-default-editing.md)，仅细化维护者评测数据和离线执行契约；不改变日常工具、策略或升级授权。基础实现见[实施计划](../plans/2026-10-25-real-model-evaluation-implementation-plan.md)和[前轮验收](../acceptance/2026-10-25-real-model-evaluation.md)，后续边界见[阶段验收](../acceptance/2026-10-26-evaluation-next-stage.md)。
 
@@ -21,6 +21,8 @@
 | budget | 正整数 maxModelRequests / maxTotalTokens / timeoutMs；token 为观测停止阈值 |
 | passConditions | 有限非负 minFirstCandidateCorrect / maxTotalTokensPerTask；先冻结，不能据结果补填。v1/v2 两者均为整数，分别是每臂首次正确最小样本数、每个任务×重复×臂样本的整树 totalTokens 上限。v1 对全部任务计首次，v2 必须冻结 firstCandidateScope |
 | tasks | 唯一 id、family、prompt、class、batchBoundary、initial / expected |
+| requestEvidence（可选） | `{version:1}` 要求新的请求捕获和独立重放报告。旧协议不追认请求原文，版本/额外字段不支持时拒绝 |
+| editPayloadVersion（可选） | 未声明或 1 保留历史请求形状识别；2 只将明确的 `[` 前缀记作 Hashline 请求、`*** Begin Patch` 独立首行记作 apply_patch 请求，其余 input 和互斥形状混用为 unknown。它不是完整语法校验或实际执行证明；未知版本拒绝 |
 
 formal 仍须覆盖原 SRS 的 13 个任务族；probe 可取子集。没有自动推广判定。冻结后身份变化即拒绝，不沿用历史哈希；已有 frozen 输出不覆盖。执行前以及每样本前核对实际安装身份，缺包、补丁不全、引擎不同或身份漂移均停止。
 
@@ -29,6 +31,20 @@ formal 仍须覆盖原 SRS 的 13 个任务族；probe 可取子集。没有自�
 可选 [task-suite.mjs](../../scripts/evaluation/task-suite.mjs) 生成覆盖 13 族的候选输入与独立 expected，输出仍是上述普通便捷配置，不增加协议字段或任务执行权限。候选默认 probe，模型/预算/条件未填；家族齐全只证明配置覆盖，不证明代表性、真实场景触发、中间行为合规或正式实验通过。任务与限制见[使用说明](../../scripts/evaluation/README.md)。
 
 ## 条件判定与未知覆盖
+
+### 实际组装请求证据 v1
+
+启用 requestEvidence 时，在 llm/stream 调用 next 前记录白名单 GenerateOptions：messages、system、tools、toolHistory、provider/model 与支持的参数、sessionId/purpose；排除 AbortSignal 和运行对象，未知选项拒绝捕获并停止后续请求。文件 request-NNNNNN.json 保存本地原文、全局序号、会话前缀长度及摘要；report.requests 只保存引用、文件摘要与表面摘要。无法捕获明确 unknown，不编造原文。
+
+checker 验证文件及字段身份、前缀与原 Session 事件一致，并核验冻结的官方 Session 入口后重放该前缀，独立比较 deriveMessages、requestHeader、toolHistory 与实际捕获。fork 使用图中已记录的 parent、createdAt、cwd、inherited 元数据构造 seeded Session。缺少重放环境/解释器或明确 PTC SDK 块时为 GAP；文件篡改、交叉会话、错误序号/摘要或重建不一致为证据错误。新协议不能删除捕获版本来跳过检查，旧协议保持未捕获。
+
+requestEvidenceAudit 的 PASS 只证明该边界的捕获与重建一致；工具接受、最终文件与冻结条件仍分别判断。此边界在 adapter 的文件/图片/工具历史投影及序列化之前，providerWire 始终 unknown；它不证明 HTTP 请求或供应商计费边界。SDK 仅从固定 PTC renderer 的显式 Program-only SDK bindings 代码块提取，缺失/歧义不猜测。
+
+compare-requests.mjs 在独立 check 后逐 taskId/repeat 比较各臂首个根请求的完整系统文本、外层工具定义与 SDK 摘要；未执行或未重放样本为 unknown，不缩小计划分母。比较不归一化路径、时间和上下文，原文不同可能包含这些因素；相同/不同均不直接证明公平性、纯策略因果或模型收益。
+
+原始请求含代码和提示，仅保存于本地留证目录，报告及比较文件不导出正文。新模板默认声明此契约；已有本地配置不自动迁移，新增脚本或代码变更后须重新采集身份并冻结。
+
+### 冻结条件
 
 冻结 v1/v2 语义后，逐臂判定上述两个绝对条件，结果写入 report.conditions；它与任务/取证的 report.status 分开。v1=per-arm-count-and-per-run-tokens-v1，其每臂首次分母为全部任务数×重复数；v2=per-arm-cohort-count-and-per-run-tokens-v2，其每臂首次分母为冻结 include 数×重复数。选中样本的失败、取消、BLOCKED 和未测均保留。首次正确只接受可复核的布尔值；Token 上限始终覆盖全部任务的含后代 totalTokens，不用均值掩盖单个超限。
 

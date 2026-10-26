@@ -1,6 +1,6 @@
 # PTC Hashline 默认编辑策略实施计划
 
-> 2026-10-26 当前安排：已按用户决定[收口为按需维护](../acceptance/2026-10-26-project-closeout.md)，默认推广与主动评测扩建暂停。下文保留原方案及各阶段结果；未完成研究项已延期，不再作为本次交付待办，FAIL/GAP/BLOCKED 不变。
+> 2026-10-26 当前安排：用户在[收口](../acceptance/2026-10-26-project-closeout.md)后授权[有界恢复四个核心工作包](../plans/2026-10-26-evaluation-finalization-plan.md)。日常推荐、默认推广暂停与原 FAIL/GAP/BLOCKED 不变；真实模型由用户手动配置，未自动启动付费执行。
 
 - 日期：2026-10-24；版本：r1。
 - 权威需求：[默认编辑策略 SRS 1.1](../specs/2026-10-24-hashline-default-editing.md)。本文解释实施方案，不另立需求正文。

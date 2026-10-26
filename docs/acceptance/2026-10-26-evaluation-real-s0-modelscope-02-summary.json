@@ -1,0 +1,891 @@
+{
+  "date": "2026-10-26",
+  "status": "FAIL",
+  "conditions": {
+    "version": 2,
+    "scope": "frozen-absolute-conditions-only",
+    "status": "FAIL",
+    "arms": {
+      "stock-edit": {
+        "status": "PASS",
+        "firstCandidateCorrect": {
+          "status": "PASS",
+          "minRequired": 3,
+          "correct": 3,
+          "incorrect": 0,
+          "measured": 3,
+          "unknown": 0,
+          "denominator": 3,
+          "rateOnMeasured": 1,
+          "rateBounds": {
+            "lower": 1,
+            "upper": 1
+          },
+          "cohort": {
+            "include": [
+              "single",
+              "repeated",
+              "multi"
+            ],
+            "exclude": [],
+            "excludedSamples": 0
+          }
+        },
+        "totalTokens": {
+          "status": "PASS",
+          "maxAllowed": 100000,
+          "knownSum": 130107,
+          "measured": 3,
+          "unknown": 0,
+          "denominator": 3,
+          "violations": []
+        }
+      },
+      "hashline-default": {
+        "status": "FAIL",
+        "firstCandidateCorrect": {
+          "status": "FAIL",
+          "minRequired": 3,
+          "correct": 0,
+          "incorrect": 2,
+          "measured": 2,
+          "unknown": 1,
+          "denominator": 3,
+          "rateOnMeasured": 0,
+          "rateBounds": {
+            "lower": 0,
+            "upper": 0.3333333333333333
+          },
+          "cohort": {
+            "include": [
+              "single",
+              "repeated",
+              "multi"
+            ],
+            "exclude": [],
+            "excludedSamples": 0
+          }
+        },
+        "totalTokens": {
+          "status": "PASS",
+          "maxAllowed": 100000,
+          "knownSum": 164431,
+          "measured": 3,
+          "unknown": 0,
+          "denominator": 3,
+          "violations": []
+        }
+      },
+      "hashline-fallback": {
+        "status": "FAIL",
+        "firstCandidateCorrect": {
+          "status": "FAIL",
+          "minRequired": 3,
+          "correct": 0,
+          "incorrect": 1,
+          "measured": 1,
+          "unknown": 2,
+          "denominator": 3,
+          "rateOnMeasured": 0,
+          "rateBounds": {
+            "lower": 0,
+            "upper": 0.6666666666666666
+          },
+          "cohort": {
+            "include": [
+              "single",
+              "repeated",
+              "multi"
+            ],
+            "exclude": [],
+            "excludedSamples": 0
+          }
+        },
+        "totalTokens": {
+          "status": "PASS",
+          "maxAllowed": 100000,
+          "knownSum": 103638,
+          "measured": 3,
+          "unknown": 0,
+          "denominator": 3,
+          "violations": []
+        }
+      }
+    }
+  },
+  "scope": "user-authorized 9-sample S0 only; no formal comparison or S1 execution",
+  "protocolHash": "cc1d01e0355ea92845df3229860f9838dac15be2137521bb5d34c5ee763b7896",
+  "model": {
+    "provider": "custom-gateway",
+    "model": "ZhipuAI/GLM-5.3-Flash",
+    "parameters": {
+      "maxTokens": 4096,
+      "reasoningEffort": "low"
+    }
+  },
+  "budgetLimits": {
+    "maxModelRequests": 36,
+    "maxTotalTokens": 600000,
+    "timeoutMs": 300000
+  },
+  "perTaskTokenCondition": 100000,
+  "accounting": {
+    "status": "PASS",
+    "streamRequests": 28,
+    "capturedRequests": 28,
+    "gaps": []
+  },
+  "requestEvidenceAudit": {
+    "version": 1,
+    "status": "PASS",
+    "boundary": "llm/stream-before-next",
+    "providerWire": "unknown",
+    "requests": 28,
+    "replayed": 28,
+    "gaps": []
+  },
+  "budget": {
+    "requests": 28,
+    "boundary": "llm/stream",
+    "providerHttpRequests": "unknown",
+    "totalTokens": 398176,
+    "knownTokens": 398176,
+    "unknown": false
+  },
+  "arms": {
+    "hashline-default": {
+      "samples": 3,
+      "finalCorrect": 2,
+      "requests": 11,
+      "totalTokens": 164431,
+      "states": {
+        "GAP": 2,
+        "FAIL": 1
+      },
+      "firstCandidate": {
+        "correct": 0,
+        "incorrect": 2,
+        "unknown": 1
+      }
+    },
+    "hashline-fallback": {
+      "samples": 3,
+      "finalCorrect": 1,
+      "requests": 7,
+      "totalTokens": 103638,
+      "states": {
+        "GAP": 1,
+        "FAIL": 2
+      },
+      "firstCandidate": {
+        "correct": 0,
+        "incorrect": 1,
+        "unknown": 2
+      }
+    },
+    "stock-edit": {
+      "samples": 3,
+      "finalCorrect": 3,
+      "requests": 10,
+      "totalTokens": 130107,
+      "states": {
+        "PASS": 3
+      },
+      "firstCandidate": {
+        "correct": 3,
+        "incorrect": 0,
+        "unknown": 0
+      }
+    }
+  },
+  "runs": [
+    {
+      "taskId": "single",
+      "arm": "hashline-default",
+      "status": "GAP",
+      "finalCorrect": true,
+      "firstCandidateCorrect": false,
+      "costs": {
+        "inputTokens": 73910,
+        "outputTokens": 652,
+        "wallMs": 55378,
+        "modelRequests": 5,
+        "runCodeCalls": 4,
+        "innerToolCalls": 6,
+        "reads": 3,
+        "verifications": "unknown",
+        "totalTokens": 74562,
+        "uncachedInputTokens": 73910
+      },
+      "failures": 1,
+      "mode": "unknown",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "single",
+      "arm": "hashline-fallback",
+      "status": "GAP",
+      "finalCorrect": true,
+      "firstCandidateCorrect": false,
+      "costs": {
+        "inputTokens": 74480,
+        "outputTokens": 365,
+        "wallMs": 24975,
+        "modelRequests": 5,
+        "runCodeCalls": 4,
+        "innerToolCalls": 4,
+        "reads": 2,
+        "verifications": "unknown",
+        "totalTokens": 74845,
+        "uncachedInputTokens": 74480
+      },
+      "failures": 1,
+      "mode": "unknown",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "single",
+      "arm": "stock-edit",
+      "status": "PASS",
+      "finalCorrect": true,
+      "firstCandidateCorrect": true,
+      "costs": {
+        "inputTokens": 38518,
+        "outputTokens": 256,
+        "wallMs": 17722,
+        "modelRequests": 3,
+        "runCodeCalls": 2,
+        "innerToolCalls": 3,
+        "reads": 2,
+        "verifications": "unknown",
+        "totalTokens": 38774,
+        "uncachedInputTokens": 38518
+      },
+      "failures": 0,
+      "mode": "non-hashline",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "repeated",
+      "arm": "hashline-fallback",
+      "status": "FAIL",
+      "finalCorrect": false,
+      "firstCandidateCorrect": "unknown",
+      "costs": {
+        "inputTokens": 14308,
+        "outputTokens": 72,
+        "wallMs": 5742,
+        "modelRequests": 1,
+        "runCodeCalls": 0,
+        "innerToolCalls": 0,
+        "reads": 0,
+        "verifications": "unknown",
+        "totalTokens": 14380,
+        "uncachedInputTokens": 14308
+      },
+      "failures": 0,
+      "mode": "not-attempted",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "repeated",
+      "arm": "stock-edit",
+      "status": "PASS",
+      "finalCorrect": true,
+      "firstCandidateCorrect": true,
+      "costs": {
+        "inputTokens": 38448,
+        "outputTokens": 247,
+        "wallMs": 15936,
+        "modelRequests": 3,
+        "runCodeCalls": 2,
+        "innerToolCalls": 2,
+        "reads": 1,
+        "verifications": "unknown",
+        "totalTokens": 38695,
+        "uncachedInputTokens": 38448
+      },
+      "failures": 0,
+      "mode": "non-hashline",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "repeated",
+      "arm": "hashline-default",
+      "status": "FAIL",
+      "finalCorrect": false,
+      "firstCandidateCorrect": "unknown",
+      "costs": {
+        "inputTokens": 14290,
+        "outputTokens": 73,
+        "wallMs": 5510,
+        "modelRequests": 1,
+        "runCodeCalls": 0,
+        "innerToolCalls": 0,
+        "reads": 0,
+        "verifications": "unknown",
+        "totalTokens": 14363,
+        "uncachedInputTokens": 14290
+      },
+      "failures": 0,
+      "mode": "not-attempted",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "multi",
+      "arm": "stock-edit",
+      "status": "PASS",
+      "finalCorrect": true,
+      "firstCandidateCorrect": true,
+      "costs": {
+        "inputTokens": 52089,
+        "outputTokens": 549,
+        "wallMs": 29452,
+        "modelRequests": 4,
+        "runCodeCalls": 3,
+        "innerToolCalls": 7,
+        "reads": 4,
+        "verifications": "unknown",
+        "totalTokens": 52638,
+        "uncachedInputTokens": 52089
+      },
+      "failures": 0,
+      "mode": "non-hashline",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "multi",
+      "arm": "hashline-default",
+      "status": "GAP",
+      "finalCorrect": true,
+      "firstCandidateCorrect": false,
+      "costs": {
+        "inputTokens": 74853,
+        "outputTokens": 653,
+        "wallMs": 35979,
+        "modelRequests": 5,
+        "runCodeCalls": 4,
+        "innerToolCalls": 6,
+        "reads": 4,
+        "verifications": "unknown",
+        "totalTokens": 75506,
+        "uncachedInputTokens": 74853
+      },
+      "failures": 1,
+      "mode": "unknown",
+      "turnOutcome": "completed"
+    },
+    {
+      "taskId": "multi",
+      "arm": "hashline-fallback",
+      "status": "FAIL",
+      "finalCorrect": false,
+      "firstCandidateCorrect": "unknown",
+      "costs": {
+        "inputTokens": 14308,
+        "outputTokens": 105,
+        "wallMs": 7670,
+        "modelRequests": 1,
+        "runCodeCalls": 0,
+        "innerToolCalls": 0,
+        "reads": 0,
+        "verifications": "unknown",
+        "totalTokens": 14413,
+        "uncachedInputTokens": 14308
+      },
+      "failures": 0,
+      "mode": "not-attempted",
+      "turnOutcome": "completed"
+    }
+  ],
+  "comparison": {
+    "status": "PASS",
+    "pairs": 9,
+    "equality": {
+      "systemTextEqual": {
+        "same": 0,
+        "different": 9,
+        "unknown": 0
+      },
+      "toolDefinitionsEqual": {
+        "same": 9,
+        "different": 0,
+        "unknown": 0
+      },
+      "sdkEqual": {
+        "same": 3,
+        "different": 6,
+        "unknown": 0
+      }
+    }
+  },
+  "rejectionEvidence": [
+    {
+      "task": "single",
+      "arm": "hashline-default",
+      "failedCalls": [
+        {
+          "callId": "chatcmpl-tool-b51eeffad2fea645:ptc:1",
+          "error": [
+            {
+              "type": "text",
+              "text": "Error: input must begin with \"[PATH#HASH]\" on the first non-blank line for anchored edits; got: \"account.txt#07A0\". Example: \"[src/foo.ts#1A2B]\" then edit ops."
+            }
+          ]
+        }
+      ],
+      "editInputSummaries": [
+        {
+          "callId": "chatcmpl-tool-b51eeffad2fea645:ptc:1",
+          "argumentKeys": [
+            "input"
+          ],
+          "inputFirstLine": "account.txt#07A0"
+        },
+        {
+          "callId": "chatcmpl-tool-a70c3b01813273c3:ptc:1",
+          "argumentKeys": [
+            "input"
+          ],
+          "inputFirstLine": "[account.txt#07A0]"
+        }
+      ],
+      "receiptSummaries": [
+        {
+          "callId": "chatcmpl-tool-b51eeffad2fea645:ptc:1",
+          "mode": "hashline",
+          "resultKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "callId": "chatcmpl-tool-a70c3b01813273c3:ptc:1",
+          "mode": "hashline",
+          "resultKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ]
+        }
+      ]
+    },
+    {
+      "task": "single",
+      "arm": "hashline-fallback",
+      "failedCalls": [
+        {
+          "callId": "chatcmpl-tool-8d8e4ef6e8ffaac8:ptc:1",
+          "error": [
+            {
+              "type": "text",
+              "text": "Error: input must begin with \"[PATH#HASH]\" on the first non-blank line for anchored edits; got: \"account.txt#07A0\". Example: \"[src/foo.ts#1A2B]\" then edit ops."
+            }
+          ]
+        }
+      ],
+      "editInputSummaries": [
+        {
+          "callId": "chatcmpl-tool-8d8e4ef6e8ffaac8:ptc:1",
+          "argumentKeys": [
+            "input"
+          ],
+          "inputFirstLine": "account.txt#07A0"
+        },
+        {
+          "callId": "chatcmpl-tool-883563d3acc84813:ptc:1",
+          "argumentKeys": [
+            "input"
+          ],
+          "inputFirstLine": "[account.txt#07A0]"
+        }
+      ],
+      "receiptSummaries": [
+        {
+          "callId": "chatcmpl-tool-8d8e4ef6e8ffaac8:ptc:1",
+          "mode": "hashline",
+          "resultKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "callId": "chatcmpl-tool-883563d3acc84813:ptc:1",
+          "mode": "hashline",
+          "resultKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ]
+        }
+      ]
+    },
+    {
+      "task": "multi",
+      "arm": "hashline-default",
+      "failedCalls": [
+        {
+          "callId": "chatcmpl-tool-adf23d973095894a:ptc:1",
+          "error": [
+            {
+              "type": "text",
+              "text": "Error: input must begin with \"[PATH#HASH]\" on the first non-blank line for anchored edits; got: \"a.txt#32D4\". Example: \"[src/foo.ts#1A2B]\" then edit ops."
+            }
+          ]
+        }
+      ],
+      "editInputSummaries": [
+        {
+          "callId": "chatcmpl-tool-adf23d973095894a:ptc:1",
+          "argumentKeys": [
+            "input"
+          ],
+          "inputFirstLine": "a.txt#32D4"
+        },
+        {
+          "callId": "chatcmpl-tool-bd4d95614aff9b95:ptc:1",
+          "argumentKeys": [
+            "input"
+          ],
+          "inputFirstLine": "[a.txt#32D4]"
+        }
+      ],
+      "receiptSummaries": [
+        {
+          "callId": "chatcmpl-tool-adf23d973095894a:ptc:1",
+          "mode": "hashline",
+          "resultKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5"
+          ]
+        },
+        {
+          "callId": "chatcmpl-tool-bd4d95614aff9b95:ptc:1",
+          "mode": "hashline",
+          "resultKeys": [
+            "0",
+            "1",
+            "2",
+            "3",
+            "4",
+            "5",
+            "6",
+            "7",
+            "8"
+          ]
+        }
+      ]
+    }
+  ],
+  "commands": {
+    "checkExit": 0,
+    "judgeExit": 2,
+    "compareExit": 0
+  },
+  "artifacts": [
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/proposal.json",
+      "sha256": "93c1db0166abff7ead295059bbccf85701cef97e6c2539366e573b86f312d9b7"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/s0.experiment.json",
+      "sha256": "50daf39b7f112cf58b98e6b8125612716022853952eaea380cc4d3dd7676ae7f"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/s0.frozen.json",
+      "sha256": "7c4fac500589c71c0682b819b7638068003fbf97c0caf7082d0c0caa84a5364a"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/authorization.json",
+      "sha256": "54954a7a760fc340e9404ac56441f6682d9ca1cc3376d56c37290ba18c40ef9d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/preflight.json",
+      "sha256": "220901528e2b9cbc2681b94fc658c63c4de4bdad7f0fb738073fa72609837265"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/design-review.json",
+      "sha256": "420f4ebdde2280866f3fd6e2f16ac63da6407f013edaaa48bcf4db63d9f29ea4"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/execution-summary.json",
+      "sha256": "ebbc2035aaf880510aa9b22882b89eb57b8f87ebe1c6836800b9a7af27874027"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/protocol.json",
+      "sha256": "7c4fac500589c71c0682b819b7638068003fbf97c0caf7082d0c0caa84a5364a"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/report.json",
+      "sha256": "5aafacf63fd5fb37703076c63f6d0084136cc6ad8747e5840f1f9759dee12a10"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/comparison.json",
+      "sha256": "5cac2abd543e5bb8cec82b737f081b4c509088b9768a776b4fafdd84cc5e9844"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/judge.json",
+      "sha256": "af2634bf08124f529056aab211775d1fb24d369ba7aaf2154ba74929f5adcac1"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/check.log",
+      "sha256": "07cb6d26c1f1651e6ff142e12a4a5280e6c082aacec2ba0df0db5fc1de6cb7ca"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/rejection-evidence.json",
+      "sha256": "581c2338a513a29238a114283c50da2c0928f6153992ddb869dbf93aa1184d2f"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-00ba1f56-d9d4-4d72-827f-06e729886d1f.graph.json",
+      "sha256": "418abfee233bfcb9726a1610c51a242bdee9a1081ca1761fc04e854e8847c88c"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-00ba1f56-d9d4-4d72-827f-06e729886d1f.jsonl",
+      "sha256": "d634306c15aa6113fdd71bc8714ada8fa2dec17f9c577e24dcbee9c610ecd690"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-00ba1f56-d9d4-4d72-827f-06e729886d1f.receipts.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-0f50f3ce-982d-4cd4-adf8-70cf6238363e.graph.json",
+      "sha256": "4ac01625888d9981772935995b42da767c4fe32968996d4c87e8b388af3df71a"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-0f50f3ce-982d-4cd4-adf8-70cf6238363e.jsonl",
+      "sha256": "60c6d293b4efb00bcf979efad3d36f6a652a0ae26103b9c251512e67f270af8f"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-0f50f3ce-982d-4cd4-adf8-70cf6238363e.receipts.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-2968e62f-4ac4-4bf7-85e1-d4001956003f.graph.json",
+      "sha256": "660ca9281d3defce125b5ebe48780deab6d4917a3ee1f4544940370ae7cccc1d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-2968e62f-4ac4-4bf7-85e1-d4001956003f.jsonl",
+      "sha256": "7265cc3a82461ca7a161cd01c53977dad17e1313d202965a4e62e33a0e4ed752"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-2968e62f-4ac4-4bf7-85e1-d4001956003f.receipts.json",
+      "sha256": "044bd2c1596d14d6502b60590352187038111dc2b9cdfb47ea2c0411c0210383"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-4495d6fc-a077-4e72-8f00-8a66ad59cf4f.graph.json",
+      "sha256": "242e77028acba56a5eaa92370ddd0e07f10cc35fe4837b4ee78db10a7b0cd669"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-4495d6fc-a077-4e72-8f00-8a66ad59cf4f.jsonl",
+      "sha256": "2191417b20a71e02ce8d6d9bc2ba4f41b7a72aa59d7f2e5bca48ed9a22db49f2"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-4495d6fc-a077-4e72-8f00-8a66ad59cf4f.receipts.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-8af6bcbd-5fcb-435c-bf81-6ce64f8b1ed8.graph.json",
+      "sha256": "187ea0d0dd693b7786d2bbb0b99e3a1a0c6abaf982938c39f139240f6c3a53d6"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-8af6bcbd-5fcb-435c-bf81-6ce64f8b1ed8.jsonl",
+      "sha256": "e1dff9f6ff3619d3a82be16e1d3d082b7e1bdce42f2d74bc36ba6cb237910814"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-8af6bcbd-5fcb-435c-bf81-6ce64f8b1ed8.receipts.json",
+      "sha256": "d38101224ac05039cb94372e7b20315ff944d8d9d457c7d4790aa9c3af812b7d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-c8ae924d-5425-4c6e-9158-6bd5c9ce7a40.graph.json",
+      "sha256": "c85b5a2e744363034a5b17c626d65145b7d7424df55afbfab1cc802ab2a5d5c8"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-c8ae924d-5425-4c6e-9158-6bd5c9ce7a40.jsonl",
+      "sha256": "f0df70075d9717786b424ec921f67756e3d8153e5c7946d183e983c50aecfa7c"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-c8ae924d-5425-4c6e-9158-6bd5c9ce7a40.receipts.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-e202fc00-05eb-4c79-9d62-da5e4bbce3e1.graph.json",
+      "sha256": "e080db1cf0a6d522124787b4dde3771530344a10afb211d54d61c84075455f77"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-e202fc00-05eb-4c79-9d62-da5e4bbce3e1.jsonl",
+      "sha256": "2eb9e268b20390beaf93e0e884a8aedf16d50c2c4dd95d02edfac911471c4a0d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-e202fc00-05eb-4c79-9d62-da5e4bbce3e1.receipts.json",
+      "sha256": "2e2217b062d3f8a1092d5906ae5383e9f91d072e2ec5dbe29055055984c42e79"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-ec0f37cd-c6ae-4403-a4ad-b5de0d1b8ed3.graph.json",
+      "sha256": "69e8abdccc46d2aa08063c18826c430d9ab329e53a5135232ba88fb4c2897413"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-ec0f37cd-c6ae-4403-a4ad-b5de0d1b8ed3.jsonl",
+      "sha256": "4d3ae3dca7bd6a424f41643cc856400915769b20d5635fef298fbddb3974a372"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-ec0f37cd-c6ae-4403-a4ad-b5de0d1b8ed3.receipts.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-f78cf032-1059-445e-a0d2-35e6a71ee4ec.graph.json",
+      "sha256": "f0aff333bec3c03e7d41283cae2af02908d8dfec49f8ba4a40dfed0e918bb9e7"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-f78cf032-1059-445e-a0d2-35e6a71ee4ec.jsonl",
+      "sha256": "c762693655017a8c2d1aaa88bdbc54abd462576a87c78f2fe233ce0b5600ac52"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/eval-f78cf032-1059-445e-a0d2-35e6a71ee4ec.receipts.json",
+      "sha256": "4f53cda18c2baa0c0354bb5f9a3ecbe5ed12ab4d8e11ba873c2f11161202b945"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000001.json",
+      "sha256": "bcc9a846d2e4348d70af9e084d2a76d65ab1401d4ca2622300f85b8b282d91fd"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000002.json",
+      "sha256": "566132851ca6c9cafbc49d508203ad7b48223d537a636409f566bc078161cd11"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000003.json",
+      "sha256": "c3f736368ac7f872bc6ab739711273aea2ea2f2f146b68011bba52eb1a2b2b63"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000004.json",
+      "sha256": "3efebd610380c63ea7b4248fbe51aa0224533d878b7d5efa217433f478593e20"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000005.json",
+      "sha256": "429ddb719d32322702b1a16b80f9ba017adb8e937f16e9236696b466933f21d9"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000006.json",
+      "sha256": "3ef2f25033a15ddca4285beb4ee28e8f21a10ee72252c1a00dfd19387d54caec"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000007.json",
+      "sha256": "f107e67e1031459b503965680358cea2d7fcb3ae6feeec2f5e3b6ff84c3c4540"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000008.json",
+      "sha256": "80d95ed8e9828a1ae524b87e16e7e35b20ebbbf2b6b8be495675c223e640e831"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000009.json",
+      "sha256": "a0b8df05a36d4729d4651eddc5854ea90ada71d422db3ce352b869f14e7a11db"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000010.json",
+      "sha256": "02ab23af05188eae3f860727b80086cfb90ebad39829cf9f5e935e921d310712"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000011.json",
+      "sha256": "03949566ff7d578ac0cb81f7b501670f112d651c45605dd7e3d46a06c7c505ee"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000012.json",
+      "sha256": "9d92d097f826e9ede94e1a4b32a35b488d900834f2d23de5001d8af99dee5583"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000013.json",
+      "sha256": "d16d338ac5cf4a0fae4a9b1142aa4fa15f5484ada450f4b2cd9882465d16c09b"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000014.json",
+      "sha256": "5e1184d58bdd848db2f4b284ba36977e66eeba3a0e1233a06064498ab745806f"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000015.json",
+      "sha256": "daedbb463a52ef9a5e25447aa2dfa0e0f0ddf319fb13fdeb35de5b5cfd2941fd"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000016.json",
+      "sha256": "7d6a11d3ec964ab6ff71050f3776f09fa3320540746a9ea2e6475e197988f94e"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000017.json",
+      "sha256": "4c4a7e6d1cb8c18a52214eafd6d32e7c952bd8019fd29e5ad295b05d8bba3439"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000018.json",
+      "sha256": "8a319a246f7e97aa6a3f24170ee3baabcfb34fa403fa60893fb683169abb7ccf"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000019.json",
+      "sha256": "58bbe3e006fa1e49d0547ba7ab10ec776e6cf7ac5258207935caf72a2bca3682"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000020.json",
+      "sha256": "5435f0d1ec01bddc066f029e1d12b3e64930ccc31554c72e4a90c50ed9d70929"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000021.json",
+      "sha256": "5bb89c017f17c87536fd8994e4a23ea88cfed655f1cf13ec1721e5108fcc7192"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000022.json",
+      "sha256": "6a637f40745885320115d19e915920d2ccb37b3fc469fd5ed7949038acc8cfe2"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000023.json",
+      "sha256": "9873db9cf08496841975c22ea952a65892be121844714ddd04850bf12f1ac3a4"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000024.json",
+      "sha256": "6a636d14f365c207e1ab8b50860dad4e45106aa63a7da6acd550f7ed375b631a"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000025.json",
+      "sha256": "12f02e4d364ad30ed4f51b2152e3330ab2b3ff335531e37c67b261f94504ca52"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000026.json",
+      "sha256": "ec24a6b16009c6052e26e6487f205037ef504005f58d258584d88d6e4c6aedb0"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000027.json",
+      "sha256": "67fdd11c8ff8442ea2b9a025ecaabe9f4ec76ef3d783e9a8ee39c88d8bbb2431"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-02/results/request-000028.json",
+      "sha256": "2f13986a5426211142325e9122bc462f80a6b4045c7a8d8f8a121c38e20da7cf"
+    }
+  ],
+  "remaining": [
+    "S0 executed but FAIL: Hashline first-candidate conditions not met and 3 tasks no tool execution",
+    "malformed anchored header yields target/mode attribution GAP; selected mode hashline is not execution proof",
+    "HTTP wire and internal HTTP counts remain unknown for this S0",
+    "cached/uncached usage categories not reconstructed if absent",
+    "real cancelled-request billing from prior round remains unknown",
+    "S1/S2 not authorized/executed; no model benefit or promotion claim"
+  ]
+}

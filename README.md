@@ -4,7 +4,7 @@
 
 验证基线为 DSH `0.2.1-rc.2`、hashline/tool-edit `0.2.1-alpha.4` 加本地补丁。项目仍为 private bundle；已验证能力与范围见[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
 
-**项目状态（2026-10-26）：本阶段已收口，保留按需维护。** 日常推荐 PTC Mode，PTC Hashline Mode 保留为手动可选方案；默认推广与通用评测扩建暂停。现有功能、测试和历史证据保留，后续范围与恢复条件见[收口记录](docs/acceptance/2026-10-26-project-closeout.md)。该决定没有修改日常 DSH profile 或 preset 实现，不代表收益验证通过。
+**项目状态（2026-10-26）：按用户新授权，有界恢复四个核心评测工作包。** 范围与验收见[恢复计划](docs/plans/2026-10-26-evaluation-finalization-plan.md)。日常仍推荐 PTC，Hashline 手动可选，默认推广继续暂停；日常 profile 未改。历史[收口记录](docs/acceptance/2026-10-26-project-closeout.md)保留，真实模型连接由用户通过配置文件填写；明确授权的[首轮 S0](docs/acceptance/2026-10-26-evaluation-real-s0-modelscope.md)超时保留 GAP；经再次授权的[完整 S0 第二轮](docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)已执行 9 项，结果 FAIL，未启动 S1。
 
 ## 项目组成
 
@@ -60,7 +60,7 @@ pnpm test:delivery
 
 ## 文档入口
 
-真实模型评测的无凭据验证、三臂隔离宿主冒烟、冻结协议及后续付费实验命令见 [evaluation README](scripts/evaluation/README.md)。运行驱动默认只做 preflight；本轮没有启动真实模型对照，未测成本记 unknown，基础设施通过不代表收益或推广通过。
+真实模型评测的无凭据验证、三臂隔离宿主冒烟、冻结协议及后续付费实验命令见 [evaluation README](scripts/evaluation/README.md)。运行驱动默认只做 preflight；完整真实 S0 第二轮已执行但未通过，正式对照尚未执行；缺失成本记 unknown，基础设施通过不代表收益或推广通过。
 
 运行目标包含 Windows、macOS 和 Linux；[CI 矩阵](.github/workflows/policy-contract.yml)使用各系统原生路径与 `file:` URL 回归。已执行平台和未覆盖范围以验收索引为准。read 的 `defaultEditPolicyGuidance` 默认关闭，仅本 preset 开启。
 

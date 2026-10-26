@@ -1,0 +1,435 @@
+{
+  "date": "2026-10-26",
+  "status": "GAP",
+  "diagnosticStatus": "PASS",
+  "scope": "diagnosis and one response/usage probe, not complete S0 or model benefit",
+  "additionalRealRequests": 1,
+  "realToolExecutions": 0,
+  "localFixtureRequests": 6,
+  "localWire": [
+    {
+      "variant": "original",
+      "path": "/v1/chat/completions",
+      "keys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options",
+        "store",
+        "max_completion_tokens",
+        "tools"
+      ],
+      "max_tokens": null,
+      "max_completion_tokens": 4096,
+      "reasoning_effort": null,
+      "thinking": null,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "messageCount": 6,
+      "toolCount": 1,
+      "chunkTypes": [
+        "block-start",
+        "text-delta",
+        "block-end",
+        "usage",
+        "finish"
+      ],
+      "realModelRequests": 0
+    },
+    {
+      "variant": "zai-off",
+      "path": "/v1/chat/completions",
+      "keys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options",
+        "store",
+        "max_completion_tokens",
+        "tools",
+        "thinking"
+      ],
+      "max_tokens": null,
+      "max_completion_tokens": 4096,
+      "reasoning_effort": null,
+      "thinking": {
+        "type": "disabled"
+      },
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "messageCount": 6,
+      "toolCount": 1,
+      "chunkTypes": [
+        "block-start",
+        "text-delta",
+        "block-end",
+        "usage",
+        "finish"
+      ],
+      "realModelRequests": 0
+    },
+    {
+      "variant": "openai-low",
+      "path": "/v1/chat/completions",
+      "keys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options",
+        "store",
+        "max_completion_tokens",
+        "tools",
+        "reasoning_effort"
+      ],
+      "max_tokens": null,
+      "max_completion_tokens": 4096,
+      "reasoning_effort": "low",
+      "thinking": null,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "messageCount": 6,
+      "toolCount": 1,
+      "chunkTypes": [
+        "block-start",
+        "text-delta",
+        "block-end",
+        "usage",
+        "finish"
+      ],
+      "realModelRequests": 0
+    },
+    {
+      "variant": "cap-max-tokens",
+      "path": "/v1/chat/completions",
+      "keys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options",
+        "store",
+        "max_tokens",
+        "tools"
+      ],
+      "max_tokens": 4096,
+      "max_completion_tokens": null,
+      "reasoning_effort": null,
+      "thinking": null,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "messageCount": 6,
+      "toolCount": 1,
+      "chunkTypes": [
+        "block-start",
+        "text-delta",
+        "block-end",
+        "usage",
+        "finish"
+      ],
+      "realModelRequests": 0
+    },
+    {
+      "variant": "zai-low",
+      "path": "/v1/chat/completions",
+      "keys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options",
+        "store",
+        "max_completion_tokens",
+        "tools",
+        "thinking",
+        "reasoning_effort"
+      ],
+      "max_tokens": null,
+      "max_completion_tokens": 4096,
+      "reasoning_effort": "low",
+      "thinking": {
+        "type": "enabled",
+        "clear_thinking": false
+      },
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "messageCount": 6,
+      "toolCount": 1,
+      "chunkTypes": [
+        "block-start",
+        "text-delta",
+        "block-end",
+        "usage",
+        "finish"
+      ],
+      "realModelRequests": 0
+    },
+    {
+      "variant": "combined-low",
+      "path": "/v1/chat/completions",
+      "keys": [
+        "model",
+        "messages",
+        "stream",
+        "stream_options",
+        "store",
+        "max_tokens",
+        "tools",
+        "reasoning_effort"
+      ],
+      "max_tokens": 4096,
+      "max_completion_tokens": null,
+      "reasoning_effort": "low",
+      "thinking": null,
+      "stream": true,
+      "stream_options": {
+        "include_usage": true
+      },
+      "messageCount": 6,
+      "toolCount": 1,
+      "chunkTypes": [
+        "block-start",
+        "text-delta",
+        "block-end",
+        "usage",
+        "finish"
+      ],
+      "realModelRequests": 0
+    }
+  ],
+  "real": {
+    "status": "PASS",
+    "scope": "single response/usage diagnostic only; no editing correctness or S0 completion claim",
+    "streams": 1,
+    "httpRequestsObserved": 1,
+    "toolExecutions": 0,
+    "wallMs": 46249,
+    "firstChunkMs": 10813,
+    "chunkTypes": {
+      "block-start": 3,
+      "reasoning-delta": 318,
+      "text-delta": 69,
+      "tool-call-delta": 240,
+      "block-end": 3,
+      "usage": 1,
+      "finish": 1
+    },
+    "usage": [
+      {
+        "inputTokens": 14186,
+        "outputTokens": 641,
+        "totalTokens": 14827
+      }
+    ],
+    "finish": [
+      {
+        "type": "finish",
+        "reason": {
+          "kind": "tool-calls"
+        },
+        "replayState": {
+          "response": {
+            "kind": "pi-ai",
+            "version": 2,
+            "api": "openai-completions",
+            "provider": "custom-gateway",
+            "model": "ZhipuAI/GLM-5.3-Flash",
+            "responseId": "chatcmpl-017eb90d-3f1d-4d42-b838-fe98247e706f",
+            "stopReason": "toolUse"
+          },
+          "blocks": [
+            {
+              "type": "reasoning",
+              "thinkingSignature": "reasoning_content"
+            },
+            {
+              "type": "text"
+            },
+            {
+              "type": "tool-call"
+            }
+          ]
+        }
+      }
+    ],
+    "transport": [
+      {
+        "host": "api-inference.modelscope.cn",
+        "path": "/v1/chat/completions",
+        "max_tokens": 4096,
+        "max_completion_tokens": null,
+        "reasoning_effort": "low",
+        "thinking": null,
+        "stream": true,
+        "stream_options": {
+          "include_usage": true
+        }
+      }
+    ],
+    "error": null
+  },
+  "requestSize": {
+    "messages": 6,
+    "textCharacters": 57648,
+    "outerTools": 1,
+    "toolDefinitionCharacters": 2496,
+    "claims": "Characters only, not a tokenizer count or demonstrated cause of prolonged reasoning"
+  },
+  "unit": {
+    "targetedFiles": 14,
+    "targetedPass": 246,
+    "fullFiles": 22,
+    "fullPass": 291,
+    "failed": 0
+  },
+  "typesExit": 0,
+  "red": {
+    "failed": 2,
+    "passed": 22,
+    "exit": 1
+  },
+  "mutation": {
+    "exit": 1,
+    "failed": 2,
+    "passed": 22,
+    "mutation": "allow arbitrary maxTokensField values instead of only the two installed enum spellings",
+    "mutationHash": "a6c2e572cc032c4c6ca84724d384ca5a2f06fd401e24f632f4d8b036053ad7e2",
+    "restoredHash": "5b8d1af4cdf5db127153843b40af77e79593b7b7901a4bf917b40696688b90ee",
+    "restoredMatchesSource": true
+  },
+  "source": [
+    {
+      "path": "scripts/evaluation/protocol.mjs",
+      "sha256": "5b8d1af4cdf5db127153843b40af77e79593b7b7901a4bf917b40696688b90ee"
+    },
+    {
+      "path": "tests/unit/evaluation-finalization-config.spec.ts",
+      "sha256": "5f833507cf66b3acd86dc340f0bd7b030f0c2ad0d0675a413cd5b904f6e07e4b"
+    },
+    {
+      "path": "C:/Users/lenovo/AppData/Local/Temp/delivery-JdeRnL/dsh-home/profiles/acceptance/node_modules/@deepseek-ai/dsh-llm-pi-ai/lib/index.js",
+      "sha256": "99b5c20830a52f69641df8a18a39206079b0c725201958cce2c4a934f1d4f7cd",
+      "symbols": [
+        "resolveModelReasoning",
+        "resolveReasoningLevel",
+        "reasoningInfo"
+      ]
+    },
+    {
+      "path": "C:/Users/lenovo/AppData/Local/Temp/delivery-JdeRnL/dsh-home/profiles/acceptance/node_modules/@earendil-works/pi-ai/dist/api/openai-completions.js",
+      "sha256": "106eb312121137abbe9ad8050e2c9baa1ea27315233c7b8bee8c7820c8b3a6cf",
+      "symbols": [
+        "detectCompat lines 1229-1285"
+      ]
+    }
+  ],
+  "sources": [
+    {
+      "url": "https://huggingface.co/zai-org/GLM-5.3-Flash/raw/main/README.md",
+      "claim": "low/high/max; omitted effort defaults max",
+      "accessed": "2026-10-26"
+    },
+    {
+      "url": "https://docs.z.ai/guides/capabilities/thinking",
+      "claim": "GLM-5.3 series cannot disable thinking",
+      "accessed": "2026-10-26"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/replay-symptom.mjs",
+      "sha256": "62e76368e1a702e32fed894d46b326e24f8005dbcc6cf4a2c2dd2f76404a3842"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/wire-probe.mjs",
+      "sha256": "4f05fd3a957323906463fde93d4bd581175ba49dc5d8010ad7dcc93a119871f3"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/wire-summary.json",
+      "sha256": "36e62ad9ee4a6771fcc2faef6fa1bade14d082aa5000357ec08e77b964c76f0d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/wire-candidates.mjs",
+      "sha256": "8ac8e4ab80152b03c9468eee6e77f1daec2e9221606cc245f736e99aa624ff5d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/wire-candidates-summary.json",
+      "sha256": "af7be51d2007632c29c8fac79425791a76750f5742878ae5f84ddac0652697d7"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/request-size.json",
+      "sha256": "8e8142b276fb138301868eadad4f9db9aeeb86c0d929350366782afa31748f8d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/cap-red-direct.log",
+      "sha256": "1534aa58cc8652ce55524324a9c2a1502433c94783c1b1093e689693dd538fa7"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/unit-all.log",
+      "sha256": "054550027977197eba353f27a0557f10cbee2709c68d8f328199fcaa7d80db9f"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/unit-full.log",
+      "sha256": "e8c60372342e514735a4dab6dc3e2e52f4fe5f1518c88f1b3c90533a5e32d610"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/mutation.log",
+      "sha256": "b2433fd3f48b396c303d23187296af02525e78b48436502f8c24c7a2354a858a"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/mutation-summary.json",
+      "sha256": "bf973c4b67f68bda268b33f91b101d2dea9df4dc446d1f922abd2c81b9e22753"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/s0.low.candidate.experiment.json",
+      "sha256": "c7c6e1f2d3f110a273caa906a3a36fd0fe8bf4ac60b2bec4743bd6c3aaa217d3"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/s0.low.candidate.frozen.json",
+      "sha256": "45d87f1dbc4e97dc32fc74f22c841a93a6a2c81abab9424571338194c0237afd"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/real-once.mjs",
+      "sha256": "f22d45bee75c2c85422c44409c22281048f386effc032130a623f0d452620c26"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/real-low-once/authorization.json",
+      "sha256": "2b0e311344840592c4be2b57acefad90aa7a47b5f607c373286a2f25bd306fa2"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/real-low-once/request.json",
+      "sha256": "88012aef219a555c9eeffa7fd32b3874814fbd4cce1a889d7df213705bbfe250"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/real-low-once/summary.json",
+      "sha256": "1606a077a2ffdce15bd72da6c6111dec597307c7da1fef28d446d9682bf5383f"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/real-low-once/transport.json",
+      "sha256": "9d3314cec36a4d422a67e869a447cea01845dc2c4ea09d2e9bb75000cd22361d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-diagnosis-01/real-low-once/chunks.json",
+      "sha256": "407cef7f3bdc51409dc3c04d721149c8c2d860db8c976af4f496c77526ca3053"
+    }
+  ],
+  "remaining": [
+    "full S0 tool execution and all-arm validation not completed",
+    "single paired change cannot separate low/cap effects",
+    "first cancelled request usage and monetary costs unknown",
+    "S0 budget/timeout must be reviewed before a fresh explicit run",
+    "S1/S2 not executed",
+    "per-task 20000 token condition is likely too low for multiple requests at the observed first-request cost; review prospectively, never rewrite old thresholds"
+  ]
+}

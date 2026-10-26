@@ -1,14 +1,19 @@
 # 当前验收状态与证据索引
 
-更新日期：2026-10-26。本文汇总已有记录，文件名保留最初建档日期。本轮补充逐目标/会话树/刺激的离线实现及独立宿主证据，见本表；没有新增付费模型请求。历史报告保留各轮结果，以下计数不得合并为同一次执行。
+更新日期：2026-10-26。本文汇总已有记录，文件名保留最初建档日期。本轮补充离线实现与用户授权的真实 S0 首轮，见本表；新一轮 S0 已完整执行 9 项，整体 FAIL，未启动 S1；原超时轮保留 GAP。历史报告保留各轮结果，以下计数不得合并为同一次执行。
 
-**当前安排：本阶段已收口，保留按需维护。** 用户已确认日常推荐 PTC Mode、Hashline 手动可选，暂停默认推广和主动评测扩建；研究缺口退出当前交付待办，事实状态保持不变。处置、来源与恢复条件见[收口记录](2026-10-26-project-closeout.md)。日常 profile 与既有 preset 契约未修改。
+**当前安排：用户已授权有界恢复四个核心评测包。** 见[恢复计划](../plans/2026-10-26-evaluation-finalization-plan.md)；真实模型连接已由用户配置并明确授权仅执行 S0；首轮超时 GAP 后经用户新授权执行第二轮，完整 S0 FAIL，未自动续跑或启动 S1。日常推荐 PTC、Hashline 手动可选及暂停默认推广的决定不变，历史[收口记录](2026-10-26-project-closeout.md)保留。原 FAIL/GAP/BLOCKED 不变。
 
 ## 当前结论
 
 | 主题 | 当前依据与证明范围 |
 |---|---|
-| 项目收口 | [收口验收与延期清单](2026-10-26-project-closeout.md)：最后实现已提交为 116ece1；[两轮用户报告](../evidence/tetris-ab/README.md)按原文与摘要归档。当前证据不支持默认推广；不宣称机制普遍优劣、正式 S0/S1/S2 通过或所有 GAP 已解决 |
+| S0 后续模式/提示审计 | [本轮验收](2026-10-26-evaluation-payload-prompt-audit.md)：version=2 消除坏 header→apply_patch 误标，actualMode 仍 unknown；旧真实报告继续复核且未改写。6 个 Hashline 首请求均有方括号指引，三个无工具响应正常 stop，未发现明确提示冲突。297 项单元、类型与固定宿主 18 项/45 请求通过；新增真实请求 0，S0 FAIL 不变 |
+| 完整真实 S0 第二轮 | [本轮验收](2026-10-26-evaluation-real-s0-modelscope-02.md)：9 项全部执行，28/28 请求对账与独立重放、总 Token 398,176；3 PASS / 3 GAP / 3 FAIL，最终 6/9 正确。stock-edit 3/3 正确，两 Hashline 臂分别 2/3 与 1/3；Hashline 首次条件失败，S0 FAIL 后停止，未启动 S1，不外推普遍收益 |
+| S0 诊断与单请求复验 | [本轮诊断](2026-10-26-evaluation-s0-diagnosis.md)：确认原推理控制未发送，修复 cap 枚举误拒；追加一次 low/max_tokens 请求约 46.2 秒返回工具调用，usage 14,827 Token。未执行工具，完整 S0 仍 GAP。291 项单元及类型通过，未启动 S1 |
+| 真实 S0 首轮 | [真实 S0 首轮](2026-10-26-evaluation-real-s0-modelscope.md)：ModelScope/GLM-5.3-Flash 首请求在 reasoning 阶段 120 秒超时；1 CANCELLED / 8 BLOCKED，usage/费用 unknown；捕获与重放 1/1，check=0、judge=2。S0 未通过，S1/S2 未执行 |
+| 请求取证与有界恢复 | [本轮验收](2026-10-26-evaluation-request-evidence.md)：完整组装请求捕获、官方 Session 独立重放、SDK 比较及手动网关配置已验证。241 项定向、九项交付门禁通过；固定 Provider 117 样本仍为 93 PASS / 18 GAP / 6 FAIL。前两包无费用部分完成，真实 S0/S1/S2 待配置及显式执行，无收益结论 |
+| 项目收口（历史） | [收口验收与延期清单](2026-10-26-project-closeout.md)：最后实现已提交为 116ece1；[两轮用户报告](../evidence/tetris-ab/README.md)按原文与摘要归档。当前证据不支持默认推广；不宣称机制普遍优劣、正式 S0/S1/S2 通过或所有 GAP 已解决 |
 | 基础 read/edit、cwd、persona | 已实现并有回归，见[运行修复](2026-10-23-runtime-fix-acceptance.md) |
 | MV 与快照次序 | 创建意图、不覆盖、部分成功、磁盘先于快照已修复，见[MV 验收](2026-10-23-mv-observation-acceptance.md)与 [ADR-0004](../adr/0004-mv-create-intent-and-snapshot-order.md) |
 | BOM | Local provider 的 hashline 路径支持零/单 BOM，连续 BOM 拒绝，见[BOM 验收](2026-10-23-bom-and-snapshot-repair-acceptance.md)与 [ADR-0005](../adr/0005-bom-preserving-hashline-read.md) |

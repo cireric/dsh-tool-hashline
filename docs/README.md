@@ -4,7 +4,7 @@
 
 **当前实现、验收范围和剩余缺口统一见[当前状态与证据索引](acceptance/2026-10-23-current-status-and-evidence-index.md)。** 文件名保留最初建档日期，正文注明更新日期。历史报告中的“当前”指执行当时。
 
-2026-10-26 已按用户决定[收口为按需维护](acceptance/2026-10-26-project-closeout.md)，默认推广与评测扩建暂停；旧计划的后续工作已延期，原 FAIL/GAP/BLOCKED 保留。[两轮外部 A/B 报告快照](evidence/tetris-ab/README.md)仅作决策参考。
+2026-10-26 收口后，用户授权[有界恢复四个核心工作包](plans/2026-10-26-evaluation-finalization-plan.md)。[请求取证与设计验收](acceptance/2026-10-26-evaluation-request-evidence.md)记录本轮无费用实现；[真实 S0 首轮](acceptance/2026-10-26-evaluation-real-s0-modelscope.md)已按用户授权执行，推理中超时 GAP；后续[完整 S0 第二轮](acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)已执行全部 9 项但判定 FAIL，S1/S2 仍未执行，默认推广仍暂停，原 FAIL/GAP/BLOCKED 保留。[两轮外部 A/B 报告快照](evidence/tetris-ab/README.md)仅作决策参考。
 
 ## 按主题阅读
 

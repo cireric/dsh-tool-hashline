@@ -2,12 +2,56 @@
 
 复用 [SRS §7](../../docs/specs/2026-10-24-hashline-default-editing.md)、[S0–S2 方案](../../docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)。本目录是维护者主动运行的离线工具，不随 bundle 发布，也不新增常驻遥测。
 
-**2026-10-26 收口：保留复用，暂停主动扩建与默认推广。** 下列命令继续可用，文中的后续实验仅是操作参考，没有待自动执行的真实模型安排。原始 FAIL/GAP/BLOCKED 保留；延期工作和恢复条件见[收口记录](../../docs/acceptance/2026-10-26-project-closeout.md)。
+**2026-10-26 有界恢复四个核心工作包。** 用户选择手动填写连接文件；用户已明确授权仅执行[首轮真实 S0](../../docs/acceptance/2026-10-26-evaluation-real-s0-modelscope.md)，推理中超时 GAP；再次授权的[完整 S0 第二轮](../../docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)已执行 9 项，结果 FAIL；未启动 S1，默认推广仍暂停。原 FAIL/GAP/BLOCKED 及[收口记录](../../docs/acceptance/2026-10-26-project-closeout.md)保留，当前范围见[恢复计划](../../docs/plans/2026-10-26-evaluation-finalization-plan.md)。
+
+## 手动连接与有界实验
+
+自定义兼容端点使用 [experiment.gateway.example.json](experiment.gateway.example.json)，复用已安装 `@deepseek-ai/dsh-llm-pi-ai`。BASE_URL 概念对应 `provider.config.providers.<路由>.baseURL`，不是大写 JSON 键或环境变量自动插值。Provider 是路由键和 `model.provider`，模型 ID 同时填写 `model.model` 和该路由的 `models[].id`；不一致会在 prepare 时拒绝。插件包名与 Provider 路由名是不同字段。
+
+填写实际 endpoint、模型 ID、服务端 contextWindow、预算、阈值；凭据只填环境变量名 apiKeyEnv/credentialEnv，值在执行进程的环境中提供。模板 API 为 openai-completions（Chat Completions 兼容协议），其它协议按已安装插件契约填写；真实服务是否兼容由 S0 验证。本轮已验证实际插件可加载自定义路由/模型目录，未向外部 endpoint 发请求。
+
+模板默认非推理模型；需要推理档位时，按实际模型填写 `models[].reasoningEfforts` 的档位及 wire 映射，并在 `model.parameters.reasoningEffort` 选择同一档位。不支持的参数仍拒绝，不升级上游。每请求输出 cap 默认 4096、内部请求重试默认 0，是可编辑起点，不是服务端能力或费用承诺。
+
+```powershell
+New-Item -ItemType Directory -Force .scratch/my-finalization | Out-Null
+Copy-Item scripts/evaluation/experiment.gateway.example.json .scratch/my-finalization/connection.json
+# 手动填写连接、模型、容量；预算和阈值可在每组生成配置中分别填写。
+node scripts/evaluation/finalization-config.mjs .scratch/my-finalization/connection.json probe .scratch/my-finalization/s0.experiment.json
+node scripts/evaluation/finalization-config.mjs .scratch/my-finalization/connection.json formal .scratch/my-finalization/s1.experiment.json
+node scripts/evaluation/prepare.mjs .scratch/my-finalization/s0.experiment.json <disposable-profile> .scratch/my-finalization/s0.frozen.json
+node scripts/evaluation/run.mjs .scratch/my-finalization/s0.frozen.json <disposable-profile> .scratch/my-finalization/s0-results
+# 仅在配置、服务端费用边界及真实执行安排明确后，显式执行 S0：
+node scripts/evaluation/run.mjs .scratch/my-finalization/s0.frozen.json <disposable-profile> .scratch/my-finalization/s0-results --execute
+node scripts/evaluation/driver.mjs check .scratch/my-finalization/s0-results/protocol.json .scratch/my-finalization/s0-results/report.json
+node scripts/evaluation/driver.mjs judge .scratch/my-finalization/s0-results/protocol.json .scratch/my-finalization/s0-results/report.json
+node scripts/evaluation/compare-requests.mjs .scratch/my-finalization/s0-results/protocol.json .scratch/my-finalization/s0-results/report.json .scratch/my-finalization/s0-requests.json
+```
+
+输出必须不存在；后续轮次使用新路径。S0 为 9 个普通任务样本，S1 为 117 样本，精确定义见[现行方案](../../docs/plans/2026-10-25-default-edit-policy-promotion-evaluation-plan.md)。S0 未完成、usage 不全或证据不一致时先停止；修复后另起协议。S0 结果符合预先条件后再 review/prepare S1，沿用相同命令但替换为 s1 路径；不会自动续跑 S1。模型或参数改变需另起 S0。
+
+生成器固定三臂、任务和重复安排，保留用户连接、模型参数、预算及阈值。S1 首程序条件仅含 5 个普通非冲突/非阶段任务，每臂分母 15；其余 8 项有预置理由，但每臂全部 39 个最终结果和成本仍计入。配置按用户填写后才冻结；不把模板、固定 Provider 的用量/结果当作真实收益。
+
+启用 `requestEvidence: {version:1}` 后，本地 request-NNNNNN.json 保存完整组装请求（含代码和提示），报告仅保存摘要。checker 通过同版本官方 Session 重放消息、工具历史和参数，fork 保留 seeded 信息。compare-requests 只读比较首个根请求的系统文本、工具定义与 SDK；路径/时间不归一化。边界在 adapter 投影/序列化之前，HTTP wire 和内部 HTTP 次数仍 unknown；报告 PASS 不等于公平性或收益成立。
+
+### 推理模型配置注意
+
+`models[].reasoningEfforts:false` 声明不提供推理档位，不是给服务端发送“关闭思考”。需控制档位时显式声明模型支持的映射并选择 `model.parameters.reasoningEffort`；不能给始终推理的模型盲配 off。GLM-5.3-Flash 的[本轮诊断](../../docs/acceptance/2026-10-26-evaluation-s0-diagnosis.md)验证了以下模型项及参数组合的请求可被所配 ModelScope 接受并返回 usage：
+
+```json
+{
+  "reasoningEfforts": {"low":"low", "high":"high", "max":"max"},
+  "compat": {"thinkingFormat":"openai", "supportsReasoningEffort":true, "maxTokensField":"max_tokens"}
+}
+```
+
+上述片段填入所选 `models[]` 项，另设 `model.parameters.reasoningEffort` 为 `low`。`maxTokensField` 仅允许现有插件提供的 `max_tokens` / `max_completion_tokens` 两个拼写；不开放任意 token 字段。此例不是所有端点的通用配置，也不证明整组编辑正确性或费用为零。首次实测输入约 1.42 万 Token，请在显式执行新一轮前审阅总预算与超时；切换参数须重新冻结。
 
 ## 无凭据验证
 
+新模板及 finalization-config 默认冻结 `editPayloadVersion:2`：不再把任意非 `[` 的 input 归为 apply_patch。只有明确 Begin Patch 首行才归为该请求形状；坏 header/歧义为 unknown，actualMode 仍依赖真实完成回执。历史配置未声明或声明 1 时保留原解释，旧报告不可通过补字段“修正”。要在未来实验使用新版，须在新配置中声明并重新冻结；[离线审计](../../docs/acceptance/2026-10-26-evaluation-payload-prompt-audit.md)不回写真实 S0 结果。
+
 ```powershell
-pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts tests/unit/evaluation-suite-programs.spec.ts tests/unit/delivery-engine-pins.spec.ts tests/unit/evaluation-design-review.spec.ts
+pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts tests/unit/evaluation-suite-programs.spec.ts tests/unit/delivery-engine-pins.spec.ts tests/unit/evaluation-design-review.spec.ts tests/unit/evaluation-request-evidence.spec.ts tests/unit/evaluation-finalization-config.spec.ts tests/unit/evaluation-provider-composition.spec.ts
 # 在独立副本构建，然后获得打包安装；保留输出中的一次性 profile 路径。
 pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
@@ -27,7 +71,7 @@ node scripts/evaluation/lifecycle-smoke.mjs <disposable-profile> .scratch/<runId
 
 同一新安装先运行 smoke.mjs 放入匹配夹具后，可用 `node scripts/evaluation/verdict-smoke.mjs <disposable-profile> .scratch/<runId>/verdict` 验证判读链。它预先冻结九组协议：原三组正常/超限/未知，加上混合 no-op/write 的范围比较、范围外超限/最终错误、空 probe 范围、所选首次未知。每组独立执行并验证 check/judge 退出码；条件或任务失败不会改写为 PASS。所有 usage 来自固定夹具，不证明真实成本。
 
-## 后续真实模型实验（本轮未执行）
+## 后续真实模型实验（完整 S0 已执行但 FAIL，正式组未执行）
 
 ### 复用 13 类候选任务
 
@@ -92,7 +136,7 @@ node scripts/evaluation/run.mjs .scratch/my-probe/frozen.json <disposable-profil
 node scripts/evaluation/review-design.mjs .scratch/my-probe/frozen.json <disposable-profile> .scratch/my-probe/design-review.json
 ```
 
-审查核对当前安装身份、原始 preset 及派生臂哈希，列出实际插件变化、白名单配置、任务家族和首次/全任务分母。只导出摘要及有限 read/edit 设置，不导出整行 persona 或任意配置内容。报告固定保留 GAP：尚无完整实际请求提示/SDK、代表性、独立模型延迟或相对收益证明。退出 0 只表示成功生成审查，身份/配置漂移、防覆盖或参数错误退出 2；它不增加执行审批、不自动修改配置或提供 S2 结论。
+审查核对当前安装身份、原始 preset 及派生臂哈希，列出实际插件变化、白名单配置、任务家族和首次/全任务分母。只导出摘要及有限 read/edit 设置，不导出整行 persona 或任意配置内容。该离线审查入口自身仍保留提示/SDK、代表性、独立模型延迟或相对收益的 GAP；新 requestEvidence/compare-requests 在实际执行后另行核对组装请求，见[本轮验收](../../docs/acceptance/2026-10-26-evaluation-request-evidence.md)，不回写历史审查。退出 0 只表示成功生成审查，身份/配置漂移、防覆盖或参数错误退出 2；它不增加执行审批、不自动修改配置或提供 S2 结论。
 
 候选 consecutive 任务尤其需要预先审查：首个编辑程序可能是任务要求的合规中间状态，不能把其相对最终 expected 的 false 直接当作模型犯错。三臂的插件/工具面不同，也不能把差异仅归因于默认策略。详见[设计审查验收](../../docs/acceptance/2026-10-26-evaluation-design-review.md)。新增脚本会进入 driverInputs，必须重新 prepare，不能沿用旧冻结身份。
 
@@ -147,7 +191,7 @@ node scripts/evaluation/driver.mjs judge .scratch/<runId>/results/protocol.json 
 
 旧 v1=`per-arm-count-and-per-run-tokens-v1` 继续针对每臂全部任务，缺首次值仍 GAP；不得把 v2 范围塞进 v1。v2 解决预先声明指标范围，所选任务自身未知仍 GAP。probe 可明确 include 为空并把最小数量设 0，首次条件返回 NOT_APPLICABLE、比例为 null；其它检查照常。formal 必须选中至少一项，且完整 13 族要求仍在；配置可冻结不代表全族真实模型已验证。
 
-checker 与执行端共用解释函数，提供工件与报告一致性检查，不是独立统计 oracle。wallMs 仍为包含身份复核、准备、快照与 diff 等开销的现场样本耗时；checker 不独立重建该值，也不重装配 promptHash/ptc，不应把这些字段当已独立核验的模型延迟或公平性证明。
+checker 与执行端共用解释函数，提供工件与报告一致性检查，不是独立统计 oracle。wallMs 仍为包含身份复核、准备、快照与 diff 等开销的现场样本耗时；checker 不独立重建该值，也不重装配旧 assembly 字段 promptHash/ptc。新 requestEvidence 独立重放的是实际组装请求，不使旧字段成为已独立核验的模型延迟或公平性证明。
 
 ## 产物和判读
 

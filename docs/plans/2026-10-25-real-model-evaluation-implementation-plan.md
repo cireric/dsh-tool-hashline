@@ -1,6 +1,6 @@
 # 真实模型评测最小实现
 
-> 2026-10-26 当前安排：已按用户决定[收口为按需维护](../acceptance/2026-10-26-project-closeout.md)，默认推广与主动评测扩建暂停。下文保留原方案及各阶段结果；未完成研究项已延期，不再作为本次交付待办，FAIL/GAP/BLOCKED 不变。
+> 2026-10-26 当前安排：用户在[收口](../acceptance/2026-10-26-project-closeout.md)后授权[有界恢复四个核心工作包](../plans/2026-10-26-evaluation-finalization-plan.md)。日常推荐、默认推广暂停与原 FAIL/GAP/BLOCKED 不变；真实模型由用户手动配置，未自动启动付费执行。
 
 本轮开发授权仅覆盖离线开发、测试及隔离交付验证；不包含付费请求、日常 profile 切换或上游升级。复用默认策略 SRS §7、E1–E4 和 S0–S2，结果见同日 real-model-evaluation 验收报告。
 
@@ -34,3 +34,21 @@
 再按[宿主任务集计划](2026-10-26-evaluation-suite-host-plan.md)完成 39 个固定 Provider 样本、连续中间快照与生成器实际调用，[验收](../acceptance/2026-10-26-evaluation-suite-host.md)保留任务 31 PASS / 6 GAP / 2 FAIL，未宣称正式实验通过。一次性安装的 upstream 范围漂移已锁回现有精确锚点并增加同物理引擎检查，未升级上游；真实模型、通用语义检查及可比性审查仍未完成。
 
 后续[离线设计审查](2026-10-26-evaluation-design-review-plan.md)补齐实际逐臂配置差异和冻结分母核验，见[验收](../acceptance/2026-10-26-evaluation-design-review.md)。明确连续任务的合规中间状态与首程序指标混杂，保持原任务和 expected；实际请求提示/SDK、代表性、通用语义及真实模型收益仍未完成，不新增审批门。
+
+## 本轮实施结果（2026-10-26）
+
+[验收与机器摘要](../acceptance/2026-10-26-evaluation-request-evidence.md)记录前两包已实现及无费用验证：组装请求捕获/官方 Session 重放/SDK 比较、可编辑网关配置、固定 S0/S1 设计及指标分母。241 项定向测试通过，九项交付门禁 exit 0；完整固定 Provider 任务结果仍保留 FAIL/GAP。第三、四包的真实 Provider S0 与 S1/S2 尚未执行，需手动填写连接、容量、预算和阈值后显式执行；本轮真实模型请求 0。
+
+### 真实 S0 首轮跟进
+
+用户填写连接并明确批准有限 S0 后，已执行[首轮真实验证](../acceptance/2026-10-26-evaluation-real-s0-modelscope.md)：首请求收到 reasoning，120 秒超时取消；1 CANCELLED / 8 BLOCKED，usage unknown，未自动重试或执行 S1。请求捕获和重放 1/1，但完整 S0 尚未完成。前述无费用验证计数和真实请求 0 仅描述前轮，不覆盖此轮。
+
+后续[超时诊断](../acceptance/2026-10-26-evaluation-s0-diagnosis.md)：补齐显式 low 与输出字段配置，本项目 cap 枚举误拒已修；用户批准的一次真实诊断约 46.2 秒返回工具调用和完整 usage（14,827 Token），没有执行工具或续跑整组。完整 S0 仍 GAP，正式组未执行；后续需复核预算。
+
+### 完整 S0 第二轮结果
+
+经用户批准新预算与阈值，[第二轮](../acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)9 项全部执行，28/28 请求对账及独立重放，总 Token 398,176；3 PASS / 3 GAP / 3 FAIL、最终 6 正确。三个 Hashline 首次输入缺方括号被拒后恢复，另三个样本只输出意图未执行工具；不是超时或预算耗尽。S0 实验执行完成但验收 FAIL；保留取证 GAP，停止于 S0，未启动 S1/S2。
+
+### S0 后续无费用审计
+
+[模式/提示审计](../acceptance/2026-10-26-evaluation-payload-prompt-audit.md)已交付：新增冻结 editPayloadVersion=2，坏 header 不再误标 apply_patch，旧报告继续按原版本复核；真实 SDK/可见结果核对未发现明确格式冲突，三次无工具响应均正常 stop。297 项单元、类型及固定 Provider 18 项宿主验证通过，新增真实模型请求 0。原 S0 FAIL 保留，未启动 S1；不为追求通过自动改提示或付费重跑。

@@ -1,0 +1,391 @@
+{
+  "date": "2026-10-26",
+  "engineeringStatus": "PASS",
+  "realModelStatus": "unchanged FAIL from S0 round 02",
+  "additionalRealModelRequests": 0,
+  "payloadVersion": 2,
+  "unit": {
+    "files": 22,
+    "passed": 297,
+    "failed": 0
+  },
+  "typesExit": 0,
+  "red": {
+    "failed": 3,
+    "passed": 22,
+    "exit": 1
+  },
+  "mutation": {
+    "failed": 3,
+    "passed": 22,
+    "exit": 1,
+    "mutated": "c8ea9a7e453a9a0da1170c3ef6238a8a3a515edfad15e3b88beade0b292d0dda",
+    "restored": "7670c27d7d7667ac4f33ea543af630e050d7f37a648356886bfcc42ca100c683",
+    "original": "7670c27d7d7667ac4f33ea543af630e050d7f37a648356886bfcc42ca100c683",
+    "restoredMatchesOriginal": true
+  },
+  "legacyCheckExit": 0,
+  "smoke": {
+    "status": "PASS",
+    "samples": 18,
+    "accounting": {
+      "status": "PASS",
+      "streamRequests": 45,
+      "capturedRequests": 45,
+      "gaps": []
+    },
+    "requestEvidenceAudit": {
+      "version": 1,
+      "status": "PASS",
+      "boundary": "llm/stream-before-next",
+      "providerWire": "unknown",
+      "requests": 45,
+      "replayed": 45,
+      "gaps": []
+    }
+  },
+  "audit": {
+    "scope": "offline calibration and prompt/visible-tool-result inspection only; not a new experiment",
+    "realModelRequests": 0,
+    "originalBefore": {
+      "protocol": "7c4fac500589c71c0682b819b7638068003fbf97c0caf7082d0c0caa84a5364a",
+      "report": "5aafacf63fd5fb37703076c63f6d0084136cc6ad8747e5840f1f9759dee12a10"
+    },
+    "originalAfter": {
+      "protocol": "7c4fac500589c71c0682b819b7638068003fbf97c0caf7082d0c0caa84a5364a",
+      "report": "5aafacf63fd5fb37703076c63f6d0084136cc6ad8747e5840f1f9759dee12a10"
+    },
+    "originalUnchanged": true,
+    "calibration": [
+      {
+        "taskId": "single",
+        "arm": "hashline-default",
+        "callId": "chatcmpl-tool-b51eeffad2fea645:ptc:1",
+        "before": "apply_patch",
+        "after": "unknown",
+        "selectedMode": "hashline",
+        "actualMode": "unknown",
+        "isError": true
+      },
+      {
+        "taskId": "single",
+        "arm": "hashline-fallback",
+        "callId": "chatcmpl-tool-8d8e4ef6e8ffaac8:ptc:1",
+        "before": "apply_patch",
+        "after": "unknown",
+        "selectedMode": "hashline",
+        "actualMode": "unknown",
+        "isError": true
+      },
+      {
+        "taskId": "multi",
+        "arm": "hashline-default",
+        "callId": "chatcmpl-tool-adf23d973095894a:ptc:1",
+        "before": "apply_patch",
+        "after": "unknown",
+        "selectedMode": "hashline",
+        "actualMode": "unknown",
+        "isError": true
+      }
+    ],
+    "audit": [
+      {
+        "taskId": "single",
+        "arm": "hashline-default",
+        "firstRequestArtifact": "request-000001.json",
+        "firstRequestHasBracketHeaderHint": true,
+        "hintFragment": "Read the file first to get its [path#tag] header",
+        "readCalls": 3,
+        "ptcPrintedSeparatePathTag": true,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 4,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "stop"
+        ],
+        "finalCorrect": true,
+        "visibleTextOnlyWhenNoCalls": null
+      },
+      {
+        "taskId": "single",
+        "arm": "hashline-fallback",
+        "firstRequestArtifact": "request-000006.json",
+        "firstRequestHasBracketHeaderHint": true,
+        "hintFragment": "Read the file first to get its [path#tag] header",
+        "readCalls": 2,
+        "ptcPrintedSeparatePathTag": true,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 4,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "stop"
+        ],
+        "finalCorrect": true,
+        "visibleTextOnlyWhenNoCalls": null
+      },
+      {
+        "taskId": "single",
+        "arm": "stock-edit",
+        "firstRequestArtifact": "request-000011.json",
+        "firstRequestHasBracketHeaderHint": false,
+        "hintFragment": null,
+        "readCalls": 2,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 2,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "tool-calls",
+          "tool-calls",
+          "stop"
+        ],
+        "finalCorrect": true,
+        "visibleTextOnlyWhenNoCalls": null
+      },
+      {
+        "taskId": "repeated",
+        "arm": "hashline-fallback",
+        "firstRequestArtifact": "request-000014.json",
+        "firstRequestHasBracketHeaderHint": true,
+        "hintFragment": "Read the file first to get its [path#tag] header",
+        "readCalls": 0,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 0,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "stop"
+        ],
+        "finalCorrect": false,
+        "visibleTextOnlyWhenNoCalls": [
+          "Intent: fix — change `status` to `active` only within the `[second]` section of records.txt, leaving the identical value in `[first]` untouched (because: the request pins the change to one section); I will read the file and apply a section-scoped edit."
+        ]
+      },
+      {
+        "taskId": "repeated",
+        "arm": "stock-edit",
+        "firstRequestArtifact": "request-000015.json",
+        "firstRequestHasBracketHeaderHint": false,
+        "hintFragment": null,
+        "readCalls": 1,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 2,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "tool-calls",
+          "tool-calls",
+          "stop"
+        ],
+        "finalCorrect": true,
+        "visibleTextOnlyWhenNoCalls": null
+      },
+      {
+        "taskId": "repeated",
+        "arm": "hashline-default",
+        "firstRequestArtifact": "request-000018.json",
+        "firstRequestHasBracketHeaderHint": true,
+        "hintFragment": "Read the file first to get its [path#tag] header",
+        "readCalls": 0,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 0,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "stop"
+        ],
+        "finalCorrect": false,
+        "visibleTextOnlyWhenNoCalls": [
+          "意图：修复 — 在 `[second]` 中将 `status` 修改为 `active`，同时确保 `[first]` 中相同的 `pending` 行保持不变（依据：明确限定的编辑指令）；我将先读取文件，然后进行锚定编辑。"
+        ]
+      },
+      {
+        "taskId": "multi",
+        "arm": "stock-edit",
+        "firstRequestArtifact": "request-000019.json",
+        "firstRequestHasBracketHeaderHint": false,
+        "hintFragment": null,
+        "readCalls": 4,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 3,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "stop"
+        ],
+        "finalCorrect": true,
+        "visibleTextOnlyWhenNoCalls": null
+      },
+      {
+        "taskId": "multi",
+        "arm": "hashline-default",
+        "firstRequestArtifact": "request-000023.json",
+        "firstRequestHasBracketHeaderHint": true,
+        "hintFragment": "Read the file first to get its [path#tag] header",
+        "readCalls": 4,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 4,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "tool-calls",
+          "stop"
+        ],
+        "finalCorrect": true,
+        "visibleTextOnlyWhenNoCalls": null
+      },
+      {
+        "taskId": "multi",
+        "arm": "hashline-fallback",
+        "firstRequestArtifact": "request-000028.json",
+        "firstRequestHasBracketHeaderHint": true,
+        "hintFragment": "Read the file first to get its [path#tag] header",
+        "readCalls": 0,
+        "ptcPrintedSeparatePathTag": false,
+        "ptcPrintedHeaderField": false,
+        "outerToolCalls": 0,
+        "turnOutcome": "completed",
+        "finishKinds": [
+          "stop"
+        ],
+        "finalCorrect": false,
+        "visibleTextOnlyWhenNoCalls": [
+          "意图：修复 —— 在 `a.txt` 和 `b.txt` 中将 `enabled=false` 更改为 `enabled=true`，同时保留所有其他字节（读取自：您对具体文件编辑的请求）；我现在将读取这两个文件并进行针对性编辑。"
+        ]
+      }
+    ]
+  },
+  "source": [
+    {
+      "path": "scripts/evaluation/evidence.mjs",
+      "sha256": "7670c27d7d7667ac4f33ea543af630e050d7f37a648356886bfcc42ca100c683"
+    },
+    {
+      "path": "scripts/evaluation/analysis.mjs",
+      "sha256": "bd854327dfbe8fc5f971ab8e0beca8f8acfdf00c1cadf36bbbc195c59be546a5"
+    },
+    {
+      "path": "scripts/evaluation/protocol.mjs",
+      "sha256": "e10ac55d438ff8ff3c974a708b4e23ddeaca94fe7e99558aee90336896cea203"
+    },
+    {
+      "path": "scripts/evaluation/report.mjs",
+      "sha256": "564c2ae8f8af83a54999c32cc374199fab768a06e19266aa1ebe72f0f28790cb"
+    },
+    {
+      "path": "scripts/evaluation/finalization-config.mjs",
+      "sha256": "80e345b3c5342a59d8732ba88cf595bd9f39fc536f9e0e6bb8103dacc3edde41"
+    },
+    {
+      "path": "scripts/evaluation/experiment.example.json",
+      "sha256": "52e390a824a08967e80e2d9c561efbd989b0721e3c8fc5de8aa9ee884b2cd613"
+    },
+    {
+      "path": "scripts/evaluation/experiment.gateway.example.json",
+      "sha256": "48e5e20d2a57d9fb23d862e2cb91668fbe95e948fe93e399bbb36577c3f6d886"
+    },
+    {
+      "path": "scripts/evaluation/smoke.mjs",
+      "sha256": "20791269206feb8adffca0f2642a69ed13a4ffa2c5e98d8165f1727beee781e5"
+    },
+    {
+      "path": "tests/unit/evaluation-evidence.spec.ts",
+      "sha256": "3fc82a4a9b8833ab0e1f911e4ba37bb3bdd74d3fbd0bfb69b34ad58b403a4d67"
+    },
+    {
+      "path": "tests/unit/evaluation-next-stage.spec.ts",
+      "sha256": "855b5f32adf3186c3d913aef8ffe8941800970efd522c57ff49dce44b01fda1f"
+    },
+    {
+      "path": "tests/unit/evaluation-finalization-config.spec.ts",
+      "sha256": "6c0a5b5bb72344511876007c625510194b2d124548a87f696b17d23048a49f2f"
+    },
+    {
+      "path": "tests/unit/evaluation-verdict.spec.ts",
+      "sha256": "364abe595918cc728ef5c46680b5117d1e519ea1a71ae3a8f7fe401d7766ec4d"
+    }
+  ],
+  "artifacts": [
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/red.log",
+      "sha256": "868ec168e2f885717b6938903e9ae58d073f517ad878113de3b76c8bfd1f9bf4"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/green.log",
+      "sha256": "449c9f396e8996997375107528bdf4c522c14375b662e5b0dad67153f60af744"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/unit.log",
+      "sha256": "38e72ebd1d60e4238c89dfd5672a86d105958a9941e5a7d9531e858088618ed4"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/types.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/legacy-check.log",
+      "sha256": "07cb6d26c1f1651e6ff142e12a4a5280e6c082aacec2ba0df0db5fc1de6cb7ca"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/audit.json",
+      "sha256": "20422e414c7f50f5d8dbd70d6a2034ac3d2aafaf5c13c7c5be03df7de79f7d95"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/mutation.log",
+      "sha256": "4d7d070f5e481982f8784017ddc976ae54a169dbb86a7c3bc6ce49ac65a7a1f6"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/mutation-summary.json",
+      "sha256": "c25c6b8b5e1b47550d1c97ce05cc94277e20b28e9d20e52ea032ef85fd1f6984"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/smoke.log",
+      "sha256": "395c3d16a66fa6c3ff8d097305c55fc810198b2f22740ada5737fe3d89445767"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/smoke/protocol.json",
+      "sha256": "1780835f4446659c4d5bf4ce3d27dca37fa5aa4a5f8631b7044cacb35b65e3ec"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/smoke/report.json",
+      "sha256": "ec43b646b6a16ac88c558e1641353c83d14040b3365b61210d07a09e48a3a8fd"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/unit-final.log",
+      "sha256": "352b28f57305026538ac70799b55720abdeb0cf8474e39e4c8aa8c5ac8ce067d"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/types-final.log",
+      "sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/v2-check.log",
+      "sha256": "07cb6d26c1f1651e6ff142e12a4a5280e6c082aacec2ba0df0db5fc1de6cb7ca"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-payload-audit/legacy-check-final.log",
+      "sha256": "07cb6d26c1f1651e6ff142e12a4a5280e6c082aacec2ba0df0db5fc1de6cb7ca"
+    }
+  ],
+  "limits": [
+    "offline shape correction does not prove rejected edit executed",
+    "PTC value path/tag are separate; rendered read envelope is not model-visible output automatically",
+    "no proven prompt conflict explaining no-tool stop responses; internal model cause remains unknown",
+    "not a new real experiment; no benefit, S0 PASS or S1/S2 claim"
+  ],
+  "v2CheckExit": 0
+}

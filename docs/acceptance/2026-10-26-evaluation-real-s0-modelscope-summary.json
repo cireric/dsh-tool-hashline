@@ -1,0 +1,326 @@
+{
+  "date": "2026-10-26",
+  "status": "GAP",
+  "scope": "user-authorized S0 only; no S1 execution",
+  "model": {
+    "provider": "custom-gateway",
+    "model": "ZhipuAI/GLM-5.3-Flash",
+    "parameters": {
+      "maxTokens": 4096
+    }
+  },
+  "providerPlugin": "@deepseek-ai/dsh-llm-pi-ai",
+  "endpointHost": "api-inference.modelscope.cn",
+  "protocolHash": "fb0f09e78c30de5dc32450a480db312a992b1657796dad2c79d1a6bc2d0bc045",
+  "budgetLimits": {
+    "maxModelRequests": 36,
+    "maxTotalTokens": 120000,
+    "timeoutMs": 120000
+  },
+  "firstCandidateThreshold": 3,
+  "perTaskTokenThreshold": 20000,
+  "preflight": {
+    "status": "PASS",
+    "gaps": []
+  },
+  "scheduled": 9,
+  "streamRequests": 1,
+  "httpRequests": "unknown",
+  "completedModelRequests": 0,
+  "runs": [
+    {
+      "taskId": "single",
+      "arm": "hashline-default",
+      "status": "CANCELLED",
+      "finalCorrect": false
+    },
+    {
+      "taskId": "single",
+      "arm": "hashline-fallback",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "single",
+      "arm": "stock-edit",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "repeated",
+      "arm": "hashline-fallback",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "repeated",
+      "arm": "stock-edit",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "repeated",
+      "arm": "hashline-default",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "multi",
+      "arm": "stock-edit",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "multi",
+      "arm": "hashline-default",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    },
+    {
+      "taskId": "multi",
+      "arm": "hashline-fallback",
+      "status": "BLOCKED",
+      "finalCorrect": "unknown"
+    }
+  ],
+  "requestEvidenceAudit": {
+    "version": 1,
+    "status": "PASS",
+    "boundary": "llm/stream-before-next",
+    "providerWire": "unknown",
+    "requests": 1,
+    "replayed": 1,
+    "gaps": []
+  },
+  "accounting": {
+    "status": "GAP",
+    "streamRequests": 1,
+    "capturedRequests": "unknown",
+    "gaps": [
+      "unknown captured request count: eval-4c6938ee-3078-4ac2-a528-f509d652c2ff",
+      "stream/session request count mismatch: eval-4c6938ee-3078-4ac2-a528-f509d652c2ff"
+    ]
+  },
+  "budget": {
+    "requests": 1,
+    "boundary": "llm/stream",
+    "providerHttpRequests": "unknown",
+    "totalTokens": "unknown",
+    "knownTokens": 0,
+    "unknown": true
+  },
+  "conditions": {
+    "version": 2,
+    "scope": "frozen-absolute-conditions-only",
+    "status": "GAP",
+    "arms": {
+      "stock-edit": {
+        "status": "GAP",
+        "firstCandidateCorrect": {
+          "status": "GAP",
+          "minRequired": 3,
+          "correct": 0,
+          "incorrect": 0,
+          "measured": 0,
+          "unknown": 3,
+          "denominator": 3,
+          "rateOnMeasured": null,
+          "rateBounds": {
+            "lower": 0,
+            "upper": 1
+          },
+          "cohort": {
+            "include": [
+              "single",
+              "repeated",
+              "multi"
+            ],
+            "exclude": [],
+            "excludedSamples": 0
+          }
+        },
+        "totalTokens": {
+          "status": "GAP",
+          "maxAllowed": 20000,
+          "knownSum": 0,
+          "measured": 0,
+          "unknown": 3,
+          "denominator": 3,
+          "violations": []
+        }
+      },
+      "hashline-default": {
+        "status": "GAP",
+        "firstCandidateCorrect": {
+          "status": "GAP",
+          "minRequired": 3,
+          "correct": 0,
+          "incorrect": 0,
+          "measured": 0,
+          "unknown": 3,
+          "denominator": 3,
+          "rateOnMeasured": null,
+          "rateBounds": {
+            "lower": 0,
+            "upper": 1
+          },
+          "cohort": {
+            "include": [
+              "single",
+              "repeated",
+              "multi"
+            ],
+            "exclude": [],
+            "excludedSamples": 0
+          }
+        },
+        "totalTokens": {
+          "status": "GAP",
+          "maxAllowed": 20000,
+          "knownSum": 0,
+          "measured": 0,
+          "unknown": 3,
+          "denominator": 3,
+          "violations": []
+        }
+      },
+      "hashline-fallback": {
+        "status": "GAP",
+        "firstCandidateCorrect": {
+          "status": "GAP",
+          "minRequired": 3,
+          "correct": 0,
+          "incorrect": 0,
+          "measured": 0,
+          "unknown": 3,
+          "denominator": 3,
+          "rateOnMeasured": null,
+          "rateBounds": {
+            "lower": 0,
+            "upper": 1
+          },
+          "cohort": {
+            "include": [
+              "single",
+              "repeated",
+              "multi"
+            ],
+            "exclude": [],
+            "excludedSamples": 0
+          }
+        },
+        "totalTokens": {
+          "status": "GAP",
+          "maxAllowed": 20000,
+          "knownSum": 0,
+          "measured": 0,
+          "unknown": 3,
+          "denominator": 3,
+          "violations": []
+        }
+      }
+    }
+  },
+  "diagnosis": {
+    "evidence": "actual interrupted assistant stream and turn boundary; no additional network/model probe",
+    "turnStart": 1793016282367,
+    "firstStreamEventAt": 1793016290658,
+    "firstStreamAfterMs": 8291,
+    "wallMs": 119992,
+    "interrupted": true,
+    "streamRecordTypes": {
+      "chunk": 1,
+      "reasoning-chunks": 1
+    },
+    "content": [
+      {
+        "type": "reasoning",
+        "characters": 13676
+      }
+    ],
+    "toolCallsObserved": 0,
+    "claims": "Provider emitted reasoning before local timeout. Network-unreachable hypothesis is contradicted for this request; reason for prolonged reasoning and missing final usage remains unproven. Declaring reasoningEfforts=false in catalog does not demonstrate server-side thinking disabled.",
+    "endReason": {
+      "kind": "aborted",
+      "reason": {
+        "kind": "user"
+      }
+    },
+    "turnEndAt": 1793016402359
+  },
+  "comparison": {
+    "status": "GAP",
+    "pairs": 9
+  },
+  "commands": {
+    "checkExit": 0,
+    "judgeExit": 2,
+    "compareExit": 0
+  },
+  "artifacts": [
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/authorization.json",
+      "sha256": "5d2734074a82359d8b8bdeec392e834a9359888bd59c839b452ca7690248a828"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/s0.experiment.json",
+      "sha256": "c7023483cd8b62f066e7c4bbb0e862976733f7af762e4d143553cb41a085d557"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/s0.frozen.json",
+      "sha256": "454f6340116925258d487a1d381984f710802e1a6a5840496a28dc9212d6db08"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/preflight.json",
+      "sha256": "44fb51999ed8695bc44255c37c2a44983d0cf115873dab923701907c4a0a01f5"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/execution-summary.json",
+      "sha256": "e47c07f2657cb4ff1cf0370040653f2adc05642bcce1d0cce2d807301f1d3553"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/diagnosis.json",
+      "sha256": "5b2cf1c4f6beb8c50fc5d092ffd90e5c31d0169c803be9f3d9d83b6b6fbef6f5"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/check.log",
+      "sha256": "07cb6d26c1f1651e6ff142e12a4a5280e6c082aacec2ba0df0db5fc1de6cb7ca"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/judge.json",
+      "sha256": "244d34c2ae163d402a26a6e587370450913fb8251f27e185eee2b8d388969478"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/comparison.json",
+      "sha256": "67ec93b51ce3c787e86586f04c1a9a9e769e5207ca064bf971c222d7ce6416fe"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/results/protocol.json",
+      "sha256": "454f6340116925258d487a1d381984f710802e1a6a5840496a28dc9212d6db08"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/results/report.json",
+      "sha256": "23aae9ae91b531c9031a0d8bd942a678b8508831d9cefece66945f40d9d82ede"
+    },
+    {
+      "path": ".scratch/real-model-evaluation/20261026-s0-modelscope-01/results/request-000001.json",
+      "sha256": "284cb61f5707cdbb4c4599aca8afd1f55e453a5a3fe317d4dc7c084d18e507a6"
+    }
+  ],
+  "remaining": [
+    "S0 tool execution, full usage and completed-request accounting not validated",
+    "other two arms and remaining tasks unexecuted",
+    "server-side reasoning controls and long reasoning cause unverified",
+    "cancelled request billing unknown; no automatic retry",
+    "S1/S2 not executed; no advantage or promotion claim"
+  ],
+  "adapterReasoningEvidence": {
+    "entry": "C:\\Users\\lenovo\\AppData\\Local\\Temp\\delivery-JdeRnL\\dsh-home\\profiles\\acceptance\\node_modules\\@deepseek-ai\\dsh-llm-pi-ai\\lib\\index.js",
+    "sha256": "99b5c20830a52f69641df8a18a39206079b0c725201958cce2c4a934f1d4f7cd",
+    "functions": [
+      "resolveModelReasoning at line 585",
+      "reasoningInfo comment at lines 1791-1802"
+    ],
+    "conclusion": "reasoningEfforts:false declares capability; does not establish a server-side disable instruction"
+  }
+}
