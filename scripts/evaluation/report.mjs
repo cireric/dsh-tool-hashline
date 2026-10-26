@@ -11,6 +11,7 @@ import { unavailableTargets } from './targets.mjs'
 import { sha256 } from './stimuli.mjs'
 import { requestAccounting } from './accounting.mjs'
 import { summarizeCoverage, evaluateConditions, SUPPORTED_CONDITION_SEMANTICS } from './verdict.mjs'
+import { auditRequestEvidence } from './request-evidence.mjs'
 
 export function checkRunReport(protocol, report, directory) {
   const problems = []
@@ -18,6 +19,11 @@ export function checkRunReport(protocol, report, directory) {
   const expected = schedule(protocol)
   if (!Array.isArray(report.runs) || report.runs.length !== expected.length) return [...problems, 'missing scheduled runs; failures must remain in denominator']
   if (report.evaluationVersion !== undefined && report.evaluationVersion !== 1) problems.push('unsupported evaluation version')
+  const requestAudit = auditRequestEvidence(protocol, report, directory)
+  if (protocol.requestEvidence?.version === 1 || report.requestEvidenceVersion !== undefined) {
+    problems.push(...requestAudit.problems)
+    if (protocolHash(report.requestEvidenceAudit ?? null) !== protocolHash(requestAudit.summary)) problems.push('request evidence audit mismatch')
+  }
   if (SUPPORTED_CONDITION_SEMANTICS.includes(protocol.passConditions?.semantics) && report.evaluationVersion !== 1) problems.push('frozen versioned conditions require evaluationVersion 1')
   if (report.evaluationVersion === 1 || report.coverage || report.conditions) {
     if (!report.coverage || protocolHash(report.coverage) !== protocolHash(summarizeCoverage(report.runs, protocol.comparison))) problems.push('coverage recomputation mismatch')
@@ -27,6 +33,7 @@ export function checkRunReport(protocol, report, directory) {
     if (!report.accounting || !report.budget) problems.push('missing request accounting')
     let status = report.runs.some(r => r.status === 'FAIL') ? 'FAIL' : report.runs.every(r => r.status === 'PASS') ? 'PASS' : 'GAP'
     if (status === 'PASS' && requestAccounting(report).status !== 'PASS') status = 'GAP'
+    if (status === 'PASS' && protocol.requestEvidence?.version === 1 && requestAudit.summary.status !== 'PASS') status = 'GAP'
     if (report.status !== status) problems.push('task/evidence status recomputation mismatch')
   }
   if (report.accounting) {
@@ -76,7 +83,7 @@ export function checkRunReport(protocol, report, directory) {
         }
         if (run.status === 'PASS' && (analysis.targetEvaluation.status === 'GAP' || analysis.stimuli.status === 'GAP')) problems.push('unsupported target/stimulus PASS at ' + i)
       } else {
-        trace = traceSummary(events, { receipts, arm: item.arm, complete: run.status !== 'CANCELLED' })
+        trace = traceSummary(events, { receipts, arm: item.arm, complete: run.status !== 'CANCELLED', payloadVersion: protocol.editPayloadVersion ?? 1 })
         Object.assign(trace, candidateSummary(trace, batches, task.batchBoundary))
         if (task.targets?.length || task.stimuli?.length) problems.push('new task contract requires session graph evidence at ' + i)
       }

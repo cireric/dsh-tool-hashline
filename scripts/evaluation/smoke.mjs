@@ -21,7 +21,7 @@ const prior = process.env.EVAL_FIXTURE_KEY
 process.env.EVAL_FIXTURE_KEY = 'offline-fixture-only'
 try {
   const protocol = freezeProtocol({
-    id: 'offline-host-fixture', kind: 'probe', limits: ['Deterministic fixture: zero real model requests; no benefit evidence.'], createdAt: new Date().toISOString(),
+    id: 'offline-host-fixture', kind: 'probe', requestEvidence: { version: 1 }, editPayloadVersion: 2, limits: ['Deterministic fixture: zero real model requests; no benefit evidence.'], createdAt: new Date().toISOString(),
     comparison: ['stock-edit', 'hashline-default', 'hashline-fallback'],
     model: { provider: 'eval-fixture', model: 'fixture', parameters: {} },
     dependencies: captureIdentity(profile, 'evaluation-fixture-provider'), tools: await captureTools(profile, 'evaluation-fixture-provider', 'EVAL_FIXTURE_KEY'),

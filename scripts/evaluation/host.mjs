@@ -12,6 +12,17 @@ import { createStimulusController } from './stimuli.mjs'
 import { installedPatch, requestFiles } from './targets.mjs'
 import { captureParsedPlan } from './apply-patch-targets.mjs'
 
+/** Replace an already mounted provider through loader overlays, never double-register it. */
+export function evaluationProviderPatches(patches, plugin, config) {
+  const rows = patches.flatMap(p => p.insert ?? [])
+  if (rows.some(r => r.id === 'eval-provider')) throw new Error('EVAL_PROVIDER_ROW_COLLISION')
+  const existing = rows.filter(r => r.name === plugin)
+  if (existing.some(r => typeof r.id !== 'string' || !r.id)) throw new Error('EVAL_PROVIDER_COMPOSITION_UNSUPPORTED')
+  return [...new Set(existing.map(r => r.id))].map(id => ({ id, disabled: true })).concat([
+    { insert: [{ id: 'eval-provider', name: plugin, config: structuredClone(config) }] },
+  ])
+}
+
 export async function openHost(profile, directory, protocol) {
   const req = createRequire(path.join(profile, 'package.json'))
   const load = name => import(pathToFileURL(req.resolve(name)).href)
@@ -19,17 +30,19 @@ export async function openHost(profile, directory, protocol) {
   const { createUserMessage } = await load('@deepseek-ai/dsh-llm')
   const loaded = boot.loadProfileDirectory('evaluation', profile, req.resolve('@deepseek-ai/dsh/package.json'))
   const web = boot.loadOverlayPatches('eval-web-topology', req.resolve('@deepseek-ai/dsh-web-app/cordis.patch.yml'))
+  const sourcePatches = [...loaded.layers.flatMap(l => l.patches), ...loaded.patches]
   const overlays = [
     { id: 'headless-startup', disabled: true }, { id: 'headless-runner', disabled: true },
     { id: 'session-title-llm', disabled: true }, { id: 'session-telemetry-otel', disabled: true },
     { insert: web.flatMap(p => p.insert ?? []).filter(p => p.id === 'subagent-model-selection-settings') },
     { insert: [{ id: 'eval-presets', name: '@deepseek-ai/dsh-agent-preset-registry', config: { default: 'ptc-hashline' } }] },
+    ...evaluationProviderPatches(sourcePatches, protocol.tools.providerPlugin, protocol.tools.providerConfig),
   ]
   // The loader resolves manually registered arm rows from the root config's
   // directory. It must be this disposable profile, which owns all host packages.
   const config = path.join(profile, 'evaluation-' + randomUUID() + '.yml')
   fs.writeFileSync(config, '[]\n', { flag: 'wx' })
-  const ctx = await boot.boot('evaluation', config, [...loaded.layers.flatMap(l => l.patches), ...loaded.patches, ...web.filter(p => p.disabled === true), ...overlays], undefined, pathToFileURL(profile + path.sep).href)
+  const ctx = await boot.boot('evaluation', config, [...sourcePatches, ...web.filter(p => p.disabled === true), ...overlays], undefined, pathToFileURL(profile + path.sep).href)
   try {
     const preset = loaded.layers.find(l => l.packageName === 'dsh-tool-hashline')?.patches.flatMap(p => p.insert ?? []).find(r => r.config?.id === 'ptc-hashline')
     if (!preset || protocolHash(preset.config.plugins) !== protocol.tools.presetHash) throw new Error('EVAL_PRESET_DRIFT')
@@ -38,10 +51,8 @@ export async function openHost(profile, directory, protocol) {
       if (protocolHash(rows) !== protocol.tools.arms[arm]) throw new Error('EVAL_ARM_DRIFT: ' + arm)
       await ctx.get('agentPresets').register({ id: 'eval-' + arm, plugins: rows })
     }
-    // Provider credentials are referenced by env NAME in the frozen plugin config.
-    // Never read a daily profile. Provider is mounted only after explicit execution.
-    const provider = await load(protocol.tools.providerPlugin)
-    await ctx.plugin(provider.default ?? provider, protocol.tools.providerConfig)
+    // Provider was mounted once through the official loader with frozen config.
+    // Credentials remain environment references; this host only boots on explicit execution.
     if (!ctx.get('llm').listProviders().some(p => p.id === protocol.model.provider)) throw new Error('EVAL_PROVIDER_UNAVAILABLE')
     const Patch = installedPatch(protocol)
     let activeTree

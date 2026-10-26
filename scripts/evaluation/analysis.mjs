@@ -5,9 +5,10 @@ import { installedPatch, targetSummary, unavailableTargets, targetObservations }
 import { stimulusSummary } from './stimuli.mjs'
 
 export function analyzeEvidence(task, evidence, arm, final, protocol, complete) {
+  const payloadVersion = protocol.editPayloadVersion ?? 1
   const trace = evidence.graph
-    ? treeTraceSummary(evidence.graph, evidence.sources, { arm, complete })
-    : traceSummary(evidence.events ?? [], { receipts: evidence.receipts ?? [], arm, complete })
+    ? treeTraceSummary(evidence.graph, evidence.sources, { arm, complete, payloadVersion })
+    : traceSummary(evidence.events ?? [], { receipts: evidence.receipts ?? [], arm, complete, payloadVersion })
   Object.assign(trace, candidateSummary(trace, evidence.batches ?? [], task.batchBoundary))
   let targets = unavailableTargets(task)
   if (evidence.graph && task.targets?.length) {

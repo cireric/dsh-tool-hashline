@@ -8,15 +8,20 @@ import { decodeArtifact, parseRecords } from '../../presets/ptc-hashline/operati
 const digest = bytes => createHash('sha256').update(bytes).digest('hex')
 const count = value => Number.isSafeInteger(value) && value >= 0
 const errorCode = value => String(value ?? '').match(/\b(?:EDIT_POLICY_[A-Z_]+|FS_[A-Z_]+|[A-Z_]*CANCEL[A-Z_]*)\b/u)?.[0] ?? 'unknown'
-const payload = args => {
+const payload = (args, version) => {
   try { args = typeof args === 'string' ? JSON.parse(args) : args } catch { return 'unknown' }
+  if (version === 2 && [args?.old_string, args?.edits, args?.input].filter(v => v !== undefined).length !== 1) return 'unknown'
   if (args?.old_string !== undefined) return 'replace'
   if (args?.edits !== undefined) return 'patch'
-  if (typeof args?.input === 'string') return /^\s*\[/u.test(args.input) ? 'hashline' : 'apply_patch'
+  if (typeof args?.input === 'string') {
+    if (/^\s*\[/u.test(args.input)) return 'hashline'
+    return version === 1 || /^\s*\*\*\* Begin Patch(?:\r?\n|$)/u.test(args.input) ? 'apply_patch' : 'unknown'
+  }
   return 'unknown'
 }
 
-export function traceSummary(records, { receipts = [], arm, complete = true, seqStart = 0, delegationCovered = false } = {}) {
+export function traceSummary(records, { receipts = [], arm, complete = true, seqStart = 0, delegationCovered = false, payloadVersion = 1 } = {}) {
+  if (![1, 2].includes(payloadVersion)) throw new Error('unsupported edit payload version')
   const gaps = []
   const events = records.filter(r => Number.isSafeInteger(r.seq))
   if (!events.length) gaps.push('no sequenced events')
@@ -39,7 +44,7 @@ export function traceSummary(records, { receipts = [], arm, complete = true, seq
     const call = calls.get(key) ?? { id, layer: inner ? 'inner' : 'outer' }
     if (start) {
       if (call.startSeq !== undefined) gaps.push('duplicate start: ' + key)
-      Object.assign(call, { name: d.name, rootCallId: d.rootCallId ?? id, startSeq: event.seq, requestedMode: d.name === 'edit' ? payload(d.arguments) : undefined })
+      Object.assign(call, { name: d.name, rootCallId: d.rootCallId ?? id, startSeq: event.seq, requestedMode: d.name === 'edit' ? payload(d.arguments, payloadVersion) : undefined })
     } else {
       if (call.endSeq !== undefined) gaps.push('duplicate settle: ' + key)
       if (inner && ((d.name && call.name && d.name !== call.name) || (d.rootCallId && call.rootCallId && d.rootCallId !== call.rootCallId))) gaps.push('mismatched settle identity: ' + key)

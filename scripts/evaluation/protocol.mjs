@@ -95,6 +95,8 @@ export function protocolGaps(protocol) {
   const gaps = []
   if (!isObject(protocol)) return ['the protocol must be an object']
   if (!['probe', 'formal'].includes(protocol.kind)) gaps.push('kind must be probe or formal')
+  if (protocol.editPayloadVersion !== undefined && ![1, 2].includes(protocol.editPayloadVersion)) gaps.push('editPayloadVersion must be 1 or 2')
+  if (protocol.requestEvidence !== undefined && (!isObject(protocol.requestEvidence) || protocol.requestEvidence.version !== 1 || Object.keys(protocol.requestEvidence).some(k => k !== 'version'))) gaps.push('requestEvidence must declare version 1 only')
   if (protocol.kind === 'probe' && (!Array.isArray(protocol.limits) || protocol.limits.length === 0 || protocol.limits.some(x => typeof x !== 'string' || !x.trim()))) gaps.push('probe requires non-empty limits; no promotion claim')
   for (const field of ['model', 'samples', 'budget', 'passConditions', 'dependencies', 'tools']) {
     if (!isObject(protocol[field])) gaps.push(field + ' must be an object')
@@ -112,7 +114,10 @@ export function protocolGaps(protocol) {
     }
     if (!isObject(protocol.tools.arms) || (Array.isArray(protocol.comparison) && protocol.comparison.some(arm => !protocol.tools.arms[arm]))) gaps.push('tools.arms must freeze each comparison configuration hash')
     if (!isObject(protocol.tools.providerConfig)) gaps.push('tools.providerConfig must be an object')
-    const secrets = value => Array.isArray(value) ? value.some(secrets) : isObject(value) && Object.entries(value).some(([key, v]) => ((/key|token|secret|password|authorization/iu.test(key) && !/Env$/u.test(key)) || secrets(v)))
+    const capacity = (key, value) => ['maxTokens', 'defaultMaxTokens'].includes(key) && Number.isSafeInteger(value) && value > 0
+    // The installed pi-ai adapter offers these two wire spellings, not a credential.
+    const capField = (key, value) => key === 'maxTokensField' && ['max_tokens', 'max_completion_tokens'].includes(value)
+    const secrets = value => Array.isArray(value) ? value.some(secrets) : isObject(value) && Object.entries(value).some(([key, v]) => ((/key|token|secret|password|authorization/iu.test(key) && !/Env$/u.test(key) && !capacity(key, v) && !capField(key, v)) || secrets(v)))
     if (secrets(protocol.tools.providerConfig)) gaps.push('literal credentials forbidden; use credential env references')
     if (typeof protocol.tools.credentialEnv !== 'string' || !/^[A-Za-z_][A-Za-z0-9_]*$/u.test(protocol.tools.credentialEnv)) gaps.push('tools.credentialEnv must name an environment variable')
   }

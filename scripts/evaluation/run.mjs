@@ -12,6 +12,7 @@ import { analyzeEvidence } from './analysis.mjs'
 import { unavailableTargets } from './targets.mjs'
 import { requestAccounting } from './accounting.mjs'
 import { summarizeCoverage, evaluateConditions } from './verdict.mjs'
+import { captureRequest, auditRequestEvidence } from './request-evidence.mjs'
 
 export function schedule(protocol) {
   const result = []
@@ -46,6 +47,7 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
   process.env.DSH_HOME = path.join(out, 'dsh-home')
   process.env.DSH_TELEMETRY_DISABLED = '1'
   const report = { evaluationVersion: 1, protocolHash: protocol.protocolHash, kind: protocol.kind, runs: [], requests: [], requestRefusals: [], status: 'GAP', claims: 'Task/evidence status and frozen conditions are separate. Conditions do not establish model benefit or promotion; wallMs is live sample-slot time including evaluator overhead, not independently reconstructed model latency.' }
+  if (protocol.requestEvidence?.version === 1) report.requestEvidenceVersion = 1
   let host, activeRoot
   const budget = { requests: 0, tokens: 0, unknown: false }
   try {
@@ -61,7 +63,12 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
       if (signal?.aborted || budget.unknown || budget.requests >= protocol.budget.maxModelRequests || budget.tokens >= protocol.budget.maxTotalTokens) throw new Error('EVAL_BUDGET_STOP')
       if (options.provider !== protocol.model.provider || options.model !== protocol.model.model || Object.entries(protocol.model.parameters).some(([key, value]) => options[key] !== value)) throw new Error('EVAL_MODEL_DRIFT')
       budget.requests++
-      report.requests.push({ sessionId, provider: options.provider, model: options.model, reasoningEffort: options.reasoningEffort ?? 'unknown', maxTokens: options.maxTokens ?? 'unknown' })
+      const request = { sessionId, provider: options.provider, model: options.model, reasoningEffort: options.reasoningEffort ?? 'unknown', maxTokens: options.maxTokens ?? 'unknown' }
+      report.requests.push(request)
+      if (report.requestEvidenceVersion === 1) {
+        try { request.capture = captureRequest(options, actor, budget.requests, out) }
+        catch { request.capture = { version: 1, status: 'unknown', reason: 'capture-unavailable' }; budget.unknown = true; throw new Error('EVAL_REQUEST_CAPTURE_UNAVAILABLE') }
+      }
       let usage
       try {
         for await (const chunk of next()) {
@@ -113,6 +120,10 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
       report.coverage = summarizeCoverage(report.runs, protocol.comparison)
       report.conditions = evaluateConditions(protocol, report.runs)
       report.accounting = requestAccounting(report)
+      if (report.requestEvidenceVersion === 1) {
+        report.requestEvidenceAudit = auditRequestEvidence(protocol, report, out).summary
+        if (report.status === 'PASS' && report.requestEvidenceAudit.status !== 'PASS') report.status = 'GAP'
+      }
       if (report.status === 'PASS' && report.accounting.status !== 'PASS') report.status = 'GAP'
       report.budget = { requests: budget.requests, boundary: 'llm/stream', providerHttpRequests: 'unknown', totalTokens: budget.unknown ? 'unknown' : budget.tokens, knownTokens: budget.tokens, unknown: budget.unknown }
       process.chdir(originalCwd)

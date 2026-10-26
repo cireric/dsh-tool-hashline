@@ -15,6 +15,8 @@ import { freezeProtocol, protocolGaps, protocolHash } from '../../scripts/evalua
 import { checkRunReport } from '../../scripts/evaluation/report.mjs'
 // @ts-expect-error plain ESM evaluation module
 import { validateCost, summarizeRuns } from '../../scripts/evaluation/counting.mjs'
+// @ts-expect-error plain ESM evaluation module
+import { analyzeEvidence } from '../../scripts/evaluation/analysis.mjs'
 
 const event = (seq: number, type: string, data: object = {}) => ({ seq, type, data })
 const records = () => [
@@ -71,6 +73,29 @@ describe('evaluation protocol and identity', () => {
 })
 
 describe('trajectory and independent final state', () => {
+  it.each([
+    ['account.txt#07A0\nPUT 1:\n+active', 'unknown'],
+    ['unrecognized input', 'unknown'],
+    ['[account.txt#07A0]\nPUT 1:\n+active', 'hashline'],
+    ['*** Begin Patch\n*** Update File: account.txt\n@@\n-old\n+new\n*** End Patch', 'apply_patch'],
+  ])('classifies only explicit v2 payload shapes: %s', (input, wanted) => {
+    const rows = records()
+    rows[2] = event(2, 'tool/ptc-dispatch-start', { subCallId: 'inner', rootCallId: 'outer', name: 'edit', arguments: { input } })
+    const trace = traceSummary(rows, { payloadVersion: 2, receipts: [{ callId: 'inner', mode: 'hashline', result: 'refused' }] })
+    expect(trace.calls[1].requestedMode).toBe(wanted)
+    expect(trace.calls[1].actualMode).toBe('unknown')
+  })
+  it('rejects ambiguous v2 route shapes and preserves the frozen legacy interpretation', () => {
+    const rows = records()
+    rows[2] = event(2, 'tool/ptc-dispatch-start', { subCallId: 'inner', rootCallId: 'outer', name: 'edit', arguments: { input: 'account.txt#07A0', old_string: 'old' } })
+    expect(traceSummary(rows, { payloadVersion: 2 }).calls[1].requestedMode).toBe('unknown')
+    rows[2] = event(2, 'tool/ptc-dispatch-start', { subCallId: 'inner', rootCallId: 'outer', name: 'edit', arguments: { input: 'account.txt#07A0' } })
+    expect(traceSummary(rows).calls[1].requestedMode).toBe('apply_patch')
+    const task = protocol().tasks[0]
+    expect(analyzeEvidence(task, { events: rows }, 'hashline-default', {}, { editPayloadVersion: 2 }, true).trace.calls[1].requestedMode).toBe('unknown')
+    expect(protocolGaps({ ...protocol(), editPayloadVersion: 2 })).toEqual([])
+    expect(protocolGaps({ ...protocol(), editPayloadVersion: 99 }).join()).toContain('editPayloadVersion')
+  })
   it('decodes every concatenated frame (regression for E3 header-only observation)', () => {
     const bytes = Buffer.concat([zstdCompressSync(JSON.stringify({ type: 'session', id: 's' }) + '\n'), zstdCompressSync(records().map(r => JSON.stringify(r)).join('\n') + '\n')])
     const result = decodeTrace(bytes, 's')

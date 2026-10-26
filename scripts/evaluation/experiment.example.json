@@ -1,6 +1,8 @@
 {
   "id": "custom-model-probe",
   "kind": "probe",
+  "editPayloadVersion": 2,
+  "requestEvidence": { "version": 1 },
   "limits": [
     "Single-point starter case only; does not establish model benefit or support promotion."
   ],

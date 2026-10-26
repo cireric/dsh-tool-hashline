@@ -11,6 +11,21 @@ export function experimentProvider(config) {
   if (!provider || typeof provider !== 'object' || Array.isArray(provider)) throw new Error('provider must declare plugin, credentialEnv and config')
   for (const field of ['plugin', 'credentialEnv']) if (typeof provider[field] !== 'string' || !provider[field].trim()) throw new Error('provider.' + field + ' must be non-empty')
   if (!provider.config || typeof provider.config !== 'object' || Array.isArray(provider.config)) throw new Error('provider.config must be an object')
+  if (provider.plugin === '@deepseek-ai/dsh-llm-pi-ai') {
+    const route = provider.config.providers?.[config.model?.provider]
+    if (!route || typeof route !== 'object' || Array.isArray(route)) throw new Error('provider.config.providers must contain model.provider route')
+    if (route.apiKeyEnv !== undefined && route.apiKeyEnv !== provider.credentialEnv) throw new Error('selected route apiKeyEnv must equal provider.credentialEnv')
+    if (Object.hasOwn(route, 'baseURL')) {
+      let endpoint
+      try { if (typeof route.baseURL !== 'string' || !route.baseURL.trim()) throw new Error(); endpoint = new URL(route.baseURL) } catch { throw new Error('selected provider baseURL must be an absolute HTTP(S) URL') }
+      if (!['http:', 'https:'].includes(endpoint.protocol) || endpoint.username || endpoint.password || endpoint.hash || [...endpoint.searchParams.keys()].some(k => /key|token|secret|password|authorization/iu.test(k))) throw new Error('selected provider baseURL must use HTTP(S) without embedded credentials or fragment')
+    }
+    if (route.models !== undefined) {
+      if (!Array.isArray(route.models) || !route.models.length || route.models.some(m => typeof m?.id !== 'string' || !m.id.trim()) || new Set(route.models.map(m => m.id)).size !== route.models.length) throw new Error('selected provider models must have distinct non-empty ids')
+      if (typeof config.model?.model === 'string' && !route.models.some(m => m.id === config.model.model)) throw new Error('model.model must match a selected provider models[].id')
+      for (const model of route.models) for (const key of ['contextWindow', 'maxTokens']) if (Object.hasOwn(model, key) && (!Number.isSafeInteger(model[key]) || model[key] < 1)) throw new Error('selected provider model.' + key + ' must be positive')
+    }
+  }
   return provider
 }
 

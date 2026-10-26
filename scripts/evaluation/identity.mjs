@@ -29,7 +29,7 @@ export function captureIdentity(profile, providerPlugin) {
   const req = createRequire(join(resolve(profile), 'package.json'))
   const names = ['@deepseek-ai/dsh', '@deepseek-ai/dsh-app-boot', '@deepseek-ai/dsh-agent-loop', '@deepseek-ai/dsh-agent-loop-testkit', '@deepseek-ai/dsh-agent-preset-registry', '@deepseek-ai/dsh-tools', '@deepseek-ai/dsh-llm', '@deepseek-ai/dsh-ptc-runtime', '@deepseek-ai/dsh-tool-fs', '@dsh-tool-hashline/tool-read', '@dsh-tool-hashline/tool-edit', '@hy-sde-org/dsh-tool-edit', '@hy-sde-org/dsh-hashline']
   if (providerPlugin) names.push(providerPlugin)
-  const critical = new Set(names)
+  const critical = new Set([...names, '@deepseek-ai/dsh-session'])
   const modules = join(profile, 'node_modules')
   for (const item of readdirSync(modules)) {
     if (item.startsWith('.')) continue

@@ -53,6 +53,19 @@ const task = () => ({ initial: { 'a.txt': 'x', 'b.txt': 'x' }, expected: { 'a.tx
 ] })
 
 describe('session tree identity and costs', () => {
+  it('passes frozen payload semantics through child sessions without claiming rejected execution', () => {
+    const { sources, graph } = fixture()
+    sources[1].events[3] = { ...sources[1].events[3], data: { subCallId: 'edit', rootCallId: 'same', name: 'edit', arguments: { input: 'a.txt#ABCD\nPUT 1:\n+y' } } }
+    sources[1].events[4] = { ...sources[1].events[4], data: { subCallId: 'edit', rootCallId: 'same', name: 'edit', isError: true } }
+    sources[1].receipts = [{ callId: 'edit', mode: 'hashline', result: 'refused' }]
+    const taskWithoutTargets = { initial: {}, expected: {} }
+    const v2 = analyzeEvidence(taskWithoutTargets, { sources, graph }, 'hashline-default', {}, { editPayloadVersion: 2 }, true)
+    const edit = v2.trace.calls.find((c: { name: string }) => c.name === 'edit')
+    expect(edit.requestedMode).toBe('unknown')
+    expect(edit.selectedMode).toBe('hashline')
+    expect(edit.actualMode).toBe('unknown')
+    expect(treeTraceSummary(graph, sources).calls.find((c: { name: string }) => c.name === 'edit').requestedMode).toBe('apply_patch')
+  })
   it('joins child activation cleanup before admitting the final parent idle boundary', async () => {
     const listeners = new Map<string, (...args: unknown[]) => void>()
     let joined = false, parentWaits = 0, noticeConsumed = false

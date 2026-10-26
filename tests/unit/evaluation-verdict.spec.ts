@@ -85,6 +85,9 @@ describe('coverage and frozen absolute conditions', () => {
 
 function independentReport(directory: string) {
   const { provider, ...template } = JSON.parse(readFileSync(new URL('../../scripts/evaluation/experiment.example.json', import.meta.url), 'utf8'))
+  // This historical fixture contains no request payloads; keep its original contract.
+  delete template.requestEvidence
+  delete template.editPayloadVersion
   const t = { id: 'a', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x' }, expected: { 'a.txt': 'y' }, prompt: 'change x to y' }
   const body = { ...template, createdAt: '2026-10-26', tasks: [t], comparison: arms, samples: { repetitions: 1, seed: 2 }, model: { provider: 'fixture', model: 'fixture', parameters: {} }, budget: { maxModelRequests: 10, maxTotalTokens: 100, timeoutMs: 1000 }, passConditions: { semantics: CONDITION_SEMANTICS, minFirstCandidateCorrect: 1, maxTotalTokensPerTask: 2 }, tools: { arms: Object.fromEntries(arms.map(a => [a, 'fixture'])), presetHash: 'fixture', providerPlugin: provider.plugin, providerConfig: {}, credentialEnv: provider.credentialEnv }, dependencies: { packages: {}, patches: {}, resources: {}, inputs: {}, profileInputs: {}, driverInputs: {}, environment: {}, readEngine: 'fixture', editEngine: 'fixture' } }
   const p = freezeProtocol(body)
