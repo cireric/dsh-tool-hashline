@@ -11,7 +11,7 @@ pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
 ```
 
-smoke 只向 `dsh-profile-acceptance` 安装本仓库的固定适配器夹具；不请求网络。它真实装配三臂宿主，检查最终字节、PTC 配对、usage、回执和报告重算，结果只证明执行驱动。
+smoke 只向 `dsh-profile-acceptance` 安装本仓库的固定适配器夹具；不请求网络。它真实装配三臂宿主，执行单点、多文件、真实委派、读后外部漂移四类任务，共 12 个案例，检查 usage、回执、候选/最终快照和报告重算。`fixture:*` 提示仅供脚本夹具路由，不是正式模型任务。夹具已存在但版本不同会拒绝，需用新的隔离交付安装，不热改旧安装。
 
 ## 后续真实模型实验（本轮未执行）
 
@@ -23,6 +23,7 @@ smoke 只向 `dsh-profile-acceptance` 安装本仓库的固定适配器夹具；
 - `model.model` 填真实模型 ID；只支持当前宿主契约中的 `maxTokens`、可选 `reasoningEffort`。不要添加 temperature 等尚不支持的参数。
 - `provider.config` 仅保存配置和凭据环境变量名；API key 的值放在进程环境中。官方插件的 `apiKeyEnv` 应与 `provider.credentialEnv` 相同。
 - 模型、总预算和通过条件刻意留为 null；必须自行填写才允许冻结。模板的 4096 单请求输出上限、120 秒超时和单次重复只是可编辑起点，不是已批准的真实实验安排。
+- `tasks[].targets` 可显式冻结文件＋目标＋适用性；当前每个文件只允许一个目标，覆盖该任务全部预期文件变更。旧配置不含 targets 仍可执行，采用率保留 unknown；不会自动改写你的本地配置。
 
 ```powershell
 New-Item -ItemType Directory -Force .scratch/my-probe | Out-Null
@@ -63,10 +64,17 @@ pnpm eval:check .scratch/<runId>/results/protocol.json .scratch/<runId>/results/
 - protocol.json / report.json：冻结身份、完整调度分母、逐样本状态、分臂统计及 unknown。
 - `<session>.initial.json`：执行前真实初始文件摘要；每组相同 initial，seed 旋转臂顺序，独立 cwd/Session。
 - `<session>.jsonl` / `.receipts.json`：本地原始事件、最小策略回执；不可直接发布，可能包含提示、正文和工具参数。
+- `<session>.graph.json` 和 `<session>-child-N.jsonl` / `.receipts.json`：根/后代元数据和捕获顺序、子会话原始事件。只有 parentSession 和父 subagent/catalog 一致且全部目录子会话均被捕获，才汇总整树费用；fork 继承前缀不重复计数。标识按 sessionId＋callId 隔离。
+- 请求日志带 Session 归属，并用 accounting 将实际 llm/stream 数与会话记录逐项对账；等待官方 waitForChildren 的完成通知后再检查父代理空闲。捕获外请求会在派发前拒绝，缺项/超项或归属不明为 GAP，即使文件结果正确也不认作完整计量。
+- `<session>.stimuli.json` / `.stimuli/`：冻结外部写入的触发引用及前后原始字节；原始字节只留本地。未触发、条件失配或副作用不明为 GAP。
 - `<session>/`：实际最终树；`.verification/expected/`：独立预期树；`actual.diff`：git no-index diff，摘要在报告中。
 - `eval:check` 重新读取初始快照、事件、回执和最终文件，重算结果；`accepted` 仅表示证据一致，BLOCKED 报告也可完整，不能读成模型通过。
 
-三臂定义见协议。`first-edit-program` 按首段含 edit 的 run_code 冻结候选边界，保存完整 checkpoint；同程序的多次 edit 属于同一候选，后续含 edit 的程序才计候选重试。`task-end` 的首批正确与重试仍为 unknown。逐文件目标映射、外部漂移的冻结注入及子会话完整导出仍有 GAP。因此 `formal` 可以做完整性冻结，现有 runner **不足以完成 S1 / S2**。
+三臂定义见协议。`first-edit-program` 在编辑程序结束或内层 edit 失败当刻保存 checkpoint；正常的多次 edit 可以成批，但失败后即开始新候选，不能把同程序内 catch 后修复并入首次正确。重叠程序、快照失败或缺失失败边界时 unknown / GAP；`task-end` 的首批正确与重试仍 unknown。
+
+可选外部刺激放在任务中，例如 `"stimuli": [{"id":"race","path":"account.txt","afterRead":1,"before":"status=pending\n","after":"status=external\n"}]`。它在匹配文件第 N 次成功 read 返回程序前执行，before 必须与当刻磁盘字节一致，after 是独立冻结的竞争者内容；按整棵会话树计读取次数。示例需替换为实际任务的完整文件内容，不能直接套用到含 owner 行的模板。它是受控测试写入，不是模型工具调用，也不证明自然发生的竞争或模型恢复纪律。
+
+逐目标目前支持明确 replace/patch 路径、Hashline 公共引擎解析的各节及 MV 两端。apply_patch 等无法可靠归属的载荷、无法归属的磁盘变更、同文件多目标、外部进程代理等保持 GAP；读后成功/失败读取是观察分类，不自动等同语义返工或模型核验。真实 provider、其它刺激控制器、跨平台和 S2 尚未完成，因此现有 runner **不足以完成 S1 / S2**。
 
 ## 历史日志复核
 

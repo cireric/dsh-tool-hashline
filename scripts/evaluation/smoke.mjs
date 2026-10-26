@@ -13,7 +13,9 @@ if (!profileArg || !outArg) throw new Error('usage: smoke.mjs <disposable-profil
 const profile = path.resolve(profileArg), out = path.resolve(outArg)
 if (JSON.parse(fs.readFileSync(path.join(profile, 'package.json'), 'utf8')).name !== 'dsh-profile-acceptance') throw new Error('disposable acceptance profile required')
 const fixture = path.join(profile, 'node_modules/evaluation-fixture-provider')
-if (!fs.existsSync(fixture)) fs.cpSync(fileURLToPath(new URL('../../tests/fixtures/evaluation-provider', import.meta.url)), fixture, { recursive: true, errorOnExist: true, force: false })
+const fixtureSource = fileURLToPath(new URL('../../tests/fixtures/evaluation-provider', import.meta.url))
+if (!fs.existsSync(fixture)) fs.cpSync(fixtureSource, fixture, { recursive: true, errorOnExist: true, force: false })
+else if (fs.readFileSync(path.join(fixture, 'index.mjs'), 'utf8') !== fs.readFileSync(path.join(fixtureSource, 'index.mjs'), 'utf8')) throw new Error('fixture version differs; use a fresh disposable delivery profile')
 const prior = process.env.EVAL_FIXTURE_KEY
 process.env.EVAL_FIXTURE_KEY = 'offline-fixture-only'
 try {
@@ -22,9 +24,14 @@ try {
     comparison: ['stock-edit', 'hashline-default', 'hashline-fallback'],
     model: { provider: 'eval-fixture', model: 'fixture', parameters: {} },
     dependencies: captureIdentity(profile, 'evaluation-fixture-provider'), tools: await captureTools(profile, 'evaluation-fixture-provider', 'EVAL_FIXTURE_KEY'),
-    samples: { repetitions: 1, seed: 7 }, order: 'interleaved', budget: { maxModelRequests: 20, maxTotalTokens: 100, timeoutMs: 20000 },
+    samples: { repetitions: 1, seed: 7 }, order: 'interleaved', budget: { maxModelRequests: 60, maxTotalTokens: 200, timeoutMs: 20000 },
     passConditions: { minFirstCandidateCorrect: 1, maxTotalTokensPerTask: 100 },
-    tasks: [{ id: 'single', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'Change x to y in a.txt.' }],
+    tasks: [
+      { id: 'single', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'Change x to y in a.txt.' },
+      { id: 'multi', family: 'multi-site', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n', 'b.txt': 'x\n' }, expected: { 'a.txt': 'y\n', 'b.txt': 'z\n' }, prompt: 'fixture:multi' },
+      { id: 'child', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'fixture:delegate' },
+      { id: 'drift', family: 'external-change', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'fixture:drift', stimuli: [{ id: 'competitor', path: 'a.txt', afterRead: 1, before: 'x\n', after: 'competitor\n' }] },
+    ].map(task => ({ ...task, targets: Object.keys(task.expected).map(file => ({ id: file, path: file, goal: 'reach the independent expected bytes', class: 'known-applicable' })) })),
   })
   const report = await runEvaluation(protocol, { profile, out, execute: true })
   if (!report.runs) throw new Error('fixture preflight blocked: ' + report.gaps.join('; '))

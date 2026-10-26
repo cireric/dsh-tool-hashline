@@ -7,6 +7,9 @@ import { randomUUID } from 'node:crypto'
 import { armRows } from './identity.mjs'
 import { protocolHash } from './protocol.mjs'
 import { treeState, verifyTree } from './evidence.mjs'
+import { collectSessions, writeSessionEvidence } from './session-tree.mjs'
+import { createStimulusController } from './stimuli.mjs'
+import { installedPatch, requestFiles } from './targets.mjs'
 
 export async function openHost(profile, directory, protocol) {
   const req = createRequire(path.join(profile, 'package.json'))
@@ -39,54 +42,78 @@ export async function openHost(profile, directory, protocol) {
     const provider = await load(protocol.tools.providerPlugin)
     await ctx.plugin(provider.default ?? provider, protocol.tools.providerConfig)
     if (!ctx.get('llm').listProviders().some(p => p.id === protocol.model.provider)) throw new Error('EVAL_PROVIDER_UNAVAILABLE')
+    const Patch = installedPatch(protocol)
+    let activeTree
     return {
       ctx, createUserMessage,
+      ownsSession(sessionId) { return activeTree?.sessions.has(sessionId) === true },
       async execute(id, arm, cwd, task, signal) {
-        const agent = await ctx.get('agentLoop').create(id, { provider: protocol.model.provider, model: protocol.model.model, ...protocol.model.parameters }, { cwd })
-        await ctx.get('agentPresets').select(agent, 'eval-' + arm)
-        const receipts = []
-        const editedRoots = new Set(), batches = []
-        const offResults = ctx.on('tools/result', (exec) => {
-          if (exec.agent?.id !== id || task.batchBoundary !== 'first-edit-program') return
-          if (exec.name === 'edit') editedRoots.add(exec.rootCallId ?? exec.callId)
-          if (exec.name !== 'run_code' || !editedRoots.has(exec.callId)) return
-          const batch = { callId: exec.callId, attempt: batches.length, ...(batches.length ? { retryOf: batches.at(-1).callId } : {}) }
+        const collector = collectSessions(ctx, id, signal)
+        activeTree = collector
+        const stimuli = createStimulusController(task, cwd, path.join(directory, id + '.stimuli'))
+        const editedRoots = new Map(), batches = []
+        const checkpoint = (source, rootCallId, boundary, boundaryCallId) => {
+          const batch = { id: source.id + ':' + rootCallId + ':' + batches.length, sessionId: source.id, callId: rootCallId, boundary, boundaryCallId, attempt: batches.length, ...(batches.length ? { retryOf: batches.at(-1).id } : {}) }
           try {
-            const snapshot = treeState(cwd), checkpoint = path.join(directory, id + '.checkpoint-' + batches.length)
-            fs.mkdirSync(checkpoint)
+            const snapshot = treeState(cwd), checkpointDirectory = path.join(directory, id + '.checkpoint-' + batches.length)
+            fs.mkdirSync(checkpointDirectory)
             for (const [name, bytes] of Object.entries(snapshot)) {
-              const file = path.join(checkpoint, name)
+              const file = path.join(checkpointDirectory, name)
               fs.mkdirSync(path.dirname(file), { recursive: true })
               fs.writeFileSync(file, bytes)
             }
             batch.final = verifyTree(task.initial, task.expected, snapshot)
-          } catch {
-            batch.final = { correct: 'unknown' } // observation failure must not change tool execution
-          }
+          } catch { batch.final = { correct: 'unknown' } }
           batches.push(batch)
+        }
+        const offResults = ctx.on('tools/result', (exec, result) => {
+          const source = collector.sessions.get(exec.agent?.id)
+          if (!source) return
+          if (exec.name === 'read' && result.isError === false) {
+            const toolCwd = ctx.get('workingDirectory').get(exec.agent.session)
+            const files = requestFiles('read', exec.arguments, toolCwd, cwd, Patch)
+            if (files !== 'unknown') for (const file of files) stimuli.read(file, { sessionId: source.id, callId: exec.callId })
+          }
+          if (task.batchBoundary !== 'first-edit-program') return
+          if (exec.name === 'edit') {
+            const rootCallId = exec.rootCallId ?? exec.callId, key = source.id + ':' + rootCallId
+            editedRoots.set(key, (editedRoots.get(key) ?? 0) + 1)
+            if (result.isError === true) {
+              checkpoint(source, rootCallId, 'edit-failure', exec.callId)
+              editedRoots.set(key, 0)
+            }
+          }
+          if (exec.name !== 'run_code') return
+          const key = source.id + ':' + exec.callId
+          if (editedRoots.get(key)) checkpoint(source, exec.callId, 'program-end', exec.callId)
+          editedRoots.delete(key)
         }, { global: true })
         const off = ctx.on('tool-edit/policy-receipt', r => {
-          if (r.exec?.agent?.id === id) receipts.push({ callId: r.exec.callId, mode: r.mode, result: r.result, code: r.code, retry: r.retry, declaredFallbacks: r.decision?.fallbacks?.map(f => ['snapshot-limit', 'window-limit', 'user-override'].includes(f.reason) ? f.reason : 'unknown') ?? [] })
+          collector.sessions.get(r.exec?.agent?.id)?.receipts.push({ callId: r.exec.callId, mode: r.mode, result: r.result, code: r.code, retry: r.retry, declaredFallbacks: r.decision?.fallbacks?.map(f => ['snapshot-limit', 'window-limit', 'user-override'].includes(f.reason) ? f.reason : 'unknown') ?? [] })
         }, { global: true })
-        const cancel = () => agent.cancel({ kind: 'user' })
+        const cancel = () => collector.cancel()
         signal.addEventListener('abort', cancel, { once: true })
-        let assembly
         try {
           signal.throwIfAborted()
-          assembly = await ctx.get('systemPrompt').assemble({ scope: agent, agent })
+          const agent = await ctx.get('agentLoop').create(id, { provider: protocol.model.provider, model: protocol.model.model, ...protocol.model.parameters }, { cwd })
+          collector.watch(agent.session)
+          collector.agents.set(id, agent)
+          signal.throwIfAborted()
+          await ctx.get('agentPresets').select(agent, 'eval-' + arm)
+          const assembly = await ctx.get('systemPrompt').assemble({ scope: agent, agent })
           agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: task.prompt }] }))
-          await agent.whenIdle()
+          await collector.idle()
           await ctx.get('sessions').flush(agent.session)
-          const events = agent.session.snapshotEvents()
-          // Restricted raw evidence is local only; reports export digests/counts.
-          fs.writeFileSync(path.join(directory, id + '.jsonl'), events.map(e => JSON.stringify(e)).join('\n') + '\n', { flag: 'wx' })
-          fs.writeFileSync(path.join(directory, id + '.receipts.json'), JSON.stringify(receipts), { flag: 'wx' })
-          fs.writeFileSync(path.join(directory, id + '.batches.json'), JSON.stringify(batches), { flag: 'wx' })
-          return { events, receipts, batches, promptHash: protocolHash(assembly.sections), ptc: { isolation: ctx.get('ptcRuntime')?.isolation ?? 'unknown', language: ctx.get('ptcRuntime')?.language ?? 'unknown' } }
+          const evidence = writeSessionEvidence(directory, collector, id, batches)
+          fs.writeFileSync(path.join(directory, id + '.stimuli.json'), JSON.stringify(stimuli.records), { flag: 'wx' })
+          return { ...evidence, batches, stimuli: stimuli.records, promptHash: protocolHash(assembly.sections), ptc: { isolation: ctx.get('ptcRuntime')?.isolation ?? 'unknown', language: ctx.get('ptcRuntime')?.language ?? 'unknown' } }
         } finally {
           signal.removeEventListener('abort', cancel)
           off()
           offResults()
+          collector.dispose()
+          collector.cancel()
+          activeTree = undefined
         }
       },
       dispose: () => ctx.fiber.dispose(),

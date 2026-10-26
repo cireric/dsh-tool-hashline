@@ -35,6 +35,9 @@
       "id": "status-update",
       "family": "single-point",
       "class": "known-applicable",
+      "targets": [
+        { "id": "account-status", "path": "account.txt", "goal": "Change only status from pending to active", "class": "known-applicable" }
+      ],
       "batchBoundary": "first-edit-program",
       "initial": { "account.txt": "status=pending\nowner=example\n" },
       "expected": { "account.txt": "status=active\nowner=example\n" },

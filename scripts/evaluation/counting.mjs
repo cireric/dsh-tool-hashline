@@ -159,7 +159,7 @@ export function summarizeRuns(runs, arms) {
       partialTasks: group.filter(r => r.partialTask).length,
       firstCandidateCorrect: group.every(r => typeof r.trace?.firstCandidateCorrect === 'boolean') ? group.filter(r => r.trace.firstCandidateCorrect).length : 'unknown',
       candidateRetries: group.every(r => Number.isSafeInteger(r.trace?.retries)) ? group.reduce((n, r) => n + r.trace.retries, 0) : 'unknown',
-      perTargetAdoption: 'unknown',
+      perTargetAdoption: group.length && group.every(r => Array.isArray(r.targetEvaluation?.targets) && r.targetEvaluation.status !== 'not-declared') ? adoption(group.flatMap(r => r.targetEvaluation.targets)) : 'unknown',
       costs: Object.fromEntries(COST_FIELDS.map(f => [f, sum(f)])),
     }]
   }))

@@ -1,6 +1,6 @@
 # 默认编辑策略：推广评测方案
 
-2026-10-25，r3。依据[默认策略 SRS §7](../specs/2026-10-24-hashline-default-editing.md)与[协议补充](../specs/2026-10-25-real-model-evaluation-protocol.md)。本轮实现与验收见[实施计划](2026-10-25-real-model-evaluation-implementation-plan.md)、[报告](../acceptance/2026-10-25-real-model-evaluation.md)。尚无正式冻结的真实模型对照，不授权付费执行、目标切换、重启或发布。
+2026-10-26，r4（保留原建档路径）。依据[默认策略 SRS §7](../specs/2026-10-24-hashline-default-editing.md)与[协议补充](../specs/2026-10-25-real-model-evaluation-protocol.md)。基础实现见[实施计划](2026-10-25-real-model-evaluation-implementation-plan.md)、[前轮报告](../acceptance/2026-10-25-real-model-evaluation.md)；逐目标/会话树/刺激的本轮边界见[阶段验收](../acceptance/2026-10-26-evaluation-next-stage.md)。尚无正式冻结的真实模型对照，不授权付费执行、目标切换、重启或发布。
 
 ## 1. S0 → S1 → S2
 
@@ -23,7 +23,7 @@ S0 与 S1 使用不同协议，不能根据正式结果事后修改模型、预�
 | 任务与 expected | 相对路径→内容；预期独立编写，整树字节校验、独立初始摘要、候选快照与最终 diff；额外文件判错 |
 | 样本与执行顺序 | 独立 cwd/Session；按 seed 旋转臂顺序、重复数和任务清单完整留证 |
 | 成本与预算 | 使用可用 usage（总输入包含缓存），缺失 unknown 并停止后续请求；请求上限在 llm/stream 边界，provider 内部 HTTP 重试 unknown；token 上限是观测停止阈值 |
-| 批次 | first-edit-program：第一段包含 edit 的 run_code 为首批，允许同程序多次 replace；后续含 edit 程序为重试，保留独立 checkpoint。task-end 兼容模式的首次正确/重试 unknown |
+| 批次 | first-edit-program：正常操作可成批，编辑程序结束或内层 edit 失败立即存 checkpoint；失败后的继续编辑是新候选，同程序 catch 修复也不并入首批。task-end 兼容模式的首次正确/重试 unknown |
 | 检查 | eval:check 从冻结输入、原始事件、回执、初始/候选快照和最终文件重新计算；accepted 不等于推广通过 |
 
 协议形状与[执行命令](../../scripts/evaluation/README.md)各维护一处。具体真实模型、次数、预算、费用上限和阈值由维护者在实验前给出；固定夹具的数值不能沿用为获批真实实验参数。
@@ -32,7 +32,7 @@ S0 与 S1 使用不同协议，不能根据正式结果事后修改模型、预�
 
 formal 覆盖 single-point / repeated-fragment / multi-site / consecutive-edits / external-change / unrelated-long-line / target-long-line / restricted-degradation / large-rewrite / already-satisfied / creation / user-override / special-tool。例外和冲突场景按其独立 expected 判断，拒绝不等同于错误写入。
 
-SRS §7.2 原计数规则继续有效：四类适用性互斥，已知适用分母不删除非 Hashline 或失败目标；首选和全程模式分开；首批正确、最终正确、工具接受、实际变更分开；正常首读不算返工；一个 PTC 程序不按内层 edit 数重复计模型往返；未测字段 unknown。当前 run summary 是任务级结果；没有逐“文件＋修改目标”的映射时采用率保持 unknown，不能拿任务 class 冒充逐目标分母。
+SRS §7.2 原计数规则继续有效：四类适用性互斥，已知适用分母不删除非 Hashline 或失败目标；首选和全程模式分开；首批正确、最终正确、工具接受、实际变更分开；正常首读不算返工；一个 PTC 程序不按内层 edit 数重复计模型往返；未测字段 unknown。run summary 现在可汇总显式 targets 的逐目标采用分母，未尝试/失败/取消/unknown 留在其中；未声明或无法归属时 unknown，不能拿任务 class 冒充逐目标分母。
 
 ## 4. 剩余正式执行 GAP
 
@@ -40,9 +40,9 @@ SRS §7.2 原计数规则继续有效：四类适用性互斥，已知适用分�
 |---|---|
 | 真实 provider / 凭据 / 明确预算 | 本轮隔离安装可解析官方 provider 包，但未配置真实凭据和执行路由；固定适配器零真实请求。以后只在独立安装提供固定 provider 和凭据引用，另获执行批准 |
 | 真实模型进程内验证 | 三臂固定适配器已验证装配；provider 实际请求、usage 及取消收费边界尚无本轮真实证据 |
-| 逐目标采用与恢复分类 | 已有 payload、选定模式、成功模式、拒绝码、调用/候选重试、任务部分落盘；跨文件目标映射和按需补读/返工分类待补，不能自动给正式采用率 |
-| 漂移/专用工具等控制端注入 | 协议能冻结任务族，但 runner 不会自动实施外部变更或专用工具夹具，需独立预置控制器并冻结注入时点/内容 |
-| 子会话归并 | 根 Session 可独立配对；发现委派记 GAP，子轨迹尚未自动并入每任务报告。预算仍覆盖隔离宿主所有 llm/stream 请求 |
+| 逐目标采用与恢复分类 | 已支持每文件一个冻结目标的映射、完整分母、失败后读取与恢复事实；同文件多目标和不可靠 apply_patch/专用工具路径保持 unknown / GAP，语义返工不能仅凭读取顺序推断 |
+| 漂移/专用工具等控制端注入 | 已支持冻结的成功 read 次数→字节前态条件→外部写入，并验证真实宿主三臂失败/恢复；其它时点、权限拒绝、专用工具等控制器仍需补齐 |
+| 子会话归并 | 已归并同进程本地后代 Session，核对目录来源及完整捕获，fork 继承前缀去重有单元证明；外部进程代理、实际 fork 端到端及真实 provider 取消计费仍无本轮证明 |
 | 平台与纯策略消融 | 本轮 Windows；macOS/Linux 未执行。三臂不等同原 auto vs policy 的单变量实验，若要纯策略因果结论须另冻配置 |
 | 推广判定 | 无自动 S2 判定；即使 formal 能冻结，缺指标或可比性不足仍只能证据不足 |
 

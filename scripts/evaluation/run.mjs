@@ -7,7 +7,10 @@ import { randomUUID } from 'node:crypto'
 import { summarizeRuns } from './counting.mjs'
 import { loadFrozenProtocol, protocolHash, assertFrozenProtocol } from './protocol.mjs'
 import { captureIdentity, assertIdentity } from './identity.mjs'
-import { traceSummary, treeState, verifyTree, writeExpectedDiff, candidateSummary } from './evidence.mjs'
+import { treeState, verifyTree, writeExpectedDiff } from './evidence.mjs'
+import { analyzeEvidence } from './analysis.mjs'
+import { unavailableTargets } from './targets.mjs'
+import { requestAccounting } from './accounting.mjs'
 
 export function schedule(protocol) {
   const result = []
@@ -41,17 +44,23 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
   const originalCwd = process.cwd(), originalHome = process.env.DSH_HOME, originalTelemetry = process.env.DSH_TELEMETRY_DISABLED
   process.env.DSH_HOME = path.join(out, 'dsh-home')
   process.env.DSH_TELEMETRY_DISABLED = '1'
-  const report = { protocolHash: protocol.protocolHash, kind: protocol.kind, runs: [], requests: [], status: 'GAP', claims: 'No promotion conclusion; first candidate and unmeasured costs remain unknown.' }
-  let host
+  const report = { protocolHash: protocol.protocolHash, kind: protocol.kind, runs: [], requests: [], requestRefusals: [], status: 'GAP', claims: 'No promotion conclusion; unmeasured fields remain unknown. PASS is limited to the recorded task and evidence scope.' }
+  let host, activeRoot
   const budget = { requests: 0, tokens: 0, unknown: false }
   try {
     host = await (hostFactory ?? (await import('./host.mjs')).openHost)(profile, out, protocol)
     // Streaming middleware sees every call, including failed/retried attempts and children.
     host.ctx.on('llm/stream', async function* (options, next) {
+      const actor = host.ctx.get?.('agents')?.requireInitiator()
+      const sessionId = actor?.id ?? activeRoot
+      if (host.ownsSession && !host.ownsSession(sessionId)) {
+        report.requestRefusals.push({ sessionId: sessionId ?? 'unknown', reason: 'outside-active-session-tree' })
+        throw new Error('EVAL_REQUEST_OUTSIDE_CAPTURE')
+      }
       if (signal?.aborted || budget.unknown || budget.requests >= protocol.budget.maxModelRequests || budget.tokens >= protocol.budget.maxTotalTokens) throw new Error('EVAL_BUDGET_STOP')
       if (options.provider !== protocol.model.provider || options.model !== protocol.model.model || Object.entries(protocol.model.parameters).some(([key, value]) => options[key] !== value)) throw new Error('EVAL_MODEL_DRIFT')
       budget.requests++
-      report.requests.push({ provider: options.provider, model: options.model, reasoningEffort: options.reasoningEffort ?? 'unknown', maxTokens: options.maxTokens ?? 'unknown' })
+      report.requests.push({ sessionId, provider: options.provider, model: options.model, reasoningEffort: options.reasoningEffort ?? 'unknown', maxTokens: options.maxTokens ?? 'unknown' })
       let usage
       try {
         for await (const chunk of next()) {
@@ -67,7 +76,7 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
       const started = Date.now()
       const task = protocol.tasks.find(t => t.id === item.taskId)
       if (signal?.aborted || budget.unknown || budget.requests >= protocol.budget.maxModelRequests || budget.tokens >= protocol.budget.maxTotalTokens) {
-        report.runs.push({ ...item, status: signal?.aborted ? 'CANCELLED' : 'BLOCKED', reason: 'cancelled or budget exhausted/unknown', finalCorrect: 'unknown' }); continue
+        report.runs.push({ ...item, status: signal?.aborted ? 'CANCELLED' : 'BLOCKED', reason: 'cancelled or budget exhausted/unknown', finalCorrect: 'unknown', targetEvaluation: unavailableTargets(task) }); continue
       }
       if (!skipPreflight) assertIdentity(protocol.dependencies, captureIdentity(profile, protocol.tools.providerPlugin))
       const id = 'eval-' + randomUUID(), cwd = path.join(out, id)
@@ -81,25 +90,27 @@ export async function runEvaluation(protocol, { profile, out, execute = false, s
       signal?.addEventListener('abort', abort, { once: true })
       const timer = setTimeout(abort, protocol.budget.timeoutMs)
       let evidence, failure
-      try { evidence = await host.execute(id, item.arm, cwd, task, controller.signal) }
+      try { activeRoot = id; evidence = await host.execute(id, item.arm, cwd, task, controller.signal) }
       catch { failure = 'host execution failed; inspect restricted local evidence' }
-      finally { clearTimeout(timer); signal?.removeEventListener('abort', abort) }
+      finally { activeRoot = undefined; clearTimeout(timer); signal?.removeEventListener('abort', abort) }
       let final, diffHash = 'unknown'
       try { final = verifyTree(task.initial, task.expected, treeState(cwd)) } catch { final = { correct: 'unknown', changed: 'unknown', files: [] } }
       try { diffHash = writeExpectedDiff(task.initial, task.expected, cwd, path.join(out, id + '.verification')) } catch { /* byte verdict above remains independent; diff is explicitly unknown */ }
-      const trace = traceSummary(evidence?.events ?? [], { receipts: evidence?.receipts ?? [], arm: item.arm, complete: !!evidence && !controller.signal.aborted })
-      Object.assign(trace, candidateSummary(trace, evidence?.batches ?? [], task.batchBoundary))
+      const analysis = analyzeEvidence(task, evidence ?? {}, item.arm, final, protocol, !!evidence && !controller.signal.aborted)
+      const { trace } = analysis
       trace.costs.wallMs = Date.now() - started
-      report.runs.push({ ...item, sessionId: id, initialHash: protocolHash(task.initial), status: controller.signal.aborted || trace.turnOutcome === 'aborted' ? 'CANCELLED' : failure || trace.turnOutcome === 'error' ? 'FAIL' : trace.status === 'GAP' || trace.candidateStatus === 'GAP' || final.correct === 'unknown' ? 'GAP' : final.correct ? 'PASS' : 'FAIL', failure, finalCorrect: final.correct, final, diffHash, trace, promptHash: evidence?.promptHash ?? 'unknown', ptc: evidence?.ptc ?? 'unknown', partialTask: trace.failures > 0 && final.changed === true })
+      report.runs.push({ ...item, graphVersion: evidence?.graph ? 1 : undefined, sessionId: id, initialHash: protocolHash(task.initial), status: controller.signal.aborted || trace.turnOutcome === 'aborted' ? 'CANCELLED' : failure || trace.turnOutcome === 'error' ? 'FAIL' : trace.status === 'GAP' || trace.candidateStatus === 'GAP' || analysis.targetEvaluation.status === 'GAP' || analysis.stimuli.status === 'GAP' || final.correct === 'unknown' ? 'GAP' : final.correct ? 'PASS' : 'FAIL', failure, finalCorrect: final.correct, final, diffHash, ...analysis, promptHash: evidence?.promptHash ?? 'unknown', ptc: evidence?.ptc ?? 'unknown', partialTask: trace.failures > 0 && final.changed === true })
       fs.writeFileSync(path.join(out, 'report.json'), JSON.stringify(report, null, 2) + '\n')
     }
     report.status = report.runs.some(r => r.status === 'FAIL') ? 'FAIL' : report.runs.every(r => r.status === 'PASS') ? 'PASS' : 'GAP'
   } catch {
-    for (const item of schedule(protocol).slice(report.runs.length)) report.runs.push({ ...item, status: 'BLOCKED', reason: 'host initialization/execution failed', finalCorrect: 'unknown' })
+    for (const item of schedule(protocol).slice(report.runs.length)) report.runs.push({ ...item, status: 'BLOCKED', reason: 'host initialization/execution failed', finalCorrect: 'unknown', targetEvaluation: unavailableTargets(protocol.tasks.find(t => t.id === item.taskId)) })
     report.status = 'GAP'
   } finally {
     try { await host?.dispose() } finally {
       report.summary = summarizeRuns(report.runs, protocol.comparison)
+      report.accounting = requestAccounting(report)
+      if (report.status === 'PASS' && report.accounting.status !== 'PASS') report.status = 'GAP'
       report.budget = { requests: budget.requests, boundary: 'llm/stream', providerHttpRequests: 'unknown', totalTokens: budget.unknown ? 'unknown' : budget.tokens, knownTokens: budget.tokens, unknown: budget.unknown }
       process.chdir(originalCwd)
       if (originalHome === undefined) delete process.env.DSH_HOME; else process.env.DSH_HOME = originalHome

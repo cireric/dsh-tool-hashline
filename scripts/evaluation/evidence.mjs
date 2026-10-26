@@ -16,12 +16,12 @@ const payload = args => {
   return 'unknown'
 }
 
-export function traceSummary(records, { receipts = [], arm, complete = true } = {}) {
+export function traceSummary(records, { receipts = [], arm, complete = true, seqStart = 0, delegationCovered = false } = {}) {
   const gaps = []
   const events = records.filter(r => Number.isSafeInteger(r.seq))
   if (!events.length) gaps.push('no sequenced events')
   for (let i = 0; i < events.length; i++) {
-    if (events[i].seq !== i) { gaps.push('non-dense or duplicate/out-of-order seq'); break }
+    if (events[i].seq !== i + seqStart) { gaps.push('non-dense or duplicate/out-of-order seq'); break }
   }
   if (!complete || !records.some(r => r.type === 'turn/end')) gaps.push('no completed capture/turn boundary')
   const turnOutcome = records.findLast(r => r.type === 'turn/end')?.data?.reason?.kind ?? 'unknown'
@@ -62,7 +62,7 @@ export function traceSummary(records, { receipts = [], arm, complete = true } = 
     }
   }
   const list = [...calls.values()]
-  if (list.some(c => ['subagent', 'subagent_fork'].includes(c.name))) gaps.push('child session coverage unknown; root trace only')
+  if (!delegationCovered && list.some(c => ['subagent', 'subagent_fork'].includes(c.name))) gaps.push('child session coverage unknown; root trace only')
   const edits = list.filter(c => c.name === 'edit')
   const knownModes = edits.map(c => c.actualMode === 'hashline' ? 'hashline' : c.actualMode === 'unknown' ? 'unknown' : 'non-hashline')
   const modes = [...new Set(knownModes)]
@@ -95,15 +95,35 @@ export function decodeTrace(bytes, sessionId, options) {
 /** A candidate is one predeclared edit-bearing PTC program, not one inner edit. */
 export function candidateSummary(trace, batches, boundary) {
   if (boundary !== 'first-edit-program') return { batches: [], candidateStatus: 'not-measured', firstCandidateCorrect: 'unknown', retries: 'unknown' }
-  const roots = trace.calls.filter(c => c.name === 'run_code' && trace.calls.some(edit => edit.name === 'edit' && edit.rootCallId === c.id))
-  const paired = roots.length === batches.length && roots.every((r, i) => batches[i]?.callId === r.id && batches[i]?.attempt === i && (i === 0 ? batches[i].retryOf === undefined : batches[i].retryOf === roots[i - 1].id) && typeof batches[i]?.final?.correct === 'boolean')
-  const overlaps = roots.some((r, i) => i > 0 && roots[i - 1].endSeq >= r.startSeq)
+  const roots = trace.calls.filter(c => c.name === 'run_code' && trace.calls.some(edit => edit.name === 'edit' && edit.rootCallId === c.id && edit.sessionId === c.sessionId))
+  if (batches.some(b => b.boundary !== undefined)) {
+    const end = call => call.endOrder ?? call.endSeq
+    const start = call => call.startOrder ?? call.startSeq
+    const overlaps = roots.some((r, i) => i > 0 && end(roots[i - 1]) >= start(r))
+    const expected = roots.flatMap(root => {
+      const edits = trace.calls.filter(c => c.name === 'edit' && c.rootCallId === root.id && c.sessionId === root.sessionId).sort((a, b) => end(a) - end(b))
+      const failures = edits.filter(c => c.isError === true).map(call => ({ root, call, boundary: 'edit-failure' }))
+      return edits.at(-1)?.isError === false ? [...failures, { root, call: root, boundary: 'program-end' }] : failures
+    }).sort((a, b) => end(a.call) - end(b.call))
+    const paired = expected.length === batches.length && expected.every((e, i) => {
+      const b = batches[i]
+      return b.id === e.root.sessionId + ':' + e.root.id + ':' + i && b.sessionId === e.root.sessionId && b.callId === e.root.id && b.boundaryCallId === e.call.id && b.boundary === e.boundary && b.attempt === i && b.retryOf === (i ? batches[i - 1].id : undefined) && typeof b.final?.correct === 'boolean'
+    })
+    if (!paired || overlaps || trace.status !== 'PASS') return { batches, candidateStatus: 'GAP', firstCandidateCorrect: 'unknown', retries: 'unknown' }
+    return { batches, candidateStatus: 'PASS', firstCandidateCorrect: batches[0]?.final.correct ?? 'unknown', retries: Math.max(0, batches.length - 1) }
+  }
+  if (roots.some(root => {
+    const edits = trace.calls.filter(c => c.name === 'edit' && c.rootCallId === root.id && c.sessionId === root.sessionId)
+    return edits.some((edit, i) => edit.isError === true && edits.length > i + 1)
+  })) return { batches, candidateStatus: 'GAP', firstCandidateCorrect: 'unknown', retries: 'unknown' }
+  const paired = roots.length === batches.length && roots.every((r, i) => batches[i]?.callId === r.id && (!r.sessionId || batches[i]?.sessionId === r.sessionId) && batches[i]?.attempt === i && (i === 0 ? batches[i].retryOf === undefined : batches[i].retryOf === roots[i - 1].id && (!r.sessionId || batches[i].retryOfSessionId === roots[i - 1].sessionId)) && typeof batches[i]?.final?.correct === 'boolean')
+  const overlaps = roots.some((r, i) => i > 0 && (roots[i - 1].endOrder ?? roots[i - 1].endSeq) >= (r.startOrder ?? r.startSeq))
   if (!paired || overlaps || trace.status !== 'PASS') return { batches, candidateStatus: 'GAP', firstCandidateCorrect: 'unknown', retries: 'unknown' }
   return { batches, candidateStatus: 'PASS', firstCandidateCorrect: batches[0]?.final.correct ?? 'unknown', retries: Math.max(0, batches.length - 1) }
 }
 
 export function treeState(directory) {
-  const result = {}
+  const result = Object.create(null)
   const visit = (dir, prefix) => {
     for (const name of readdirSync(dir).sort()) {
       const file = join(dir, name), relative = prefix + name, stat = lstatSync(file)
@@ -121,9 +141,9 @@ export function verifyTree(initial, expected, actual) {
   // Unmentioned initial files must remain unchanged; expected null means deletion.
   const wanted = { ...initial, ...expected }
   const files = [...new Set([...Object.keys(wanted), ...Object.keys(actual)])].sort().map(name => {
-    const before = initial[name] == null ? null : digest(Buffer.from(initial[name]))
-    const after = actual[name] == null ? null : digest(actual[name])
-    const expect = wanted[name] == null ? null : digest(Buffer.from(wanted[name]))
+    const before = !Object.hasOwn(initial, name) || initial[name] == null ? null : digest(Buffer.from(initial[name]))
+    const after = !Object.hasOwn(actual, name) || actual[name] == null ? null : digest(actual[name])
+    const expect = !Object.hasOwn(wanted, name) || wanted[name] == null ? null : digest(Buffer.from(wanted[name]))
     return { name, before, expected: expect, actual: after, changed: before !== after, correct: expect === after }
   })
   return { correct: files.every(f => f.correct), changed: files.some(f => f.changed), files }

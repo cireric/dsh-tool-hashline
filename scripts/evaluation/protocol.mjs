@@ -12,6 +12,7 @@
  */
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
+import { taskEvaluationGaps, safeTaskPath } from './stimuli.mjs'
 
 /** Fields a protocol MUST declare before a run may start (SRS §7.1). */
 export const REQUIRED_FIELDS = [
@@ -149,13 +150,14 @@ export function protocolGaps(protocol) {
     protocol.tasks.forEach((task, index) => {
       const at = 'tasks[' + index + ']'
       if (!isObject(task)) { gaps.push(at + ' must be an object'); return }
+      gaps.push(...taskEvaluationGaps(task).map(gap => at + ': ' + gap))
       for (const field of ['id', 'family', 'prompt']) {
         if (typeof task[field] !== 'string' || task[field].trim() === '') gaps.push(at + '.' + field + ' must be a non-empty string')
       }
       for (const field of ['initial', 'expected']) {
         if (!isObject(task[field]) || Object.values(task[field]).some(value => typeof value !== 'string' && !(field === 'expected' && value === null))) gaps.push(at + '.' + field + ' must map relative filenames to UTF-8 strings (expected null = absent)')
         else for (const name of Object.keys(task[field])) {
-          if (!name || name.includes('\\') || name.includes(':') || name.startsWith('/') || name.split('/').some(p => !p || p === '.' || p === '..')) gaps.push(at + ': unsafe task filename ' + name)
+          if (!safeTaskPath(name)) gaps.push(at + ': unsafe task filename ' + name)
         }
       }
       if (!['known-applicable', 'declared-exception', 'no-change-needed', 'applicability-unknown'].includes(task.class)) gaps.push(at + '.class is required')
