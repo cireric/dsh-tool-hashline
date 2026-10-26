@@ -10,7 +10,7 @@ import { readSessionEvidence } from './session-tree.mjs'
 import { unavailableTargets } from './targets.mjs'
 import { sha256 } from './stimuli.mjs'
 import { requestAccounting } from './accounting.mjs'
-import { summarizeCoverage, evaluateConditions, CONDITION_SEMANTICS } from './verdict.mjs'
+import { summarizeCoverage, evaluateConditions, SUPPORTED_CONDITION_SEMANTICS } from './verdict.mjs'
 
 export function checkRunReport(protocol, report, directory) {
   const problems = []
@@ -18,7 +18,7 @@ export function checkRunReport(protocol, report, directory) {
   const expected = schedule(protocol)
   if (!Array.isArray(report.runs) || report.runs.length !== expected.length) return [...problems, 'missing scheduled runs; failures must remain in denominator']
   if (report.evaluationVersion !== undefined && report.evaluationVersion !== 1) problems.push('unsupported evaluation version')
-  if (protocol.passConditions?.semantics === CONDITION_SEMANTICS && report.evaluationVersion !== 1) problems.push('frozen v1 conditions require evaluationVersion 1')
+  if (SUPPORTED_CONDITION_SEMANTICS.includes(protocol.passConditions?.semantics) && report.evaluationVersion !== 1) problems.push('frozen versioned conditions require evaluationVersion 1')
   if (report.evaluationVersion === 1 || report.coverage || report.conditions) {
     if (!report.coverage || protocolHash(report.coverage) !== protocolHash(summarizeCoverage(report.runs, protocol.comparison))) problems.push('coverage recomputation mismatch')
     if (!report.conditions || protocolHash(report.conditions) !== protocolHash(evaluateConditions(protocol, report.runs))) problems.push('conditions recomputation mismatch')

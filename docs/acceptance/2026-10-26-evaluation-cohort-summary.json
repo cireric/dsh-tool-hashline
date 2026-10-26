@@ -1,0 +1,298 @@
+{
+  "date": "2026-10-26",
+  "baseCommit": "4e88222",
+  "workingTreeIncrement": true,
+  "realModelRequests": 0,
+  "evidenceRoot": ".scratch/real-model-evaluation/20261026-cohort",
+  "sourceHashes": {
+    "scripts/evaluation/accounting.mjs": "e33e2ece5c201a0c9fd8da9115964f8917d48371429ddfa2d6956f1da8334552",
+    "scripts/evaluation/analysis.mjs": "433c49a4504be114cc35079d370e9145405964a32a20ecc40778e9b8fe1676af",
+    "scripts/evaluation/apply-patch-targets.mjs": "e8877894745cb1a73c57e7eb6c22301045ce9601236e30ab28ee5c5ab4768348",
+    "scripts/evaluation/counting.mjs": "d63fce96e3e067fa31a9c3a552a5f0d8be746c49c4eb66087f421ceb63a7e247",
+    "scripts/evaluation/driver.mjs": "551bb61e400a104f562a5f033349d1cb73c69532eeb9539c9208be4ae0002aee",
+    "scripts/evaluation/evidence.mjs": "756ea14405e46ee51dbcd684768b47dbc10a822a7de0a7e4c02f8830d811c117",
+    "scripts/evaluation/host.mjs": "8e28743e0ec013eb9bdce1355653d5227594c6fc19f0f5fc2a869f3676a92a85",
+    "scripts/evaluation/identity.mjs": "3aa2b9203123061372a4862d702c4317367628bc2fca200497022a3365c65e18",
+    "scripts/evaluation/inspect.mjs": "7fedc632b103afcc92f27f38b8613bfd0664819bba4a78a87c203900e64066eb",
+    "scripts/evaluation/lifecycle-smoke.mjs": "069590a8bb1702faad6684e54a237db67586d5c9e1015b84c2213bc330689a28",
+    "scripts/evaluation/prepare.mjs": "d874492a5616fafbda11f73be099582a31e191f550dc478491e5632e0c4628bb",
+    "scripts/evaluation/protocol.mjs": "4cdf99e3fe297a56cee7e2bc2a95b1544850f015493818ad56bd122d3395d829",
+    "scripts/evaluation/report.mjs": "e20330a7d197b50849ab8c382d9ce0b2d141615722ac9b01916710eb707db913",
+    "scripts/evaluation/run.mjs": "42897c11646711b1d706b791dacb37e02731469a282e9e920a28f8762f872a89",
+    "scripts/evaluation/session-tree.mjs": "8e373c3ddc550e9832b4f418d0e548db20ce5792e86791b83cbffe3c3c0c4f71",
+    "scripts/evaluation/smoke.mjs": "2b4a808d36b17d5f0d1cb6d594e592876c023b92a04edc3096c3c80aab1a64d9",
+    "scripts/evaluation/stimuli.mjs": "1f870a5ce950750b1c3118fab46b119b5fc0155687556d083e8feb5cb3a9ec23",
+    "scripts/evaluation/targets.mjs": "70d8c8d04cd180182963f9dee39f961fcf8c7a4c322db2299ab81f543fd2cbbb",
+    "scripts/evaluation/verdict-smoke.mjs": "2e6f31b2ce924f028c699a899941d9d2f4c6c743cdfd0005ecb071cc98c815dc",
+    "scripts/evaluation/verdict.mjs": "1b2265765fecbbc159595db8bad27569abc11237504dd538bc1e70a62696f6b0",
+    "tests/fixtures/evaluation-provider/index.mjs": "86b3975109efed815532fa478e6390840637d029a1ae57b3569072132ad791a0"
+  },
+  "isolatedSourceMismatches": [],
+  "tests": {
+    "passed": 123,
+    "failed": 0,
+    "files": 7,
+    "typesExit": 0,
+    "checkExit": 0
+  },
+  "mutation": {
+    "changed": "Token violations use eligible instead of full group",
+    "failed": 1,
+    "passed": 26,
+    "exit": 1,
+    "restoredByteForByte": true
+  },
+  "delivery": {
+    "verdictCounts": {
+      "PASS": 21,
+      "BLOCKED": 9
+    },
+    "gates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "caseCounts": {
+      "PASS": 55
+    }
+  },
+  "scenarios": [
+    {
+      "scenario": "pass",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "PASS",
+      "judgeStatus": "PASS",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "requests": 4
+    },
+    {
+      "scenario": "token-fail",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "FAIL",
+      "judgeStatus": "FAIL",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "requests": 4
+    },
+    {
+      "scenario": "first-unknown",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "GAP",
+      "judgeStatus": "GAP",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "requests": 4
+    },
+    {
+      "scenario": "cohort-pass",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "PASS",
+      "judgeStatus": "PASS",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "requests": 10
+    },
+    {
+      "scenario": "cohort-unscoped",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "GAP",
+      "judgeStatus": "GAP",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "requests": 10
+    },
+    {
+      "scenario": "excluded-token-fail",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "FAIL",
+      "judgeStatus": "FAIL",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "requests": 10
+    },
+    {
+      "scenario": "excluded-final-fail",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "FAIL",
+      "conditionStatus": "PASS",
+      "judgeStatus": "FAIL",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "requests": 10
+    },
+    {
+      "scenario": "empty-cohort",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "PASS",
+      "judgeStatus": "PASS",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "requests": 6
+    },
+    {
+      "scenario": "selected-unknown",
+      "assertions": "PASS",
+      "taskEvidenceStatus": "PASS",
+      "conditionStatus": "GAP",
+      "judgeStatus": "GAP",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "requests": 10
+    }
+  ],
+  "cli": [
+    {
+      "name": "verdict/pass",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "verdict/token-fail",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "FAIL"
+    },
+    {
+      "name": "verdict/first-unknown",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP"
+    },
+    {
+      "name": "verdict/cohort-pass",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "verdict/cohort-unscoped",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP"
+    },
+    {
+      "name": "verdict/excluded-token-fail",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "FAIL"
+    },
+    {
+      "name": "verdict/excluded-final-fail",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "FAIL"
+    },
+    {
+      "name": "verdict/empty-cohort",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "verdict/selected-unknown",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP"
+    },
+    {
+      "name": "smoke",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "fork",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "cancel-1",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP"
+    },
+    {
+      "name": "cancel-2",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP"
+    },
+    {
+      "name": "cancel-3",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP"
+    },
+    {
+      "name": "historical-v1",
+      "checkExit": 0,
+      "judgeExit": 0,
+      "status": "PASS"
+    },
+    {
+      "name": "historical-unversioned",
+      "checkExit": 0,
+      "judgeExit": 2,
+      "status": "GAP",
+      "reason": "semantics-not-frozen"
+    }
+  ],
+  "remaining": [
+    "Complete formal task suite not executed",
+    "Real provider and model validation not executed",
+    "Relative benefit, prompt fairness and independent timing not implemented",
+    "Other cancellation boundaries and external-process descendants not validated"
+  ]
+}

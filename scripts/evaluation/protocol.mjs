@@ -13,7 +13,7 @@
 import { createHash } from 'node:crypto'
 import { readFileSync } from 'node:fs'
 import { taskEvaluationGaps, safeTaskPath } from './stimuli.mjs'
-import { CONDITION_SEMANTICS } from './verdict.mjs'
+import { SUPPORTED_CONDITION_SEMANTICS, firstCandidateScopeGaps } from './verdict.mjs'
 
 /** Fields a protocol MUST declare before a run may start (SRS §7.1). */
 export const REQUIRED_FIELDS = [
@@ -140,10 +140,11 @@ export function protocolGaps(protocol) {
     }
   }
   if (isObject(protocol.passConditions)) {
-    if (protocol.passConditions.semantics !== undefined && protocol.passConditions.semantics !== CONDITION_SEMANTICS) gaps.push('unsupported passConditions.semantics')
+    if (protocol.passConditions.semantics !== undefined && !SUPPORTED_CONDITION_SEMANTICS.includes(protocol.passConditions.semantics)) gaps.push('unsupported passConditions.semantics')
+    gaps.push(...firstCandidateScopeGaps(protocol))
     for (const field of ['minFirstCandidateCorrect', 'maxTotalTokensPerTask']) {
       if (typeof protocol.passConditions[field] !== 'number' || !Number.isFinite(protocol.passConditions[field]) || protocol.passConditions[field] < 0) gaps.push('passConditions.' + field + ' must be a finite non-negative number')
-      if (protocol.passConditions.semantics === CONDITION_SEMANTICS && !Number.isSafeInteger(protocol.passConditions[field])) gaps.push('v1 passConditions.' + field + ' must be an integer')
+      if (SUPPORTED_CONDITION_SEMANTICS.includes(protocol.passConditions.semantics) && !Number.isSafeInteger(protocol.passConditions[field])) gaps.push('versioned passConditions.' + field + ' must be an integer')
     }
   }
   if (!Array.isArray(protocol.tasks) || protocol.tasks.length === 0) {

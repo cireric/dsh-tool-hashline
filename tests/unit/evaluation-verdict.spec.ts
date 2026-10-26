@@ -5,7 +5,7 @@ import { join } from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { spawnSync } from 'node:child_process'
 // @ts-expect-error plain ESM module
-import { CONDITION_SEMANTICS, summarizeCoverage, evaluateConditions } from '../../scripts/evaluation/verdict.mjs'
+import { CONDITION_SEMANTICS, COHORT_CONDITION_SEMANTICS, summarizeCoverage, evaluateConditions } from '../../scripts/evaluation/verdict.mjs'
 // @ts-expect-error plain ESM module
 import { freezeProtocol, protocolGaps, protocolHash } from '../../scripts/evaluation/protocol.mjs'
 // @ts-expect-error plain ESM module
@@ -146,10 +146,13 @@ describe('condition protocol, independent checker and CLI', () => {
       }
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
-  it('does not let condition PASS override an independently wrong final file', () => {
+  it.each(['v1', 'v2-excluded'])('does not let %s condition PASS override an independently wrong final file', version => {
     const dir = mkdtempSync(join(tmpdir(), 'eval-condition-final-failure-')), driver = fileURLToPath(new URL('../../scripts/evaluation/driver.mjs', import.meta.url))
     try {
-      const { p, report } = independentReport(dir), run = report.runs[0]!, task = p.tasks[0]
+      const { p: original, body, report } = independentReport(dir)
+      const p = version === 'v1' ? original : freezeProtocol({ ...body, passConditions: { ...body.passConditions, semantics: COHORT_CONDITION_SEMANTICS, minFirstCandidateCorrect: 0, firstCandidateScope: { include: [], exclude: [{ taskId: 'a', reason: 'Not measured in this probe.' }] } } })
+      report.protocolHash = p.protocolHash; report.conditions = evaluateConditions(p, report.runs)
+      const run = report.runs[0]!, task = p.tasks[0]
       writeFileSync(join(dir, run.sessionId, 'a.txt'), 'x')
       run.final = verifyTree(task.initial, task.expected, { 'a.txt': Buffer.from('x') }); run.finalCorrect = false; run.status = 'FAIL'; report.status = 'FAIL'
       report.summary = summarizeRuns(report.runs, arms); report.coverage = summarizeCoverage(report.runs, arms)
@@ -159,6 +162,17 @@ describe('condition protocol, independent checker and CLI', () => {
       const result = spawnSync(process.execPath, [driver, 'judge', join(dir, 'p.json'), join(dir, 'r.json')], { encoding: 'utf8' })
       expect(result.status, result.stderr).toBe(2)
       expect(JSON.parse(result.stdout)).toMatchObject({ status: 'FAIL', conditions: { status: 'PASS' } })
+    } finally { rmSync(dir, { recursive: true, force: true }) }
+  })
+  it('recomputes the v2 cohort instead of trusting stored scope annotations', () => {
+    const dir = mkdtempSync(join(tmpdir(), 'eval-condition-cohort-forgery-'))
+    try {
+      const { body, report } = independentReport(dir)
+      const p = freezeProtocol({ ...body, passConditions: { ...body.passConditions, semantics: COHORT_CONDITION_SEMANTICS, firstCandidateScope: { include: ['a'], exclude: [] } } })
+      report.protocolHash = p.protocolHash; report.conditions = evaluateConditions(p, report.runs)
+      expect(checkRunReport(p, report, dir)).toEqual([])
+      report.conditions.arms['stock-edit'].firstCandidateCorrect.cohort.include = []
+      expect(checkRunReport(p, report, dir).join()).toContain('conditions recomputation mismatch')
     } finally { rmSync(dir, { recursive: true, force: true }) }
   })
   it.each(['coverage', 'conditions', 'missing-fields', 'status', 'version', 'raw-first', 'unexecuted-trace'])('rejects forged %s even when a report claims PASS', field => {

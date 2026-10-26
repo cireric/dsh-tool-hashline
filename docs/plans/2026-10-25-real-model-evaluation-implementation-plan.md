@@ -24,3 +24,5 @@
 随后[apply_patch 计划](2026-10-26-evaluation-apply-patch-plan.md)补齐无移动、完整受管解析回执的文件归属，见[验收](../acceptance/2026-10-26-evaluation-apply-patch.md)。73 项回归及最终 18 例宿主组通过；首轮新建和空文件换行不符仍各保留 FAIL，未据此扩大工具能力或真实模型结论。
 
 依据后续代码分析调整优先级，[条件判定计划](2026-10-26-evaluation-verdict-plan.md)已完成 v1 绝对阈值消费者、覆盖统计和 check/judge 分离，见[验收](../acceptance/2026-10-26-evaluation-verdict.md)。94 项回归及预先冻结的实际宿主判读场景有证据；旧协议不追认条件通过。相对收益、计时/提示公平性和真实模型 probe 仍未完成。
+
+首次指标的任务范围已按[v2 计划](2026-10-26-evaluation-cohort-plan.md)冻结，见[验收](../acceptance/2026-10-26-evaluation-cohort.md)。排除不影响全任务最终文件、Token、取证与调度检查；历史 v1 不迁移。完整 formal 任务集和真实模型执行仍是后续工作。

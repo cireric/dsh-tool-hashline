@@ -17,20 +17,24 @@
 | samples | 正整数 repetitions / seed |
 | order | `interleaved`：每任务按 seed + repetition + task index 旋转臂顺序，固定执行 |
 | budget | 正整数 maxModelRequests / maxTotalTokens / timeoutMs；token 为观测停止阈值 |
-| passConditions | 有限非负 minFirstCandidateCorrect / maxTotalTokensPerTask；先冻结，不能据结果补填。显式 semantics=per-arm-count-and-per-run-tokens-v1 时，两者为整数，分别是每臂首次正确最小样本数、每个任务×重复×臂样本的整树 totalTokens 上限 |
+| passConditions | 有限非负 minFirstCandidateCorrect / maxTotalTokensPerTask；先冻结，不能据结果补填。v1/v2 两者均为整数，分别是每臂首次正确最小样本数、每个任务×重复×臂样本的整树 totalTokens 上限。v1 对全部任务计首次，v2 必须冻结 firstCandidateScope |
 | tasks | 唯一 id、family、prompt、class、batchBoundary、initial / expected |
 
 formal 仍须覆盖原 SRS 的 13 个任务族；probe 可取子集。没有自动推广判定。冻结后身份变化即拒绝，不沿用历史哈希；已有 frozen 输出不覆盖。执行前以及每样本前核对实际安装身份，缺包、补丁不全、引擎不同或身份漂移均停止。
 
 ## 条件判定与未知覆盖
 
-冻结 v1 语义后，逐臂判定上述两个绝对条件，结果写入 report.conditions；它与任务/取证的 report.status 分开。每臂总样本数为任务数×重复数，所有失败、取消、BLOCKED 和未测样本均在分母。首次正确只接受可复核的布尔值；Token 上限逐样本使用含后代的 totalTokens，不用均值掩盖单个超限。
+冻结 v1/v2 语义后，逐臂判定上述两个绝对条件，结果写入 report.conditions；它与任务/取证的 report.status 分开。v1=per-arm-count-and-per-run-tokens-v1，其每臂首次分母为全部任务数×重复数；v2=per-arm-cohort-count-and-per-run-tokens-v2，其每臂首次分母为冻结 include 数×重复数。选中样本的失败、取消、BLOCKED 和未测均保留。首次正确只接受可复核的布尔值；Token 上限始终覆盖全部任务的含后代 totalTokens，不用均值掩盖单个超限。
 
-已知首次正确数＋未知数仍小于最小要求，或任一已知 Token 超限，即 FAIL；其余存在未知时 GAP；覆盖完整且两条件均满足才 PASS。PASS 只表示满足冻结的绝对条件，不包含因果收益、统计推广或 S2 授权。旧协议缺 semantics 时 conditions=GAP，reason=semantics-not-frozen；不把历史 PASS 解释成阈值通过。
+v2 的 passConditions.firstCandidateScope 必须为 `{include: [taskId], exclude: [{taskId, reason}]}`。全部任务恰好出现一次，ID 不得重复/交叉/未知，排除理由非空；最小数量不得超过所选任务数×重复数。范围对所有臂、所有重复一致，不能按执行结果自动改变；v1/无语义协议不得携带该字段。排除是作者声明的指标范围，不是模型/工具推断的“不适用”事实，也不证明被排除任务天然不适用。
+
+v2 条件结果 version=2，首次条件含 cohort 的 include/exclude/excludedSamples。全局 coverage 仍保留全部任务的未知，不因排除改写；最终文件、调度、取证与 Token 检查也覆盖全部任务。probe 可明确把首次范围设为空，但最小数量必须为 0，首次条件标 NOT_APPLICABLE，比例与上下界为 null；token 和任务/取证仍可能 FAIL/GAP。formal 必须有非空首次范围，13 个任务族要求不因排除而降低。旧 v1 输出形状及全任务口径不变，旧冻结件不迁移。
+
+所选范围内已知首次正确数＋未知数仍小于最小要求，或全部任务中任一已知 Token 超限，即 FAIL；其余存在所选首次未知或任一任务 Token 未知时 GAP；覆盖完整且条件满足才 PASS。显式空 probe 首次范围为 NOT_APPLICABLE，仅由其它条件与全部任务结果决定是否通过。PASS 只表示满足冻结的绝对条件，不包含因果收益、统计推广或 S2 授权。旧协议缺 semantics 时 conditions=GAP，reason=semantics-not-frozen；不把历史 PASS 解释成阈值通过。
 
 report.coverage 独立保留每臂首次/最终正确的 correct、incorrect、measured、unknown、denominator；rateOnMeasured 仅为描述，同时给出完整计划分母的 rateBounds。上下界分别把未知当错误/正确，是缺失数据的可能范围，不是统计置信区间。成本提供 knownSum/measured/unknown/denominator，unknown>0 时 knownSum 不是总成本。目标注释缺失单列 unknownSamples，不抹掉已有的目标统计。原 summary 的全量 unknown 口径不变，历史报告继续按原字段检查。
 
-新 report.evaluationVersion=1 必须带可重算的 coverage/conditions 和请求对账；有 v1 条件的新协议必须使用该报告版本。check 校验证据和计算一致性，允许真实 FAIL/GAP 报告；judge 在证据一致后单独判条件，且要求任务/取证也为 PASS 才退出 0。条件 PASS 不能覆盖最终文件错误。未执行样本不得伪造 trace，整体任务/取证状态也必须可重算。wallMs 仍是包含评测器开销、由运行端现场记录且未独立重建的样本耗时，不用于本轮 Token 条件，也不充当模型延迟。
+新 report.evaluationVersion=1 必须带可重算的 coverage/conditions 和请求对账；有版本语义条件的新协议必须使用该报告版本。check 校验证据和计算一致性，允许真实 FAIL/GAP 报告；judge 在证据一致后单独判条件，且要求任务/取证也为 PASS 才退出 0。条件 PASS 不能覆盖最终文件错误。未执行样本不得伪造 trace，整体任务/取证状态也必须可重算。wallMs 仍是包含评测器开销、由运行端现场记录且未独立重建的样本耗时，不用于本轮 Token 条件，也不充当模型延迟。
 
 三臂复用相同 persona、watchdog、PTC、宿主策略、非编辑工具：stock-edit 启用 stock read/edit 并移除自有 read/edit；hashline-default 将当前受管 edit 固定为 hashline；hashline-fallback 保留当前受管 auto 与三类 fallback 的事实检查。它们同时改变可用的 read/edit 能力，**不是只改变 policy 一行的消融实验**。原 auto-policy-off 对照仍可另行冻结实现，本轮不把三臂替代结果解释为纯策略因果效应。
 

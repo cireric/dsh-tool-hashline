@@ -5,7 +5,7 @@
 ## 无凭据验证
 
 ```powershell
-pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts
+pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts
 # 在独立副本构建，然后获得打包安装；保留输出中的一次性 profile 路径。
 pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
@@ -23,7 +23,7 @@ node scripts/evaluation/lifecycle-smoke.mjs <disposable-profile> .scratch/<runId
 
 该入口在三臂分别验证非空的真实 fork 继承前缀和子会话部分落盘后取消。父回合完成后追加测试提示、等待中的适配器取消均由该测试入口显式编排，不是 formal 任务能力。`lifecycle.json` 保存后续提示边界、实际适配器请求、取消确认及空闲状态；四组协议各自保留原始证据并运行 checker。取消组包含一个实际执行样本及两个未执行 CANCELLED 样本，评测报告预期为 GAP、缺 usage 为 unknown；测试断言通过不把它改成任务 PASS，也不证明真实 Provider 的取消计费。
 
-同一新安装先运行 smoke.mjs 放入匹配夹具后，可用 `node scripts/evaluation/verdict-smoke.mjs <disposable-profile> .scratch/<runId>/verdict` 验证判读链。它在执行前分别冻结三份协议：正常阈值、零 Token 上限、task-end 不测首次候选；真实宿主均正确改文件，但 judge 应分别给出 PASS/FAIL/GAP，退出码 0/2/2。所有 usage 来自固定夹具，不证明真实成本。
+同一新安装先运行 smoke.mjs 放入匹配夹具后，可用 `node scripts/evaluation/verdict-smoke.mjs <disposable-profile> .scratch/<runId>/verdict` 验证判读链。它预先冻结九组协议：原三组正常/超限/未知，加上混合 no-op/write 的范围比较、范围外超限/最终错误、空 probe 范围、所选首次未知。每组独立执行并验证 check/judge 退出码；条件或任务失败不会改写为 PASS。所有 usage 来自固定夹具，不证明真实成本。
 
 ## 后续真实模型实验（本轮未执行）
 
@@ -75,15 +75,27 @@ node scripts/evaluation/driver.mjs judge .scratch/<runId>/results/protocol.json 
 
 ## 冻结条件判定
 
-新模板在 passConditions 声明 `semantics: "per-arm-count-and-per-run-tokens-v1"`。`minFirstCandidateCorrect` 是每臂首次候选正确的最小**样本数量**，不是比例；`maxTotalTokensPerTask` 是每个任务×重复×臂样本的**整树总 Token 上限**，不是整臂总量或均值。两者均须是非负整数，自行按实验目标冻结；旧配置不会自动迁移。
+新模板在 passConditions 声明 `semantics: "per-arm-cohort-count-and-per-run-tokens-v2"`，并冻结 firstCandidateScope。`minFirstCandidateCorrect` 是每臂所选任务×重复中首次候选正确的最小**样本数量**，不是比例；`maxTotalTokensPerTask` 是全部任务×重复×臂各个样本的**整树总 Token 上限**，不是整臂总量或均值。两者均须是非负整数，自行按实验目标冻结；旧配置不会自动迁移。
+
+```json
+"firstCandidateScope": {
+  "include": ["status-update"],
+  "exclude": [
+    { "taskId": "already-done", "reason": "No edit candidate is needed by this task." },
+    { "taskId": "create-only", "reason": "This task measures write-only creation." }
+  ]
+}
+```
+
+以上是含三个任务时的例子；模板只有 status-update，故 exclude 为空。每个实际任务 ID 必须在 include 或 exclude 中恰好出现一次，排除理由非空，所有臂和重复使用同一范围。新增任务时须同步范围；冻结后不能据结果排除未知。排除只是作者的指标计划，不自动证明“不适用”，也不删除全局 coverage 中的未知。范围外的最终文件、Token、调度和证据仍全部检查。
 
 报告将三层结果分开：run 的 `status` 是任务/取证结果，`conditions` 是逐臂冻结阈值，`coverage` 保存已测与未知。`run.mjs` 的退出码继续表示执行/取证状态；`check` 只读重算证据一致性，真实 FAIL/GAP 报告也可被接受；`judge` 先 check 再判定，只有任务/取证与条件同时 PASS 才退出 0，其余 FAIL/GAP 为 2。条件通过仅覆盖这两个绝对条件，不证明优于其它臂、统计收益或 S2 推广通过。
 
-未知始终在计划分母：首次正确的 `correct/incorrect/measured/unknown/denominator` 与 `rateOnMeasured/rateBounds` 同时显示；单看已测率不能判通过。上下界是未知全错/全对的范围，不是置信区间。成本的 `knownSum` 必须与 measured/unknown 一起读，存在未知时不能当完整成本。已知首次正确的最高可能值仍不足要求，或某个已知样本 Token 超限时 FAIL；其余有未知则 GAP；全部测得且满足才 PASS。
+条件中的首次未知保留在冻结的所选范围分母，Token 未知仍检查全部样本；全局 coverage 始终保留全部计划样本：首次正确的 `correct/incorrect/measured/unknown/denominator` 与 `rateOnMeasured/rateBounds` 同时显示；单看已测率不能判通过。上下界是未知全错/全对的范围，不是置信区间。成本的 `knownSum` 必须与 measured/unknown 一起读，存在未知时不能当完整成本。已知首次正确的最高可能值仍不足要求，或某个已知样本 Token 超限时 FAIL；其余有未知则 GAP；全部测得且满足才 PASS。
 
 旧冻结件缺 semantics 时 `judge` 返回 GAP / semantics-not-frozen，不追认历史阈值通过。可继续核对旧工件；新执行需重新 prepare/freeze，因为驱动源码也属于冻结身份。新报告 evaluationVersion=1 必须包含 coverage/conditions，checker 会重算并拒绝篡改或缺失；旧 summary 保留原口径和检查路径。
 
-当前首次正确条件针对每臂全部计划样本，没有任务子集字段。task-end、无需编辑或仅 write 的任务可能没有可测的首次候选，因而使 formal 条件保持 GAP。完整正式实验前仍须冻结首次候选指标的适用范围；不能事后排除未知，也不能仅据本轮单点条件测试宣布全族正式评测已就绪。
+旧 v1=`per-arm-count-and-per-run-tokens-v1` 继续针对每臂全部任务，缺首次值仍 GAP；不得把 v2 范围塞进 v1。v2 解决预先声明指标范围，所选任务自身未知仍 GAP。probe 可明确 include 为空并把最小数量设 0，首次条件返回 NOT_APPLICABLE、比例为 null；其它检查照常。formal 必须选中至少一项，且完整 13 族要求仍在；配置可冻结不代表全族真实模型已验证。
 
 checker 与执行端共用解释函数，提供工件与报告一致性检查，不是独立统计 oracle。wallMs 仍为包含身份复核、准备、快照与 diff 等开销的现场样本耗时；checker 不独立重建该值，也不重装配 promptHash/ptc，不应把这些字段当已独立核验的模型延迟或公平性证明。
 
