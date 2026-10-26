@@ -1,0 +1,593 @@
+{
+  "reportDate": "2026-10-26",
+  "timezone": "Asia/Shanghai",
+  "maintenanceCommitAtExecution": "fe18815",
+  "scope": "Deterministic installed-host lifecycle only. No real model, billing, benefit or S1/S2 claims.",
+  "realModelRequests": 0,
+  "evidenceRoot": ".scratch/real-model-evaluation/20261026-lifecycle",
+  "environment": {
+    "node": "v24.19.0",
+    "platform": "win32",
+    "osRelease": "10.0.26200",
+    "arch": "x64"
+  },
+  "sourceHashes": {
+    "accounting.mjs": "e33e2ece5c201a0c9fd8da9115964f8917d48371429ddfa2d6956f1da8334552",
+    "analysis.mjs": "433c49a4504be114cc35079d370e9145405964a32a20ecc40778e9b8fe1676af",
+    "counting.mjs": "d63fce96e3e067fa31a9c3a552a5f0d8be746c49c4eb66087f421ceb63a7e247",
+    "driver.mjs": "fcfa72afb9406e05dd1238e01207834b544c5b9e630628c4a09d3c499df8771c",
+    "evidence.mjs": "16868dd7e39a3739e392ab0019aa5120f76d2136e172fa4165daf79915c6319c",
+    "host.mjs": "a6b76882bcf1fe7044efc454d6fbf24b675c09ab4aeadb98652fe1d3a1d0b230",
+    "identity.mjs": "d0dbb5bd2842e64edeeb904b4b9c5c65a4f7a1bfcf4e43d1463bdf9ab25ea24c",
+    "inspect.mjs": "7fedc632b103afcc92f27f38b8613bfd0664819bba4a78a87c203900e64066eb",
+    "lifecycle-smoke.mjs": "d765b662d8bc6a3a27d14afe33847550d706d9bb6b1cb5a06e27bb9741807b00",
+    "prepare.mjs": "d874492a5616fafbda11f73be099582a31e191f550dc478491e5632e0c4628bb",
+    "protocol.mjs": "2345dc0574e340e889b379893ea9cfbbc5fa03b66f1b361f1e9a20e148390bb6",
+    "report.mjs": "853fafb0d476f5677aeabbfc223cac0f0603c4381daa11ffd910c9f9ae4eafdc",
+    "run.mjs": "0a699950b17d47859d475be728bb6de506a1474847c9f3fec9b81826da4eb0b6",
+    "session-tree.mjs": "8e373c3ddc550e9832b4f418d0e548db20ce5792e86791b83cbffe3c3c0c4f71",
+    "smoke.mjs": "35c215b872a3ca37393b2883b4541cd8a01f0cac8211b9da0a426e999bd64ecf",
+    "stimuli.mjs": "1f870a5ce950750b1c3118fab46b119b5fc0155687556d083e8feb5cb3a9ec23",
+    "targets.mjs": "69f5eed2b6f232ea5f0080901b0bb1c134107f98fa2d2668ee5be05e87ec3610"
+  },
+  "sourceMismatches": [],
+  "fixtureSha256": "f5964b89232ed4b25707ee0573ff193b1e274d42e2070e3d381952e0d191cc57",
+  "scenarios": [
+    {
+      "scenario": "fork",
+      "assertions": "PASS",
+      "evaluationStatus": "PASS",
+      "protocolHash": "39671b8d3739af928008f6e3ddbfa62bd0416a6808f33700d8ec70ae95b9c866",
+      "reportSha256": "af1ce58ac32c51e00c6ebfcacfc2a3ffb5cbe654aac67d1249859992217a9e3c",
+      "observationsSha256": "cb9af6f2a93854bfbce04857db5cf22596c03be52cbde0cca34fd498a43315f9",
+      "accounting": {
+        "status": "PASS",
+        "streamRequests": 18,
+        "capturedRequests": 18,
+        "gaps": []
+      },
+      "budget": {
+        "requests": 18,
+        "boundary": "llm/stream",
+        "providerHttpRequests": "unknown",
+        "totalTokens": 36,
+        "knownTokens": 36,
+        "unknown": false
+      },
+      "providerRequests": 18,
+      "requestsAfterCancellation": 0,
+      "settlements": [
+        {
+          "kind": "settled",
+          "states": [
+            {
+              "sessionId": "eval-ade6626e-3697-45e1-9d66-e3c86762481c",
+              "status": "idle"
+            },
+            {
+              "sessionId": "95350b58-c067-4a0d-880d-c0f29f3db6ba",
+              "status": "released"
+            }
+          ]
+        },
+        {
+          "kind": "settled",
+          "states": [
+            {
+              "sessionId": "eval-ea2eb0b5-3014-4d99-a3a7-8e61eab569e0",
+              "status": "idle"
+            },
+            {
+              "sessionId": "7606e661-091c-43f4-a833-8c6dd497edf7",
+              "status": "released"
+            }
+          ]
+        },
+        {
+          "kind": "settled",
+          "states": [
+            {
+              "sessionId": "eval-0137232f-6409-4853-99d6-98d87efcfc08",
+              "status": "idle"
+            },
+            {
+              "sessionId": "0fdc45c2-b4eb-43a8-8754-3cbb3b62bd59",
+              "status": "released"
+            }
+          ]
+        }
+      ],
+      "checkerProblems": [],
+      "runs": [
+        {
+          "arm": "stock-edit",
+          "status": "PASS",
+          "sessionId": "eval-ade6626e-3697-45e1-9d66-e3c86762481c",
+          "finalCorrect": true,
+          "targets": [
+            {
+              "id": "a.txt",
+              "finalCorrect": true,
+              "observedAttempts": 1
+            }
+          ],
+          "sources": [
+            {
+              "id": "eval-ade6626e-3697-45e1-9d66-e3c86762481c",
+              "parentId": null,
+              "inherited": 0,
+              "sha256": "f6f1cfd57f417950c9bb1db29af91064a3512892308b9f721b21a93e5b4c1cd3"
+            },
+            {
+              "id": "95350b58-c067-4a0d-880d-c0f29f3db6ba",
+              "parentId": "eval-ade6626e-3697-45e1-9d66-e3c86762481c",
+              "inherited": 20,
+              "sha256": "4092adc515b68b87df0fd8d6add390cf89533f9e05d63e307efe3c319f7a4adc"
+            }
+          ]
+        },
+        {
+          "arm": "hashline-default",
+          "status": "PASS",
+          "sessionId": "eval-ea2eb0b5-3014-4d99-a3a7-8e61eab569e0",
+          "finalCorrect": true,
+          "targets": [
+            {
+              "id": "a.txt",
+              "finalCorrect": true,
+              "observedAttempts": 1
+            }
+          ],
+          "sources": [
+            {
+              "id": "eval-ea2eb0b5-3014-4d99-a3a7-8e61eab569e0",
+              "parentId": null,
+              "inherited": 0,
+              "sha256": "cd5b50628f1d419c2a27008513067c34d85229a810c37c5fa422dcfc35ee1b1f"
+            },
+            {
+              "id": "7606e661-091c-43f4-a833-8c6dd497edf7",
+              "parentId": "eval-ea2eb0b5-3014-4d99-a3a7-8e61eab569e0",
+              "inherited": 20,
+              "sha256": "3d0b51fd7d9125bd7ccfc29d691f7a936d1fbc3db96b92d4fcc932250100d7a9"
+            }
+          ]
+        },
+        {
+          "arm": "hashline-fallback",
+          "status": "PASS",
+          "sessionId": "eval-0137232f-6409-4853-99d6-98d87efcfc08",
+          "finalCorrect": true,
+          "targets": [
+            {
+              "id": "a.txt",
+              "finalCorrect": true,
+              "observedAttempts": 1
+            }
+          ],
+          "sources": [
+            {
+              "id": "eval-0137232f-6409-4853-99d6-98d87efcfc08",
+              "parentId": null,
+              "inherited": 0,
+              "sha256": "b7ed2ab8290a499cde27d14d58604989b8ff98522db61ce93aab47f0dde5be93"
+            },
+            {
+              "id": "0fdc45c2-b4eb-43a8-8754-3cbb3b62bd59",
+              "parentId": "eval-0137232f-6409-4853-99d6-98d87efcfc08",
+              "inherited": 20,
+              "sha256": "6c1b2ddb6e6c24182893b60e403b3b9568fc2bb32aeaa3f47d14decd0b92aa00"
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "scenario": "cancel-1",
+      "assertions": "PASS",
+      "evaluationStatus": "GAP",
+      "protocolHash": "21361e27850a714845ff98dbc9c259dee47cd64dcfa67f7009b245b1f799fe90",
+      "reportSha256": "e382e71a624e75734cba2fc26161fc6a7ef8e0aee7d82e2f9fa8b6d854cbcf43",
+      "observationsSha256": "e37a1429462531581d7fb65c6e446762f6081d761f96ccc66c99d5293762e094",
+      "accounting": {
+        "status": "GAP",
+        "streamRequests": 4,
+        "capturedRequests": "unknown",
+        "gaps": [
+          "unknown captured request count: eval-fa483bcd-df6f-41a7-a1ee-70be25e97769",
+          "unknown captured request count: 793e67ed-afae-4f86-ab1c-9fa043830d55",
+          "stream/session request count mismatch: eval-fa483bcd-df6f-41a7-a1ee-70be25e97769",
+          "stream/session request count mismatch: 793e67ed-afae-4f86-ab1c-9fa043830d55"
+        ]
+      },
+      "budget": {
+        "requests": 4,
+        "boundary": "llm/stream",
+        "providerHttpRequests": "unknown",
+        "totalTokens": "unknown",
+        "knownTokens": 6,
+        "unknown": true
+      },
+      "providerRequests": 4,
+      "requestsAfterCancellation": 0,
+      "settlements": [
+        {
+          "kind": "settled",
+          "states": [
+            {
+              "sessionId": "eval-fa483bcd-df6f-41a7-a1ee-70be25e97769",
+              "status": "idle"
+            },
+            {
+              "sessionId": "793e67ed-afae-4f86-ab1c-9fa043830d55",
+              "status": "released"
+            }
+          ]
+        }
+      ],
+      "checkerProblems": [],
+      "runs": [
+        {
+          "arm": "hashline-default",
+          "status": "CANCELLED",
+          "sessionId": "eval-fa483bcd-df6f-41a7-a1ee-70be25e97769",
+          "finalCorrect": false,
+          "targets": [
+            {
+              "id": "a.txt",
+              "finalCorrect": true,
+              "observedAttempts": 1
+            },
+            {
+              "id": "b.txt",
+              "finalCorrect": false,
+              "observedAttempts": 0
+            }
+          ],
+          "sources": [
+            {
+              "id": "eval-fa483bcd-df6f-41a7-a1ee-70be25e97769",
+              "parentId": null,
+              "inherited": 0,
+              "sha256": "e997596fb434b9116b5943c34bbc84062c0c8a1a81ec1936a620470f95608f87"
+            },
+            {
+              "id": "793e67ed-afae-4f86-ab1c-9fa043830d55",
+              "parentId": "eval-fa483bcd-df6f-41a7-a1ee-70be25e97769",
+              "inherited": 0,
+              "sha256": "1169f75b57e548ea5ee0b076d407b9d0f1a064664d519873663fccd2ab6738f2"
+            }
+          ]
+        },
+        {
+          "arm": "hashline-fallback",
+          "status": "CANCELLED",
+          "sessionId": null,
+          "finalCorrect": "unknown"
+        },
+        {
+          "arm": "stock-edit",
+          "status": "CANCELLED",
+          "sessionId": null,
+          "finalCorrect": "unknown"
+        }
+      ]
+    },
+    {
+      "scenario": "cancel-2",
+      "assertions": "PASS",
+      "evaluationStatus": "GAP",
+      "protocolHash": "fc5b48cd0a19d4f7a91e35e8b4bbb623cf191ad13b7bd9ff0198e4c098e47066",
+      "reportSha256": "6e31e04f985294db3eb4d86da769f6e28017c00ffd9ffd98f0fdc767c2f3ae62",
+      "observationsSha256": "0359815fdaf897725010a05fa5bd805381a798dc7b73c613d291020032221807",
+      "accounting": {
+        "status": "GAP",
+        "streamRequests": 4,
+        "capturedRequests": "unknown",
+        "gaps": [
+          "unknown captured request count: eval-9b9a38ba-45c2-44d5-8bfa-8efcc1b01b95",
+          "unknown captured request count: c4d136aa-7286-47ed-93c1-d1a0751aa12a",
+          "stream/session request count mismatch: eval-9b9a38ba-45c2-44d5-8bfa-8efcc1b01b95",
+          "stream/session request count mismatch: c4d136aa-7286-47ed-93c1-d1a0751aa12a"
+        ]
+      },
+      "budget": {
+        "requests": 4,
+        "boundary": "llm/stream",
+        "providerHttpRequests": "unknown",
+        "totalTokens": "unknown",
+        "knownTokens": 6,
+        "unknown": true
+      },
+      "providerRequests": 4,
+      "requestsAfterCancellation": 0,
+      "settlements": [
+        {
+          "kind": "settled",
+          "states": [
+            {
+              "sessionId": "eval-9b9a38ba-45c2-44d5-8bfa-8efcc1b01b95",
+              "status": "idle"
+            },
+            {
+              "sessionId": "c4d136aa-7286-47ed-93c1-d1a0751aa12a",
+              "status": "released"
+            }
+          ]
+        }
+      ],
+      "checkerProblems": [],
+      "runs": [
+        {
+          "arm": "hashline-fallback",
+          "status": "CANCELLED",
+          "sessionId": "eval-9b9a38ba-45c2-44d5-8bfa-8efcc1b01b95",
+          "finalCorrect": false,
+          "targets": [
+            {
+              "id": "a.txt",
+              "finalCorrect": true,
+              "observedAttempts": 1
+            },
+            {
+              "id": "b.txt",
+              "finalCorrect": false,
+              "observedAttempts": 0
+            }
+          ],
+          "sources": [
+            {
+              "id": "eval-9b9a38ba-45c2-44d5-8bfa-8efcc1b01b95",
+              "parentId": null,
+              "inherited": 0,
+              "sha256": "b4766bf201db7a25f1fec0a8684b3d400aa229541a7c9f163b5c61a493a5c894"
+            },
+            {
+              "id": "c4d136aa-7286-47ed-93c1-d1a0751aa12a",
+              "parentId": "eval-9b9a38ba-45c2-44d5-8bfa-8efcc1b01b95",
+              "inherited": 0,
+              "sha256": "55b975582763cc3ca17905739196674175b9d5d4b7814ae18ac1685f4fb2a96f"
+            }
+          ]
+        },
+        {
+          "arm": "stock-edit",
+          "status": "CANCELLED",
+          "sessionId": null,
+          "finalCorrect": "unknown"
+        },
+        {
+          "arm": "hashline-default",
+          "status": "CANCELLED",
+          "sessionId": null,
+          "finalCorrect": "unknown"
+        }
+      ]
+    },
+    {
+      "scenario": "cancel-3",
+      "assertions": "PASS",
+      "evaluationStatus": "GAP",
+      "protocolHash": "add344001b7f9a697a0b39688ac5c98fcee09b1cb0486b10da0a3ba10ffdce27",
+      "reportSha256": "8ebaa53991b57417bff2bc7488095542feb74ba904c0be1feb536c15fb00d4d0",
+      "observationsSha256": "6d513aa440f2f0d5d77b773a8beb35499a1d7d58a28673fe2e47e47d716d6cf6",
+      "accounting": {
+        "status": "GAP",
+        "streamRequests": 4,
+        "capturedRequests": "unknown",
+        "gaps": [
+          "unknown captured request count: eval-651af9ed-62df-4791-b092-be9badcaf33a",
+          "unknown captured request count: 1e664191-f458-46c6-9c5f-48259739feb2",
+          "stream/session request count mismatch: eval-651af9ed-62df-4791-b092-be9badcaf33a",
+          "stream/session request count mismatch: 1e664191-f458-46c6-9c5f-48259739feb2"
+        ]
+      },
+      "budget": {
+        "requests": 4,
+        "boundary": "llm/stream",
+        "providerHttpRequests": "unknown",
+        "totalTokens": "unknown",
+        "knownTokens": 6,
+        "unknown": true
+      },
+      "providerRequests": 4,
+      "requestsAfterCancellation": 0,
+      "settlements": [
+        {
+          "kind": "settled",
+          "states": [
+            {
+              "sessionId": "eval-651af9ed-62df-4791-b092-be9badcaf33a",
+              "status": "idle"
+            },
+            {
+              "sessionId": "1e664191-f458-46c6-9c5f-48259739feb2",
+              "status": "released"
+            }
+          ]
+        }
+      ],
+      "checkerProblems": [],
+      "runs": [
+        {
+          "arm": "stock-edit",
+          "status": "CANCELLED",
+          "sessionId": "eval-651af9ed-62df-4791-b092-be9badcaf33a",
+          "finalCorrect": false,
+          "targets": [
+            {
+              "id": "a.txt",
+              "finalCorrect": true,
+              "observedAttempts": 1
+            },
+            {
+              "id": "b.txt",
+              "finalCorrect": false,
+              "observedAttempts": 0
+            }
+          ],
+          "sources": [
+            {
+              "id": "eval-651af9ed-62df-4791-b092-be9badcaf33a",
+              "parentId": null,
+              "inherited": 0,
+              "sha256": "efeecaedcf7a5dc5e41b0001fcc0e06beaf23ce86c28d1b0bcbd85612601a6b5"
+            },
+            {
+              "id": "1e664191-f458-46c6-9c5f-48259739feb2",
+              "parentId": "eval-651af9ed-62df-4791-b092-be9badcaf33a",
+              "inherited": 0,
+              "sha256": "57a9c4ece144206c0af99dc8c3ccd4d7433e602449e73127b053385a53981069"
+            }
+          ]
+        },
+        {
+          "arm": "hashline-default",
+          "status": "CANCELLED",
+          "sessionId": null,
+          "finalCorrect": "unknown"
+        },
+        {
+          "arm": "hashline-fallback",
+          "status": "CANCELLED",
+          "sessionId": null,
+          "finalCorrect": "unknown"
+        }
+      ]
+    }
+  ],
+  "tests": {
+    "passed": 55,
+    "failed": 0,
+    "log": ".scratch/real-model-evaluation/20261026-lifecycle/logs/evaluation-final.log",
+    "logSha256": "218f374f765f0939bde850fdd1b19e97673811a34e13aa91a279ffea7ff4f6b4",
+    "typecheckExitCode": 0
+  },
+  "mutation": {
+    "expectedExitCode": 1,
+    "actualExitCode": 1,
+    "change": "traceSummary includes inherited prefix",
+    "sourceRestored": true,
+    "log": ".scratch/real-model-evaluation/20261026-lifecycle/logs/mutation.log",
+    "logSha256": "c444dba74361e04333db9b4010d25d60f66578f6e12d26f41560065899110362"
+  },
+  "earlierRounds": {
+    "directories": [
+      "lifecycle-01",
+      "lifecycle-02",
+      "lifecycle-03"
+    ],
+    "note": "01/02 FAIL: fixture followup before public idle; 03 earlier bounded PASS. Do not add to final counts."
+  },
+  "ordinarySmoke": {
+    "status": "PASS",
+    "runs": 12,
+    "accounting": {
+      "status": "PASS",
+      "streamRequests": 33,
+      "capturedRequests": 33,
+      "gaps": []
+    },
+    "reportSha256": "7db579ba6402123187e46668400ec383d5fd8e642fa12d3d28f31a2b5d647e6d",
+    "log": ".scratch/real-model-evaluation/20261026-lifecycle/logs/smoke-final.log"
+  },
+  "delivery": {
+    "gates": [
+      {
+        "command": "pnpm build",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm -r check",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:tests",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:unit",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:integration",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:ptc",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:compat",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm check:preset",
+        "exitCode": 0,
+        "note": "exit 0"
+      },
+      {
+        "command": "pnpm test:profile",
+        "exitCode": 0,
+        "note": "exit 0"
+      }
+    ],
+    "verdictCounts": {
+      "PASS": 21,
+      "BLOCKED": 9
+    },
+    "summarySha256": "348ef18a2d1977a9c6b34c1fd60b273f686d668774e0a56d1a976369f4092542"
+  },
+  "remainingGaps": [
+    "Other cancellation timing and external-process agents",
+    "Real provider usage/HTTP retries/cancellation billing and other platforms",
+    "Same-file multiple targets, opaque payload mapping, semantic rework and overlapping candidates",
+    "Other stimuli and automated S2"
+  ],
+  "checker": {
+    "log": ".scratch/real-model-evaluation/20261026-lifecycle/logs/checker-final.json",
+    "logSha256": "a954b5eeb7e2b07ab52200a6d34d317319a7e9d679f4a6d7b2d4f927d106b831",
+    "results": [
+      {
+        "scenario": "fork",
+        "exitCode": 0,
+        "stdout": "report accepted (evidence integrity only); this does not imply model benefit or promotion",
+        "stderr": ""
+      },
+      {
+        "scenario": "cancel-1",
+        "exitCode": 0,
+        "stdout": "report accepted (evidence integrity only); this does not imply model benefit or promotion",
+        "stderr": ""
+      },
+      {
+        "scenario": "cancel-2",
+        "exitCode": 0,
+        "stdout": "report accepted (evidence integrity only); this does not imply model benefit or promotion",
+        "stderr": ""
+      },
+      {
+        "scenario": "cancel-3",
+        "exitCode": 0,
+        "stdout": "report accepted (evidence integrity only); this does not imply model benefit or promotion",
+        "stderr": ""
+      },
+      {
+        "scenario": "ordinary-smoke",
+        "exitCode": 0,
+        "stdout": "report accepted (evidence integrity only); this does not imply model benefit or promotion",
+        "stderr": ""
+      }
+    ],
+    "scope": "Evidence integrity only; cancelled reports remain GAP."
+  },
+  "installedFixtureMatches": true,
+  "isolatedDriversMatch": true
+}

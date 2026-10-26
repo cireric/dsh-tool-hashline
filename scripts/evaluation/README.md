@@ -13,6 +13,14 @@ node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
 
 smoke 只向 `dsh-profile-acceptance` 安装本仓库的固定适配器夹具；不请求网络。它真实装配三臂宿主，执行单点、多文件、真实委派、读后外部漂移四类任务，共 12 个案例，检查 usage、回执、候选/最终快照和报告重算。`fixture:*` 提示仅供脚本夹具路由，不是正式模型任务。夹具已存在但版本不同会拒绝，需用新的隔离交付安装，不热改旧安装。
 
+生命周期验证另用同一固定适配器与现有执行器：
+
+```powershell
+node scripts/evaluation/lifecycle-smoke.mjs <disposable-profile> .scratch/<runId>/lifecycle
+```
+
+该入口在三臂分别验证非空的真实 fork 继承前缀和子会话部分落盘后取消。父回合完成后追加测试提示、等待中的适配器取消均由该测试入口显式编排，不是 formal 任务能力。`lifecycle.json` 保存后续提示边界、实际适配器请求、取消确认及空闲状态；四组协议各自保留原始证据并运行 checker。取消组包含一个实际执行样本及两个未执行 CANCELLED 样本，评测报告预期为 GAP、缺 usage 为 unknown；测试断言通过不把它改成任务 PASS，也不证明真实 Provider 的取消计费。
+
 ## 后续真实模型实验（本轮未执行）
 
 ### 用配置文件选择模型（推荐）

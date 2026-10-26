@@ -42,7 +42,7 @@ batchBoundary 支持 `task-end` 和 `first-edit-program`。后者以首段含 ed
 
 TokenUsage 的 inputTokens 是未缓存输入。总输入优先由权威 totalTokens - outputTokens 得出，同时保留 uncachedInputTokens；不把缓存漏出成本分母。任一请求缺 usage 时保持 unknown；不以字符串长度估 Token。失败、重试和取消保留在报告里；observed edit failures、recovery 和部分任务落盘分别统计，部分落盘不等于 edit 的事务语义。
 
-新执行使用 session-tree 证据：记录 Session 事件、捕获顺序、各自回执及后代元数据；核对 parentSession 与父 subagent/catalog 的 childId / childCreatedAt，要求全部目录子会话都被捕获。调用按 sessionId＋callId 隔离，fork 的 inheritedEventCount 前缀不重复收费；捕获缺失、目录孤儿、重复/倒序位置、子会话未结束均记 GAP。整树任一费用字段不可得则该总量 unknown；保留各 Session 子项。预算中间件仍观察隔离宿主所有 llm/stream 请求。外部进程代理未归并，实际 fork 集成与 provider 取消计费边界仍须真实验证；旧根日志继续按原范围检查。
+新执行使用 session-tree 证据：记录 Session 事件、捕获顺序、各自回执及后代元数据；核对 parentSession 与父 subagent/catalog 的 childId / childCreatedAt，要求全部目录子会话都被捕获。调用按 sessionId＋callId 隔离，fork 的 inheritedEventCount 前缀不重复收费；捕获缺失、目录孤儿、重复/倒序位置、子会话未结束均记 GAP。整树任一费用字段不可得则该总量 unknown；保留各 Session 子项。预算中间件仍观察隔离宿主所有 llm/stream 请求。实际同进程 fork 与子流取消已有[固定 Provider 集成证据](../acceptance/2026-10-26-evaluation-lifecycle.md)；外部进程代理、其它取消时点及真实 provider 取消计费边界仍待验证；旧根日志继续按原范围检查。
 
 Agent 空闲不等于子代理激活清理和完成通知已经结束；完成边界必须使用宿主公开 waitForChildren 后重新等待父代理空闲。每次流量准入记录真实 Session 身份，捕获外请求在调用 provider 前拒绝并留标记。accounting 逐 Session 核对流量与日志模型记录计数；任一缺项/超项/归属不明时整体计量为 GAP，PASS 不能只看局部轨迹或最终文件。checker 独立重算 accounting，不将补数或漏记当作零成本。
 
