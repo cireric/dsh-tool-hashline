@@ -18,7 +18,8 @@
 | fork 与取消生命周期 | [验证计划](plans/2026-10-26-evaluation-lifecycle-plan.md)、[命令](../scripts/evaluation/README.md) | [实际宿主证据](acceptance/2026-10-26-evaluation-lifecycle.md)：非空 fork 去重与子流取消；真实 Provider 计费仍待验证 |
 | apply_patch 文件归属 | [补齐计划](plans/2026-10-26-evaluation-apply-patch-plan.md)、[协议](specs/2026-10-25-real-model-evaluation-protocol.md) | [解析计划取证与失败对照](acceptance/2026-10-26-evaluation-apply-patch.md)：有界映射；创建和换行 FAIL 保留 |
 | 首次指标的冻结范围 | [v2 计划](plans/2026-10-26-evaluation-cohort-plan.md)、[协议](specs/2026-10-25-real-model-evaluation-protocol.md) | [v2 验收](acceptance/2026-10-26-evaluation-cohort.md)：显式纳入/排除任务，保留全任务文件及成本门禁；真实模型仍待验证 |
-| 可复用候选任务集 | [计划](plans/2026-10-26-evaluation-task-suite-plan.md)、[配置生成命令](../scripts/evaluation/README.md) | [验收](acceptance/2026-10-26-evaluation-task-suite.md)：13 族配置、独立 expected、冻结/预检可复用；默认 probe，尚未完整模型执行 |
+| 可复用候选任务集 | [计划](plans/2026-10-26-evaluation-task-suite-plan.md)、[配置生成命令](../scripts/evaluation/README.md) | [验收](acceptance/2026-10-26-evaluation-task-suite.md)：13 族配置、独立 expected、冻结/预检可复用；默认 probe，尚未完整真实模型执行 |
+| 候选任务集宿主执行 | [计划](plans/2026-10-26-evaluation-suite-host-plan.md)、[运行命令](../scripts/evaluation/README.md) | [验收](acceptance/2026-10-26-evaluation-suite-host.md)：39 个固定 Provider 样本、81/81 对账；保留 31 PASS / 6 GAP / 2 FAIL，未执行真实模型；一次性安装已固定传递引擎与同物理实例 |
 | 冻结条件判读与复用 | [判定计划](plans/2026-10-26-evaluation-verdict-plan.md)、[命令](../scripts/evaluation/README.md) | [判定验收](acceptance/2026-10-26-evaluation-verdict.md)：绝对阈值与未知覆盖可查，check/judge 职责分开；真实收益仍待验证 |
 | 块定位能力限制 | [问题调查](background/2026-10-25-hashline-block-locator-assessment.md)、[修复计划](plans/2026-10-25-hashline-block-locator-guidance-fix.md) | [说明与诊断修复验收](acceptance/2026-10-25-hashline-block-locator-fix.md)；不代表实现了块解析器 |
 

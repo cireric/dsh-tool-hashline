@@ -28,3 +28,5 @@
 首次指标的任务范围已按[v2 计划](2026-10-26-evaluation-cohort-plan.md)冻结，见[验收](../acceptance/2026-10-26-evaluation-cohort.md)。排除不影响全任务最终文件、Token、取证与调度检查；历史 v1 不迁移。完整 formal 任务集和真实模型执行仍是后续工作。
 
 随后[候选任务集计划](2026-10-26-evaluation-task-suite-plan.md)补齐可复用的 13 族配置生成、独立 expected 和既有 prepare/预检链路，见[验收](../acceptance/2026-10-26-evaluation-task-suite.md)。默认 probe，不覆盖正式实验参数；完整宿主任务执行、分步/生成器行为证据及真实模型验证仍未完成。
+
+再按[宿主任务集计划](2026-10-26-evaluation-suite-host-plan.md)完成 39 个固定 Provider 样本、连续中间快照与生成器实际调用，[验收](../acceptance/2026-10-26-evaluation-suite-host.md)保留任务 31 PASS / 6 GAP / 2 FAIL，未宣称正式实验通过。一次性安装的 upstream 范围漂移已锁回现有精确锚点并增加同物理引擎检查，未升级上游；真实模型、通用语义检查及可比性审查仍未完成。

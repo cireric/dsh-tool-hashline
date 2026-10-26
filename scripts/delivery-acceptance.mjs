@@ -143,6 +143,16 @@ export const SHIPPED = [
   { directory: 'packages/tool-read', name: '@dsh-tool-hashline/tool-read' },
   { directory: 'packages/tool-edit', name: '@dsh-tool-hashline/tool-edit' },
 ]
+
+/** Freeze upstream transitive ranges to the exact versions declared by our anchors. */
+export function enginePinsFromAnchors(hashlineAnchor, editAnchor) {
+  const pins = {
+    '@hy-sde-org/dsh-hashline': hashlineAnchor?.dependencies?.['@hy-sde-org/dsh-hashline'],
+    '@hy-sde-org/dsh-tool-edit': editAnchor?.dependencies?.['@hy-sde-org/dsh-tool-edit'],
+  }
+  for (const [name, version] of Object.entries(pins)) if (typeof version !== 'string' || !/^\d+\.\d+\.\d+(?:-[0-9A-Za-z.-]+)?$/u.test(version)) throw new Error('exact engine anchor required: ' + name)
+  return pins
+}
 /** The two delivered skills, in report order. */
 export const OPERATIONS_SKILLS = ['ptc-hashline-incident', 'ptc-hashline-upgrade']
 export const OPERATIONS_PROVIDER = 'ptc-hashline-operations'
@@ -276,6 +286,7 @@ export async function installBundle(roots, notes) {
     '@deepseek-ai/dsh-util-code-language': HOST_VERSION,
     '@deepseek-ai/dsh-working-directory': HOST_VERSION,
   }
+  const enginePins = enginePinsFromAnchors(await readJson(path.join(repo, 'packages/hashline/package.json')), await readJson(path.join(repo, 'packages/tool-edit/package.json')))
   await writeFile(path.join(profile, 'package.json'), JSON.stringify({
     name: 'dsh-profile-acceptance',
     private: true,
@@ -312,6 +323,7 @@ export async function installBundle(roots, notes) {
     '',
     'overrides:',
     ...SHIPPED.filter(entry => entry.directory !== '.').map(entry => '  ' + JSON.stringify(entry.name) + ': ' + JSON.stringify(tarballs[entry.name])),
+    ...Object.entries(enginePins).map(([name, version]) => '  ' + JSON.stringify(name) + ': ' + JSON.stringify(version)),
     '',
   ].join('\n'), 'utf8')
   await writeFile(path.join(profile, 'cordis.patch.yml'), '[]\n', 'utf8')
@@ -393,6 +405,11 @@ export async function installBundle(roots, notes) {
   // the same version number is exactly what "version equality is no evidence"
   // forbids reading as delivered.
   const require_ = createRequire(path.join(profile, 'package.json'))
+  const readEngine = realpathSync(createRequire(require_.resolve('@dsh-tool-hashline/tool-read')).resolve('@hy-sde-org/dsh-hashline'))
+  const upstreamEdit = createRequire(require_.resolve('@dsh-tool-hashline/tool-edit')).resolve('@hy-sde-org/dsh-tool-edit')
+  const editEngine = realpathSync(createRequire(upstreamEdit).resolve('@hy-sde-org/dsh-hashline'))
+  if (readEngine !== editEngine) throw new Error('the acceptance profile read/edit resolve different physical hashline engines: ' + readEngine + ' / ' + editEngine)
+  for (const [name, version] of Object.entries(enginePins)) if ((await readJson(require_.resolve(name + '/package.json'))).version !== version) throw new Error('the acceptance profile drifted from engine anchor: ' + name)
   const markerOf = async (specifier, file, marker) => {
     const manifest = realpathSync(require_.resolve(specifier + '/package.json'))
     const body = await readFile(path.join(path.dirname(manifest), file), 'utf8')
@@ -406,6 +423,7 @@ export async function installBundle(roots, notes) {
     throw new Error('the acceptance profile installed an UNPATCHED engine (hashline=' + patched.hashline + ', tool-edit=' + patched.toolEdit + '), so its build is not the one this repository ships')
   }
   notes.push({ id: 'PACK-01', part: 'engine-patches', detail: 'both anchors installed from patches/ + patchedDependencies and carry their marker (hashline=' + patched.hashline + ', tool-edit=' + patched.toolEdit + ')' })
+  notes.push({ id: 'PACK-01', part: 'engine-identity', detail: 'exact upstream pins ' + JSON.stringify(enginePins) + '; shared physical engine ' + readEngine })
   notes.push({ id: 'PACK-01', part: 'resolve', detail: 'bundle root ' + bundleRoot + '; no checkout path in any shipped artifact (patch, personas, skills, operations, watchdog)' })
   return facts
 }

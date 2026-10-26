@@ -21,7 +21,8 @@
 | fork/取消生命周期 | [本轮验收](2026-10-26-evaluation-lifecycle.md)：真实同进程 fork 三臂 18/18 去重对账；子流取消三臂保留部分落盘及后续样本，取消后无新适配器请求，评测结果仍 GAP/unknown。固定 Provider 证明有界生命周期，不证明真实 Provider 取消计费；创建中/工具中等其它取消时点仍缺验证 |
 | apply_patch 目标取证 | [本轮验收](2026-10-26-evaluation-apply-patch.md)：保存实际解析计划并核对同会话调用/模式/文件头集合；无移动载荷可映射，缺计划仍 unknown。73 项定向、最终宿主 18 PASS、对账 45/45；九项门禁 exit 0。早期新路径创建 FS_NOT_OBSERVED 和空文件末尾换行不符各保留 1 FAIL，未修工具契约；不证明模型收益 |
 | 首次指标冻结范围 | [v2 验收](2026-10-26-evaluation-cohort.md)：任务 include/exclude 在执行前冻结，仅影响首次条件；最终文件、Token、调度和全局覆盖仍检查全任务。123 项回归、九种固定 Provider 判读及历史兼容通过；真实模型请求 0，正式任务集未执行 |
-| 可复用候选任务集 | [本轮验收](2026-10-26-evaluation-task-suite.md)：13 族普通配置与独立 expected 可生成，默认 probe；136 项定向、实际 CLI 冻结及无凭据 BLOCKED 预检通过，九项交付门禁 exit 0、21 PASS / 9 BLOCKED。尚无完整任务集的固定 Provider 宿主执行或真实模型实验，不据标签齐全认定 S1 通过 |
+| 可复用候选任务集 | [本轮验收](2026-10-26-evaluation-task-suite.md)：13 族普通配置与独立 expected 可生成，默认 probe；136 项定向、实际 CLI 冻结及无凭据 BLOCKED 预检通过，九项交付门禁 exit 0、21 PASS / 9 BLOCKED。本阶段止于配置/预检；后续完整固定宿主结果见下行，真实模型未执行，不据标签齐全认定 S1 通过 |
+| 候选任务集完整宿主验证 | [后续验收](2026-10-26-evaluation-suite-host.md)：39 样本实际固定 Provider 执行、90 断言通过、81/81 请求对账；实际任务 31 PASS / 6 GAP / 2 FAIL，最终字节 36 正确 / 3 错误，judge=2。连续中间快照与生成器调用已取证，shell 目标仍 unknown。189 回归与九项交付门禁通过、21 PASS / 9 BLOCKED；真实模型请求 0。发现并修正一次性安装的传递 Hashline 版本/物理实例漂移，历史根 marker PASS 不扩大为同引擎证明 |
 | 冻结条件与覆盖统计 | [本轮验收](2026-10-26-evaluation-verdict.md)：v1 明确每臂首次正确数量与逐样本整树 Token 上限，judge 与 check 分开；保留已测/未知分母及可能范围。94 项回归、18 例宿主组、预先冻结 PASS/FAIL/GAP 场景与退出码 0/2/2 已验证；旧语义明确 GAP。完整交付 21 PASS / 9 BLOCKED；不包含真实模型收益或自动 S2 |
 | 平台与安装状态 | 上述 10-25 修复验收为 Windows 隔离安装；macOS/Linux 已配置 CI，报告尚无实跑结果。没有据隔离验收切换日常 profile；早期用户确认重启不代表后续修复已装入或复验 |
 

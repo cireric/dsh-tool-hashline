@@ -5,7 +5,7 @@
 ## 无凭据验证
 
 ```powershell
-pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts
+pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts tests/unit/evaluation-suite-programs.spec.ts tests/unit/delivery-engine-pins.spec.ts
 # 在独立副本构建，然后获得打包安装；保留输出中的一次性 profile 路径。
 pnpm test:delivery --keep --out .scratch/<runId>/delivery
 node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
@@ -51,7 +51,19 @@ node scripts/evaluation/task-suite.mjs .scratch/my-suite/experiment.json
 
 首次范围预先纳入 10 项，排除 satisfied、create、generator，并保留理由。最终文件与成本仍覆盖全部 13 项；strict Hashline 对例外任务可能失败，不能删除失败样本或把预期结果改成其实际结果。长行和快照场景按当前固定 preset 的 2000 字符列上限、4 MiB 快照门槛设计，实际冻结配置改变后应重新审阅任务。
 
-最终字节检查不能证明 consecutive 的中间核验或 generator 的真实调用；这些要求须另审原始轨迹。专用工具变更的目标模式仍可能 unknown/GAP；生成器产物正确不补造 edit 证据。当前并未运行完整任务集的模型执行，验证范围见[任务集验收](../../docs/acceptance/2026-10-26-evaluation-task-suite.md)。
+最终字节检查不能证明 consecutive 的中间核验或 generator 的真实调用；这些要求须另审原始轨迹。专用工具变更的目标模式仍可能 unknown/GAP；生成器产物正确不补造 edit 证据。当前并未运行完整任务集的真实模型执行，验证范围见[任务集验收](../../docs/acceptance/2026-10-26-evaluation-task-suite.md)。
+
+完整候选集的无费用宿主验证使用独立固定 Provider：
+
+```powershell
+node scripts/evaluation/suite-smoke.mjs <fresh-disposable-profile> .scratch/<runId>/suite
+```
+
+该入口只接受一次性 acceptance profile，安装匹配的测试夹具并冻结原 13 类任务与三臂，实际执行 39 样本；任务 prompt、initial 和 expected 没有被夹具标记或输出替换。连续编辑拆为两个 PTC 程序，检查实际中间快照和重读顺序；生成器通过真实平台 shell 工具执行。Provider 程序不导入 expected，也不直接替代工具改文件；用量为固定夹具数据，不代表真实 Token 成本。
+
+`suite-summary.json` 单列测试断言和实际评测结果。脚本 exit 0 表示预先声明的失败/未知也按预期保留，**不表示 39 样本全部 PASS**。本轮实际为 31 PASS / 6 GAP / 2 FAIL，最终字节 36 正确 / 3 错误，judge=2；长行和生成器的 shell 调用仍导致目标归属 unknown。原始轨迹不包含 shell 的完整 canonical 数值退出码，固定程序现场检查该值并在非零时抛错，不能将其扩大为通用 shell 退出码审计。
+
+新一次性交付安装器已从既有锚点固定两个 upstream overrides，并检查安装后的实际版本、补丁和同物理 Hashline；先前安装可把 tool-edit 的传递范围解析成较新副本而被评测预检阻断。不要移除 identity 检查或手改 node_modules 消除报错，详见[宿主任务集验收](../../docs/acceptance/2026-10-26-evaluation-suite-host.md)。真实模型正式实验仍需另行授权和设计审查。
 
 ### 用配置文件选择模型（推荐）
 

@@ -1,5 +1,7 @@
 /** Type surface for the delivery-acceptance harness (scripts/delivery-acceptance*.mjs). */
 
+export function enginePinsFromAnchors(hashlineAnchor: { dependencies?: Record<string, string> }, editAnchor: { dependencies?: Record<string, string> }): Record<string, string>
+
 export interface AcceptanceRow {
   id: string
   part: string
