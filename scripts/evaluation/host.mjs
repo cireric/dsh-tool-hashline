@@ -10,6 +10,7 @@ import { treeState, verifyTree } from './evidence.mjs'
 import { collectSessions, writeSessionEvidence } from './session-tree.mjs'
 import { createStimulusController } from './stimuli.mjs'
 import { installedPatch, requestFiles } from './targets.mjs'
+import { captureParsedPlan } from './apply-patch-targets.mjs'
 
 export async function openHost(profile, directory, protocol) {
   const req = createRequire(path.join(profile, 'package.json'))
@@ -89,7 +90,7 @@ export async function openHost(profile, directory, protocol) {
           editedRoots.delete(key)
         }, { global: true })
         const off = ctx.on('tool-edit/policy-receipt', r => {
-          collector.sessions.get(r.exec?.agent?.id)?.receipts.push({ callId: r.exec.callId, mode: r.mode, result: r.result, code: r.code, retry: r.retry, declaredFallbacks: r.decision?.fallbacks?.map(f => ['snapshot-limit', 'window-limit', 'user-override'].includes(f.reason) ? f.reason : 'unknown') ?? [] })
+          collector.sessions.get(r.exec?.agent?.id)?.receipts.push({ callId: r.exec.callId, mode: r.mode, result: r.result, code: r.code, retry: r.retry, declaredFallbacks: r.decision?.fallbacks?.map(f => ['snapshot-limit', 'window-limit', 'user-override'].includes(f.reason) ? f.reason : 'unknown') ?? [], parsedPlan: captureParsedPlan(r) })
         }, { global: true })
         const cancel = () => collector.cancel()
         signal.addEventListener('abort', cancel, { once: true })

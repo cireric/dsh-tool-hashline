@@ -20,3 +20,5 @@
 2026-10-26 后续：[逐目标/会话树/刺激阶段](2026-10-25-evaluation-targets-lineage-stimuli-plan.md)已完成有界离线实现与[验收](../acceptance/2026-10-26-evaluation-next-stage.md)。前文列出的初版缺口现按每文件单目标、同进程后代会话、成功读后外部写入三个范围关闭；请求边界通过官方子代理完成等待与逐 Session 对账校验。其它载荷、同文件多目标、真实 provider 等仍保留 GAP，不把初版缺口或新阶段结果扩大为 S1/S2。
 
 同日[生命周期计划](2026-10-26-evaluation-lifecycle-plan.md)补齐实际同进程 fork 去重与子流取消的固定 Provider 端到端证据，见[验收](../acceptance/2026-10-26-evaluation-lifecycle.md)。正式执行器未变；创建中/工具中取消、外部进程及真实 provider 计费仍待验证。
+
+随后[apply_patch 计划](2026-10-26-evaluation-apply-patch-plan.md)补齐无移动、完整受管解析回执的文件归属，见[验收](../acceptance/2026-10-26-evaluation-apply-patch.md)。73 项回归及最终 18 例宿主组通过；首轮新建和空文件换行不符仍各保留 FAIL，未据此扩大工具能力或真实模型结论。

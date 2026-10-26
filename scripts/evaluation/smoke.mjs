@@ -1,5 +1,6 @@
 /** Repeatable, zero-network wiring test over an installed disposable host. */
 import fs from 'node:fs'
+import assert from 'node:assert/strict'
 import path from 'node:path'
 import { fileURLToPath } from 'node:url'
 import { captureTools } from './host.mjs'
@@ -31,12 +32,33 @@ try {
       { id: 'multi', family: 'multi-site', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n', 'b.txt': 'x\n' }, expected: { 'a.txt': 'y\n', 'b.txt': 'z\n' }, prompt: 'fixture:multi' },
       { id: 'child', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'fixture:delegate' },
       { id: 'drift', family: 'external-change', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'fixture:drift', stimuli: [{ id: 'competitor', path: 'a.txt', afterRead: 1, before: 'x\n', after: 'competitor\n' }] },
-    ].map(task => ({ ...task, targets: Object.keys(task.expected).map(file => ({ id: file, path: file, goal: 'reach the independent expected bytes', class: 'known-applicable' })) })),
+      { id: 'apply-authorized', family: 'user-override', class: 'declared-exception', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n', 'b.txt': 'x\n' }, expected: { 'a.txt': 'y\n', 'b.txt': 'z\n' }, prompt: 'fixture:apply-authorized. For the fallback arm, use apply_patch to change a.txt x to y and b.txt x to z, keeping final newlines.' },
+      { id: 'apply-recover', family: 'single-point', class: 'known-applicable', batchBoundary: 'first-edit-program', initial: { 'a.txt': 'x\n' }, expected: { 'a.txt': 'y\n' }, prompt: 'fixture:apply-recover' },
+    ].map(task => ({ ...task, targets: Object.keys(task.expected).map(file => ({ id: file, path: file, goal: 'reach the independent expected bytes', class: task.class })) })),
   })
   const report = await runEvaluation(protocol, { profile, out, execute: true })
   if (!report.runs) throw new Error('fixture preflight blocked: ' + report.gaps.join('; '))
   fs.writeFileSync(path.join(out, 'frozen.json'), JSON.stringify(protocol, null, 2) + '\n', { flag: 'wx' })
   const problems = checkRunReport(protocol, report, out)
+  for (const run of report.runs.filter(r => r.arm === 'hashline-fallback' && r.taskId.startsWith('apply-'))) {
+    assert.deepEqual(run.targetEvaluation.unassigned, [])
+    assert.equal(run.targetEvaluation.targets[0].firstAttempt, 'non-hashline')
+    assert(!JSON.stringify(run.trace).includes('parsedPlan'))
+    const receipts = JSON.parse(fs.readFileSync(path.join(out, run.sessionId + '.receipts.json'), 'utf8'))
+    assert(receipts.some(r => r.parsedPlan?.mode === 'apply_patch'))
+    if (run.taskId === 'apply-authorized') {
+      assert.equal(run.targetEvaluation.targets.length, 2)
+      assert(run.targetEvaluation.targets.every(t => t.mode === 'non-hashline' && t.finalCorrect === true))
+      assert(receipts.some(r => r.mode === 'apply_patch' && r.result === 'completed' && r.declaredFallbacks.length === 2))
+    } else {
+      assert(receipts.some(r => r.mode === 'apply_patch' && r.result === 'refused' && r.code === 'EDIT_POLICY_FALLBACK_REQUIRED'))
+      assert.equal(run.targetEvaluation.targets[0].observedAttempts, 2)
+      assert.equal(run.targetEvaluation.targets[0].observedFailures, 1)
+      assert.equal(run.targetEvaluation.targets[0].observedRecovery, true)
+      assert.equal(run.trace.firstCandidateCorrect, false)
+      assert.equal(run.finalCorrect, true)
+    }
+  }
   console.log(JSON.stringify({ status: report.status, realModelRequests: 0, runs: report.runs.map(r => ({ arm: r.arm, status: r.status })), problems }, null, 2))
   process.exitCode = report.status === 'PASS' && !problems.length ? 0 : 1
 } finally {

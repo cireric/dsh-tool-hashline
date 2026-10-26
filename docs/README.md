@@ -16,6 +16,7 @@
 | 可复现评测基础设施 | [协议补充](specs/2026-10-25-real-model-evaluation-protocol.md)、[实施计划](plans/2026-10-25-real-model-evaluation-implementation-plan.md)、[命令](../scripts/evaluation/README.md) | [差距与根因、离线验收](acceptance/2026-10-25-real-model-evaluation.md)；未执行新的真实模型请求 |
 | 逐目标、子会话与外部刺激 | [阶段计划](plans/2026-10-25-evaluation-targets-lineage-stimuli-plan.md)、[协议补充](specs/2026-10-25-real-model-evaluation-protocol.md) | [阶段验收](acceptance/2026-10-26-evaluation-next-stage.md)：固定适配器证明基础设施，不证明真实模型收益 |
 | fork 与取消生命周期 | [验证计划](plans/2026-10-26-evaluation-lifecycle-plan.md)、[命令](../scripts/evaluation/README.md) | [实际宿主证据](acceptance/2026-10-26-evaluation-lifecycle.md)：非空 fork 去重与子流取消；真实 Provider 计费仍待验证 |
+| apply_patch 文件归属 | [补齐计划](plans/2026-10-26-evaluation-apply-patch-plan.md)、[协议](specs/2026-10-25-real-model-evaluation-protocol.md) | [解析计划取证与失败对照](acceptance/2026-10-26-evaluation-apply-patch.md)：有界映射；创建和换行 FAIL 保留 |
 | 块定位能力限制 | [问题调查](background/2026-10-25-hashline-block-locator-assessment.md)、[修复计划](plans/2026-10-25-hashline-block-locator-guidance-fix.md) | [说明与诊断修复验收](acceptance/2026-10-25-hashline-block-locator-fix.md)；不代表实现了块解析器 |
 
 ## 背景与维护规则

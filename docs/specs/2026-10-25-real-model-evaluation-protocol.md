@@ -11,7 +11,7 @@
 | id / createdAt | 本轮身份、编写时间 |
 | kind | `probe` 或 `formal`；probe 的非空 limits 明示不证明的事项 |
 | comparison | distinct `stock-edit` / `hashline-default` / `hashline-fallback`，至少两臂 |
-| dependencies | inspect identity 采集的 packages、patches、resources、inputs、profileInputs、driverInputs、environment、readEngine / editEngine；包含解析路径、版本、运行文件摘要、补丁实际标记和源补丁摘要 |
+| dependencies | inspect identity 采集的 packages、patches、resources、inputs、profileInputs、driverInputs、environment、readEngine / editEngine；包含解析路径、版本、运行文件摘要、补丁实际标记和源补丁摘要。inputs 同时冻结评测复用的本地 default-edit-policy/user-source 辅助模块 |
 | tools | presetHash、每臂派生配置摘要 arms、providerPlugin、无字面凭据的 providerConfig、credentialEnv（仅变量名） |
 | model | 非空 provider / model；parameters 仅接受当前 AgentOptions 支持的 reasoningEffort / maxTokens。temperature 等未支持字段拒绝，不静默忽略 |
 | samples | 正整数 repetitions / seed |
@@ -30,7 +30,11 @@ initial 是相对文件名到 UTF-8 内容的对象；允许空对象用于创�
 
 class 使用 known-applicable / declared-exception / no-change-needed / applicability-unknown，任务 class 仍只是整组注释。可选 targets 数组以 id / path / goal / class 冻结每个“文件＋修改目标”；当前每文件只允许一个目标，且覆盖全部 expected 中的文件变更。不按模型自述补目标、不删除未尝试/失败/取消目标；未声明时采用率 unknown。路径还须排除跨平台非法字符、Windows 设备名和尾随点/空格。
 
-工具目标从原始参数和会话有效目录解析：Hashline 复用实际安装引擎的公开 Patch.parse，包含 MV 源/目标；replace / patch 使用明确路径。没有能力证明具体目标的 apply_patch、shell 或未归属变更保持 unknown / GAP。首选载荷与选定路由冲突时也不虚构精确选择。逐目标最终正确用独立 expected 字节判断；正常首读、编辑前额外读取、失败后读取、成功后读取及并发/未知读取分列，这些是观察事实，不自动证明读取意图或语义返工。
+工具目标从原始参数和会话有效目录解析：Hashline 复用实际安装引擎的公开 Patch.parse，包含 MV 源/目标；replace / patch 使用明确路径。无移动的受管 apply_patch 复用上游解析后进入策略 decision.targets 的计划：本地回执保存 parsedPlan，交叉核对版本、同 Session 调用/根调用、请求/选定模式及现有 requestTargets 文件头集合，并约束在任务目录内。文件头单独出现不证明解析成功；早期拒绝无计划、集合不一致或任一重试计划缺失均 unknown。现有计划不含 rename 目的端，含 Move to 一律 unknown；shell、其它专用工具及未归属变更仍 unknown / GAP。
+
+parsedPlan 仅保存调用、模式和路径/操作元数据，不复制正文，保留在本地原始回执 sidecar；报告 trace 不导出该字段。checker 重读原始回执重算目标，不能靠报告自己补计划。解析计划既不证明调用执行成功，也不证明所有文件落盘；已失败/拒绝的模式保持 unknown，独立最终字节仍是正确性依据。旧回执没有此字段时不补造。
+
+首选载荷与选定路由冲突时也不虚构精确选择。逐目标最终正确用独立 expected 字节判断；正常首读、编辑前额外读取、失败后读取、成功后读取及并发/未知读取分列，这些是观察事实，不自动证明读取意图或语义返工。
 
 batchBoundary 支持 `task-end` 和 `first-edit-program`。后者以首段含 edit 的 run_code 开始首候选，同程序可包含一组正常操作；程序结束或任何内层 edit 失败时立即保存文件树 checkpoint，失败后的继续编辑是新候选，即使模型在同一程序中 catch 并修复。每批有唯一 id、sessionId、边界调用、attempt 和 retryOf；并行重叠程序无法隔离候选时为 GAP。旧证据缺少同程序失败/恢复间快照时不得沿用“首次正确”。额外 evaluator 快照 I/O 计入墙钟，不伪装成模型工具调用。
 

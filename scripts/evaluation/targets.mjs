@@ -4,6 +4,7 @@ import { createRequire } from 'node:module'
 import { readFileSync } from 'node:fs'
 import { sha256 } from './stimuli.mjs'
 import { adoption } from './counting.mjs'
+import { parsedPlanFiles } from './apply-patch-targets.mjs'
 
 export function installedPatch(protocol) {
   const engine = protocol.dependencies.packages['@hy-sde-org/dsh-hashline']
@@ -11,7 +12,7 @@ export function installedPatch(protocol) {
   return createRequire(import.meta.url)(engine.entry).Patch
 }
 
-export function requestFiles(name, args, cwd, root, Patch) {
+export function requestFiles(name, args, cwd, root, Patch, call) {
   try {
     if (typeof args === 'string') args = JSON.parse(args)
     const explicit = args?.file_path ?? args?.path
@@ -21,6 +22,10 @@ export function requestFiles(name, args, cwd, root, Patch) {
       if ([args?.old_string !== undefined, args?.edits !== undefined, args?.input !== undefined].filter(Boolean).length !== 1) return 'unknown'
       if (args?.old_string !== undefined) files = [explicit]
       else if (Array.isArray(args?.edits)) files = [explicit, ...args.edits.map(e => e.rename).filter(Boolean)]
+      else if (call?.selectedMode === 'apply_patch') {
+        files = parsedPlanFiles(args, call, cwd)
+        if (files === 'unknown') return 'unknown'
+      }
       else if (typeof args?.input === 'string' && Patch) files = Patch.parse(args.input, { cwd, path: explicit }).sections.flatMap(s => [s.path, ...(s.fileOp?.kind === 'move' ? [s.fileOp.dest] : [])])
       else return 'unknown'
     } else return 'unknown'
@@ -52,7 +57,7 @@ export function targetObservations(trace, sources, graph, Patch) {
         if (['bash', 'pwsh'].includes(call.name)) unassigned.push({ sessionId: source.id, callId: call.id, reason: 'shell-side-effects-unknown' })
         continue
       }
-      const files = requestFiles(call.name, event.data?.arguments, cwd, root, Patch)
+      const files = requestFiles(call.name, event.data?.arguments, cwd, root, Patch, { ...call, receipts: source.receipts.filter(r => r.callId === call.id) })
       if (files === 'unknown') { if (call.name !== 'read') unassigned.push({ sessionId: source.id, callId: call.id, reason: 'unresolved-target' }); continue }
       for (const file of files) observations.push({ file, call, order: positions.get(source.id + ':' + event.seq) })
     }

@@ -60,7 +60,7 @@ export function captureIdentity(profile, providerPlugin) {
   const bundle = dirname(req.resolve('dsh-tool-hashline/package.json'))
   const files = ['preset.patch.yml', 'intent-gate-watchdog.mjs', 'personas/orchestrator.md', 'policy/default-edit-policy.mjs']
   const resources = Object.fromEntries(files.map(file => [file, sha256File(join(bundle, 'presets/ptc-hashline', file))]))
-  const inputs = Object.fromEntries(['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch', 'patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch'].map(file => [file, sha256File(join(repository, file))]))
+  const inputs = Object.fromEntries(['pnpm-lock.yaml', 'pnpm-workspace.yaml', 'patches/@hy-sde-org__dsh-hashline@0.2.1-alpha.4.patch', 'patches/@hy-sde-org__dsh-tool-edit@0.2.1-alpha.4.patch', 'presets/ptc-hashline/policy/default-edit-policy.mjs', 'presets/ptc-hashline/policy/user-source.mjs'].map(file => [file, sha256File(join(repository, file))]))
   const profileInputs = Object.fromEntries(['package.json', 'cordis.patch.yml', 'pnpm-lock.yaml'].map(file => [file, existsSync(join(profile, file)) ? sha256File(join(profile, file)) : 'absent']))
   const driverInputs = Object.fromEntries(readdirSync(join(repository, 'scripts/evaluation')).filter(f => f.endsWith('.mjs')).map(file => [file, sha256File(join(repository, 'scripts/evaluation', file))]))
   const engine = entry => realpathSync(createRequire(entry).resolve('@hy-sde-org/dsh-hashline'))

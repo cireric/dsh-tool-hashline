@@ -55,7 +55,8 @@ export function traceSummary(records, { receipts = [], arm, complete = true, seq
     if (call.layer === 'inner' && !calls.has('outer:' + call.rootCallId)) gaps.push('missing outer call: ' + key)
     if (call.name === 'edit') {
       const rs = receipts.filter(r => r.callId === call.id)
-      call.receipts = rs
+      // Parsed plan paths remain in restricted sidecars, not the public report.
+      call.receipts = rs.map(r => Object.fromEntries(Object.entries(r).filter(([field]) => field !== 'parsedPlan')))
       call.selectedMode = rs.at(-1)?.mode ?? 'unknown'
       call.actualMode = rs.find(r => r.result === 'completed')?.mode ?? (arm === 'stock-edit' && call.isError === false ? 'replace' : 'unknown')
       call.execution = rs.at(-1)?.result === 'refused' ? 'refused' : call.isError === false ? 'completed' : 'unknown'
