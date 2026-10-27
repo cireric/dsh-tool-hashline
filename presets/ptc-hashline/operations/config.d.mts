@@ -30,7 +30,14 @@ export function saveConfig(options: {
   directory: string
   maintenanceRepository?: string
   evidenceDirectory?: string
+  dshCheckout?: string
   create?: boolean
+}): Promise<DescribedConfig>
+
+export function saveSettings(options: {
+  directory: string
+  namespace: string
+  values: Record<string, unknown>
 }): Promise<DescribedConfig>
 
 export function describeConfig(directory: string): Promise<DescribedConfig>

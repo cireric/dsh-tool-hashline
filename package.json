@@ -20,6 +20,7 @@
     "check:tests": "tsc -p tsconfig.tests.json",
     "install:profile": "node scripts/install-profile.mjs",
     "test:delivery": "node scripts/delivery-acceptance-cli.mjs",
+    "sync:check": "node scripts/sync-check.mjs",
     "test:host-policy": "node scripts/test-default-edit-host.mjs",
     "eval:freeze": "node scripts/evaluation/driver.mjs freeze",
     "eval:check": "node scripts/evaluation/driver.mjs check"

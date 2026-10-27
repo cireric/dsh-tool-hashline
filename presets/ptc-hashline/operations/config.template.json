@@ -1,0 +1,7 @@
+{
+  "maintenanceRepository": "<绝对路径：本仓库工作树>",
+  "evidenceDirectory": "<绝对路径：本地证据目录，检查写在其下 sync/<checkId>/>",
+  "sync": {
+    "dshCheckout": "<绝对路径：本机 DSH 源码目录，可指向用户维护的链接>"
+  }
+}

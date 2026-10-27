@@ -8,8 +8,11 @@
 
 ## 按主题阅读
 
+上游同步交付后的审查问题及修复验证见[审查修复验收](acceptance/2026-10-27-upstream-sync-review-fixes.md)，各轮原始验收继续保留。
+
 | 主题 | 需求与决策 | 实施与证据 |
 |---|---|---|
+| PTC 与上游同步 | [需求规格](specs/2026-10-27-upstream-sync-requirements.md)、[早期技术提案](plans/2026-10-27-upstream-sync-plan.md) | [票据 01 本机来源检查](acceptance/2026-10-27-upstream-sync-check-01.md)：公开手动入口、来源优先级、来源身份与本项目基线；[票据 02 PTC 变化检查](acceptance/2026-10-27-upstream-sync-check-02.md)：75 个逐对象检查点、公共差异记录与保留依据；[票据 03 stock read 对照](acceptance/2026-10-27-upstream-sync-check-03.md)：14 个检查点、上限按值比较、已有关联差异带负向探针；[票据 04 引擎发布评估](acceptance/2026-10-27-upstream-sync-check-04.md)：已发布版本全量枚举按语义版本分渠道、补丁与组合只到待验证、部分来源与超时如实记录；[票据 05 重复检查与审阅决定](acceptance/2026-10-27-upstream-sync-check-05.md)：跨轮分类、决定格式与校验、维护者录入与复查操作；[票据 06 真实来源验收与交接](acceptance/2026-10-27-upstream-sync-check-06.md)：真实本机 DSH 与真实发布源四轮运行、SYNC-01～10 PASS、SYNC-11 Windows PASS 且 macOS/Linux 保留 GAP、跟进项交接路径。四个区域在 Windows 实跑；候选包内容、macOS/Linux 实跑与目标切换仍为 GAP |
 | 收口与按需维护 | [收口计划](plans/2026-10-26-project-closeout-plan.md) | [收口记录](acceptance/2026-10-26-project-closeout.md)、[报告归档](evidence/tetris-ab/README.md)；日常推荐 PTC，Hashline 可选，未自动切换配置 |
 | PTC、read/tag/edit、窗口与 seen | [基础规格 v3](specs/2026-10-22-ptc-hashline-requirements-spec.md)、[ADR-0001](adr/0001-inherit-bounded-seen-guard.md)、[ADR-0002](adr/0002-own-ptc-gate-assets.md) | [初期追溯](acceptance/2026-10-23-acceptance-traceability.md)、[运行修复](acceptance/2026-10-23-runtime-fix-acceptance.md) |
 | cwd、MV、BOM、快照次序 | [ADR-0003](adr/0003-effective-working-directory.md)、[0004](adr/0004-mv-create-intent-and-snapshot-order.md)、[0005](adr/0005-bom-preserving-hashline-read.md) | [MV 验收](acceptance/2026-10-23-mv-observation-acceptance.md)、[BOM 验收](acceptance/2026-10-23-bom-and-snapshot-repair-acceptance.md)、[兼容矩阵](../tests/compat/README.md) |

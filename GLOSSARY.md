@@ -4,6 +4,10 @@
 
 ## Language
 
+**上游同步**:
+对 PTC 通用能力、hashline/tool-edit 与自有 read 所参照的上游能力持续进行变化发现、影响判断、按需适配和验证的维护过程；允许保留有明确理由的 Hashline 差异。
+_Avoid_: 全量功能追平、自动升级、目标切换（仅是获准应用变更的动作）
+
 **tag**:
 整篇归一化文本的 4 位大写十六进制摘要，用于引用一版内容；它本身不证明当前会话仍保留该内容的 seen 记录。
 _Avoid_: hash、version、snapshot id

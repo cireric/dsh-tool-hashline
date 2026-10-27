@@ -70,7 +70,7 @@ export const UPGRADE_SUBCOMMANDS = ['assess', 'propose', 'consent', 'validate', 
  */
 export const FLAG_ALLOWLIST = {
   context: ['session', 'target-session', 'target-cwd', 'cwd', 'preset'],
-  config: ['set-maintenance-repo', 'set-evidence-dir', 'create'],
+  config: ['set-maintenance-repo', 'set-evidence-dir', 'set-dsh-checkout', 'create'],
   baseline: ['session', 'target-session', 'target-cwd', 'cwd', 'preset'],
   incident: ['session', 'target-session', 'target-cwd', 'cwd', 'seq-min', 'seq-max', 'now', 'feature', 'user-report', 'user-evidence', 'preset'],
   'upgrade assess': ['sources', 'now', 'target', 'preset'],
@@ -535,16 +535,22 @@ export async function run(argv, environment = { env: {} }) {
       ...typeof flags['set-maintenance-repo'] === 'string' ? { maintenanceRepository: flags['set-maintenance-repo'] } : {},
       ...typeof flags['set-evidence-dir'] === 'string' ? { evidenceDirectory: flags['set-evidence-dir'] } : {},
     }
-    if (Object.keys(assignments).length === 0) {
+    // The sync check keeps its ONE setting (the DSH source path) in this same
+    // file, under its own namespace: one store and one writer, so a maintainer
+    // never has to learn a second configuration mechanism.
+    const checkoutAssignment = flags['set-dsh-checkout']
+    if (checkoutAssignment === true) throw new UsageError('--set-dsh-checkout needs an absolute path')
+    if (Object.keys(assignments).length === 0 && checkoutAssignment === undefined) {
       const described = await describeConfig(facts.stateDir)
       return { code: EXIT.ok, value: { command: 'config', stateDirectory: facts.stateDir, ...described } }
     }
-    const saved = await saveConfig({
+    const described = await saveConfig({
       directory: facts.stateDir,
       ...assignments,
+      ...typeof checkoutAssignment === 'string' ? { dshCheckout: checkoutAssignment } : {},
       create: flags.create === true,
     })
-    return { code: EXIT.ok, value: { command: 'config', stateDirectory: facts.stateDir, ...saved } }
+    return { code: EXIT.ok, value: { command: 'config', stateDirectory: facts.stateDir, ...described } }
   }
   if (command === 'baseline') {
     const described = await describeConfig(facts.stateDir)

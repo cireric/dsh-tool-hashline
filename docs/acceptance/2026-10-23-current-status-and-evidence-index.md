@@ -1,6 +1,6 @@
 # 当前验收状态与证据索引
 
-更新日期：2026-10-26。本文汇总已有记录，文件名保留最初建档日期。本轮补充离线实现与用户授权的真实 S0 首轮，见本表；新一轮 S0 已完整执行 9 项，整体 FAIL，未启动 S1；原超时轮保留 GAP。历史报告保留各轮结果，以下计数不得合并为同一次执行。
+更新日期：2026-10-27。本文汇总已有记录，文件名保留最初建档日期。真实 S0 第二轮已完整执行 9 项，整体 FAIL，未启动 S1；原超时轮保留 GAP。PTC 与上游同步的六张票据全部交付并在 Windows 实跑：真实来源与真实发布源完成完整检查、重复检查与部分失败边界，四区域共 118 个检查点、43 条差异逐项处置，macOS/Linux 与候选包内容保留 GAP（见[票据 06](2026-10-27-upstream-sync-check-06.md)）。历史报告保留各轮结果，以下计数不得合并为同一次执行。
 
 **当前安排：本轮评测按用户确认的[阶段决策](2026-10-26-evaluation-stage-decision.md)收尾，停止扩样并转为按需维护。** 完整 S0 已执行但 FAIL，后续离线审计完成；S1/S2 延期未执行，不计作完成或通过。日常推荐 PTC、Hashline 手动可选及暂停默认推广不变；原 FAIL/GAP/BLOCKED 与历史证据保留。
 
@@ -8,6 +8,11 @@
 
 | 主题 | 当前依据与证明范围 |
 |---|---|
+| 上游同步审查修复 | [后续修复验收](2026-10-27-upstream-sync-review-fixes.md)：5 项意见均 ACCEPT；单侧插件绑定完整配置、read token 差异绑定实际内容，配置先校验后统一写入，报告区分发布来源，PTC 测试不再意外联网。新增 7 项红转绿，定向 107 PASS；隔离副本九项门禁 exit 0，打包宿主 21 PASS / 9 BLOCKED；修复后真实只读冒烟 complete。旧决定内容身份变化需复查，不回写历史结果 |
+| PTC 与上游同步 · 引擎发布评估 | [正式规格](../specs/2026-10-27-upstream-sync-requirements.md)的 SYNC-05/SYNC-07 要求枚举已发布版本、区分稳定与预发布、给出更新依据并如实记录外部查询失败。[票据 04](2026-10-27-upstream-sync-check-04.md)在 Windows 实跑：两个引擎包全量枚举后按语义版本分渠道（真实来源显示两包均未发布正式版，dist-tag 的 latest 指向预发布，故不能取 latest 充当答案），补丁 7 项与组合影响只到 pending-verification，单个引擎查询失败或超时记 BLOCKED 且不复用上一轮结果；一次真实只读查询得整体 complete、exit 0 |
+| PTC 与上游同步 · 重复检查与审阅决定 | [正式规格](../specs/2026-10-27-upstream-sync-requirements.md)的 SYNC-06 要求区分首次 / 无新增 / 已知 / 新增 / 旧决定需复查，并让决定只绑定已审阅的内容身份。[票据 05](2026-10-27-upstream-sync-check-05.md)在 Windows 实跑两轮：首轮 43 条新增；写入 1 条 keep 决定后次轮 no-new-changes（已知 1、未变化未决定 42），决定记录整份生效或整份无效，历史缺失 / 读不出 / 格式不支持分别报告。 |
+| PTC 与上游同步 · 真实来源验收与交接 | [正式规格](../specs/2026-10-27-upstream-sync-requirements.md)的 SYNC-09/SYNC-10/SYNC-11 要求 Windows 真实来源完整检查、可核验重复运行、可交接跟进项与三平台自动化。[票据 06](2026-10-27-upstream-sync-check-06.md)在真实本机 DSH（0.2.1-rc.2 @ 687f282，工作树 clean）与真实 npm 发布源上跑了四轮：首轮 complete（18/75/14/11 检查点、43 条差异：保留 24 / 待分析 18 / 不适用 1、缺口 0）、重复轮 no-new-changes、带 1 条决定轮 known 1、部分失败轮 engines BLOCKED 而本地三区域照常；检查前后来源树、依赖、补丁、profile 与链接均未改变。SYNC-01～10 PASS，SYNC-11 Windows PASS 且 macOS/Linux 保留 GAP |
+| PTC 与上游同步需求 | [正式规格](../specs/2026-10-27-upstream-sync-requirements.md)记录手动检查、来源身份、差异复查和 11 项验收场景。[票据 01](2026-10-27-upstream-sync-check-01.md)交付公开入口 pnpm sync:check、三层来源优先级与来源/基线身份；[票据 02](2026-10-27-upstream-sync-check-02.md)交付 ptc 区域逐对象比较（75 检查点 / 28 差异，其中 3 条指向本项目声明的 backgroundMode 在所选来源未满足）；[票据 03](2026-10-27-upstream-sync-check-03.md)交付 stock read 对照（14 检查点 / 5 记录：三处上限按值比较均相同、4 条已有关联差异带依据、图片工具记不适用）；[票据 04](2026-10-27-upstream-sync-check-04.md)交付引擎发布评估（版本全量枚举、渠道分离、补丁与组合待验证）；[票据 05](2026-10-27-upstream-sync-check-05.md)交付跨轮比较与决定记录；[票据 06](2026-10-27-upstream-sync-check-06.md)完成真实来源验收与交接（四轮、SYNC-01～10 PASS、SYNC-11 Windows PASS + macOS/Linux GAP），整体检查现可在真实来源上跑成 complete，报告不再标不完整 |
 | 本轮阶段决策 | [决策记录](2026-10-26-evaluation-stage-decision.md)：接受 S0 失败并停止扩样；已交付实现与审计保留复用，S1/S2 延期未执行。两个候选问题按需立项，不以未获 PASS 作为继续花费理由 |
 | S0 后续模式/提示审计 | [本轮验收](2026-10-26-evaluation-payload-prompt-audit.md)：version=2 消除坏 header→apply_patch 误标，actualMode 仍 unknown；旧真实报告继续复核且未改写。6 个 Hashline 首请求均有方括号指引，三个无工具响应正常 stop，未发现明确提示冲突。297 项单元、类型与固定宿主 18 项/45 请求通过；新增真实请求 0，S0 FAIL 不变 |
 | 完整真实 S0 第二轮 | [本轮验收](2026-10-26-evaluation-real-s0-modelscope-02.md)：9 项全部执行，28/28 请求对账与独立重放、总 Token 398,176；3 PASS / 3 GAP / 3 FAIL，最终 6/9 正确。stock-edit 3/3 正确，两 Hashline 臂分别 2/3 与 1/3；Hashline 首次条件失败，S0 FAIL 后停止，未启动 S1，不外推普遍收益 |

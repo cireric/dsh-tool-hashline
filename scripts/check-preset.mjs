@@ -163,9 +163,9 @@ for (const skill of OPERATIONS_SKILLS) {
   if (!/^description:\s*\S/mu.test(text)) fail(file + ' must declare a description')
 }
 // The operations runtime ships inside the bundle, so a packed install resolves
-// it without a checkout: every module the skills reference must exist and use
-// only Node builtins plus its own siblings.
-for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 'session-log.mjs', 'incidents.mjs', 'upgrades.mjs', 'proposals.mjs', 'candidates.mjs', 'switch.mjs', 'text.mjs']) {
+// it without a checkout: every module the skills and the maintenance entry
+// reference must exist and use only Node builtins plus its own siblings.
+for (const module of ['cli.mjs', 'context.mjs', 'config.mjs', 'baseline.mjs', 'session-log.mjs', 'incidents.mjs', 'upgrades.mjs', 'proposals.mjs', 'candidates.mjs', 'switch.mjs', 'text.mjs', 'sync.mjs', 'sync-hash.mjs', 'sync-yaml.mjs', 'sync-ptc.mjs', 'sync-read.mjs', 'sync-engines.mjs', 'sync-run.mjs', 'sync-history.mjs']) {
   const file = join('presets/ptc-hashline/operations', module)
   if (!existsSync(join(repo, file))) { fail('missing operations module: ' + file); continue }
   const text = read(file)

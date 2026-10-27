@@ -84,6 +84,7 @@ export async function probeDirectory(path) {
  * @param {string} options.directory the state directory
  * @param {string} [options.maintenanceRepository] an explicitly named repository
  * @param {string} [options.evidenceDirectory] an explicitly named evidence directory
+ * @param {string} [options.dshCheckout] an explicitly named sync source (stored, not created)
  * @param {boolean} [options.create] create the named directories when absent
  * @returns {Promise<object>} the saved values plus per-role health
  */
@@ -92,11 +93,49 @@ export async function saveConfig(options) {
     ...options.maintenanceRepository === undefined ? {} : { maintenanceRepository: requireAbsolute('maintenanceRepository', options.maintenanceRepository) },
     ...options.evidenceDirectory === undefined ? {} : { evidenceDirectory: requireAbsolute('evidenceDirectory', options.evidenceDirectory) },
   }
+  // Validate every assignment before --create or either configuration write.
+  const dshCheckout = options.dshCheckout === undefined ? undefined : requireAbsolute('dshCheckout', options.dshCheckout)
   const current = await readConfig(options.directory)
   const values = { ...current.values, ...assignments }
+  if (dshCheckout !== undefined) {
+    const previous = current.values.sync
+    values.sync = { ...(previous !== null && typeof previous === 'object' && !Array.isArray(previous) ? previous : {}), dshCheckout }
+  }
   if (options.create === true) {
     for (const value of Object.values(assignments)) await mkdir(value, { recursive: true })
   }
+  await mkdir(dirname(current.path), { recursive: true })
+  await writeFile(current.path, JSON.stringify(values, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
+  return await describeConfig(options.directory)
+}
+
+/**
+ * Merge one namespaced setting into the same configuration file.
+ *
+ * A feature that owns a small setting of its own (the upstream-sync check and
+ * its DSH source path) must not need a THIRD configuration store: it writes a
+ * namespace in this file, so there is exactly one place a maintainer looks, and
+ * the two documented write-roles keep their own probed health unchanged.
+ * @param {object} options
+ * @param {string} options.directory the state directory
+ * @param {string} options.namespace the top-level key to merge into
+ * @param {Record<string, unknown>} options.values the settings to write
+ * @returns {Promise<object>} the described configuration afterwards
+ */
+export async function saveSettings(options) {
+  const namespace = options.namespace
+  if (typeof namespace !== 'string' || namespace.trim() === '') throw new Error('a settings namespace must be a non-empty string')
+  if (namespace === 'maintenanceRepository' || namespace === 'evidenceDirectory') {
+    throw new Error(namespace + ' is a configured ROLE; assign it through saveConfig so its health is probed')
+  }
+  const current = await readConfig(options.directory)
+  const previous = current.values[namespace]
+  const merged = previous !== null && typeof previous === 'object' && !Array.isArray(previous) ? { ...previous } : {}
+  for (const [key, value] of Object.entries(options.values ?? {})) {
+    if (value === undefined) delete merged[key]
+    else merged[key] = value
+  }
+  const values = { ...current.values, [namespace]: merged }
   await mkdir(dirname(current.path), { recursive: true })
   await writeFile(current.path, JSON.stringify(values, null, 2) + '\n', { encoding: 'utf8', mode: 0o600 })
   return await describeConfig(options.directory)
