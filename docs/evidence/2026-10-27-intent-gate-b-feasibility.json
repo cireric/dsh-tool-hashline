@@ -1,0 +1,195 @@
+{
+  "date": "2026-10-27",
+  "status": "PASS",
+  "claimScope": "production AgentLoop + ToolRuntime, in-process test PTC; fixed adapter; no network or real models",
+  "command": "node .scratch/intent-gate/intent-b-feasibility-probe.mjs",
+  "exitCode": 0,
+  "probeSha256": "a3f4c627520934f4b083be2e510efeb0a246d54ae03d34ef892aeff26212c589",
+  "packages": [
+    {
+      "name": "dsh-agent-loop",
+      "version": "0.2.1-rc.2",
+      "realpath": "node_modules/@deepseek-ai/dsh-agent-loop",
+      "entrySha256": "cf57e3ecd487ac5c2553455aaa5cef2c6fb41e6bd61be5aa455675d1d7193033"
+    },
+    {
+      "name": "dsh-agent",
+      "version": "0.2.1-rc.2",
+      "realpath": "node_modules/@deepseek-ai/dsh-agent",
+      "entrySha256": "7b59cf82c2784c25bdce4e3e24e5e5303b02b9f1003efacf50255492d17baf8b"
+    },
+    {
+      "name": "dsh-llm",
+      "version": "0.2.1-rc.2",
+      "realpath": "node_modules/@deepseek-ai/dsh-llm",
+      "entrySha256": "d18d8ae4c8d961e628708c1e4698e09716a0ebb80e55a672e0bde1029bec1155"
+    },
+    {
+      "name": "dsh-tools",
+      "version": "0.2.1-rc.2",
+      "realpath": "node_modules/@deepseek-ai/dsh-tools",
+      "entrySha256": "1e53932e7c4213ea24a7d87f06960b7a7702cb21f8a5741c97242b4a470a442a"
+    },
+    {
+      "name": "dsh-agent-loop-testkit",
+      "version": "0.2.1-rc.2",
+      "realpath": "node_modules/@deepseek-ai/dsh-agent-loop-testkit",
+      "entrySha256": "9a757bfc06ff1835751e23dca1c6127c3365eee6474615a758828c202d5907dd"
+    }
+  ],
+  "results": [
+    {
+      "name": "valid-tool",
+      "status": "PASS",
+      "requests": 2,
+      "activeTurn": 1,
+      "repairs": 0,
+      "withheld": 0,
+      "toolCalls": 1,
+      "markers": [
+        "first",
+        "second"
+      ],
+      "attempts": 0,
+      "usages": 2,
+      "rawRejectedAttempts": 0,
+      "errors": 0,
+      "turnEnd": "completed",
+      "trace": [
+        "provider:0",
+        "gate:allow",
+        "marker:first",
+        "marker:second",
+        "provider:1"
+      ]
+    },
+    {
+      "name": "repair-tool",
+      "status": "PASS",
+      "requests": 3,
+      "activeTurn": 1,
+      "repairs": 1,
+      "withheld": 1,
+      "toolCalls": 1,
+      "markers": [
+        "first",
+        "second"
+      ],
+      "attempts": 1,
+      "usages": 3,
+      "rawRejectedAttempts": 1,
+      "errors": 0,
+      "turnEnd": "completed",
+      "trace": [
+        "provider:0",
+        "gate:withhold",
+        "gate:retry",
+        "provider:1",
+        "gate:allow",
+        "marker:first",
+        "marker:second",
+        "provider:2"
+      ]
+    },
+    {
+      "name": "repair-text",
+      "status": "PASS",
+      "requests": 2,
+      "activeTurn": 1,
+      "repairs": 1,
+      "withheld": 1,
+      "toolCalls": 0,
+      "markers": [],
+      "attempts": 1,
+      "usages": 2,
+      "rawRejectedAttempts": 1,
+      "errors": 0,
+      "turnEnd": "completed",
+      "trace": [
+        "provider:0",
+        "gate:withhold",
+        "gate:retry",
+        "provider:1",
+        "gate:allow"
+      ]
+    },
+    {
+      "name": "repair-exhausted",
+      "status": "PASS",
+      "requests": 2,
+      "activeTurn": 1,
+      "repairs": 1,
+      "withheld": 2,
+      "toolCalls": 0,
+      "markers": [],
+      "attempts": 2,
+      "usages": 2,
+      "rawRejectedAttempts": 2,
+      "errors": 1,
+      "turnEnd": "error",
+      "trace": [
+        "provider:0",
+        "gate:withhold",
+        "gate:retry",
+        "provider:1",
+        "gate:withhold"
+      ]
+    },
+    {
+      "name": "cancel-buffer",
+      "status": "PASS",
+      "requests": 1,
+      "activeTurn": 1,
+      "repairs": 0,
+      "withheld": 0,
+      "toolCalls": 0,
+      "markers": [],
+      "attempts": 1,
+      "usages": 0,
+      "rawRejectedAttempts": 0,
+      "errors": 0,
+      "trace": [
+        "provider:0"
+      ]
+    },
+    {
+      "name": "second-user-request",
+      "status": "PASS",
+      "requests": 4,
+      "activeTurn": 2,
+      "repairs": 1,
+      "withheld": 1,
+      "toolCalls": 1,
+      "markers": [
+        "first",
+        "second"
+      ],
+      "attempts": 1,
+      "usages": 4,
+      "rawRejectedAttempts": 1,
+      "errors": 0,
+      "turnEnd": "completed",
+      "trace": [
+        "provider:0",
+        "gate:allow",
+        "provider:1",
+        "gate:withhold",
+        "gate:retry",
+        "provider:2",
+        "gate:allow",
+        "marker:first",
+        "marker:second",
+        "provider:3"
+      ]
+    }
+  ],
+  "gaps": [
+    "Official launcher/full preset composition not run",
+    "Real provider behavior, actual cost and latency not measured",
+    "Cancellation accounting incomplete: buffered usage not published",
+    "Same-turn steering/multiple sessions/children/resume/compaction not exercised",
+    "Policy error origin and retry middleware interoperability not production verified",
+    "Only fixture declaration-prefix predicate; semantic correctness not measured"
+  ],
+  "artifacts": ".scratch/intent-gate/ (ignored; not shipped in clone)"
+}

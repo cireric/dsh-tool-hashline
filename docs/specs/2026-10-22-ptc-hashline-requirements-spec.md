@@ -12,6 +12,8 @@
 
 > 维护说明（2026-10-25）：基础能力已实现，逐项结果及限制见[当前状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。新增运维 skills 的[独立需求](2026-10-23-ptc-hashline-operations-skills.md)与[实施计划](../plans/2026-10-23-ptc-hashline-operations-skills-implementation-plan.md)已交付，证据见[交付验收](../acceptance/2026-10-24-delivery-acceptance-report.md)。实现完成不授权目标切换；文中的 `.scratch` 历史来源不随 clone 交付。
 
+> 后续意图门需求（2026-10-27）：已确认的[请求级意图门方案 B](2026-10-27-intent-gate-b-requirements.md)定义意图门后续演进，取代本规格中与其冲突的触发范围、六桶格式、内层拒绝与相关状态目标。本文仍记录已交付旧基线；新门尚未实现，read/edit 及其他契约不变。实施时须按新规格一致迁移资源基线与契约测试，不把规格发布当作运行升级。
+
 ---
 
 ## 1. 目标

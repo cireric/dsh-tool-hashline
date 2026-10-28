@@ -12,6 +12,7 @@
 
 | 主题 | 需求与决策 | 实施与证据 |
 |---|---|---|
+| 请求级意图门（方案 B） | [正式需求规格](specs/2026-10-27-intent-gate-b-requirements.md)、[独立资源 ADR](adr/0002-own-ptc-gate-assets.md) | 需求与系统级测试 seam 已确认；票据 01～07 已实施并留验收（声明前置、有界修复、输入例外、澄清等待、中途纠正优先、状态由日志推导、完整交付与呈现端穿透）；真实模型效果评估（IGB-AC-12）仍为 GAP，日常 profile 未切换。[可行性分析](background/2026-10-27-intent-gate-b-feasibility.md)与[早期证据](evidence/2026-10-27-intent-gate-b-feasibility.json)只证明核心接口组合，不是新规格验收 |
 | PTC 与上游同步 | [需求规格](specs/2026-10-27-upstream-sync-requirements.md)、[早期技术提案](plans/2026-10-27-upstream-sync-plan.md) | [票据 01 本机来源检查](acceptance/2026-10-27-upstream-sync-check-01.md)：公开手动入口、来源优先级、来源身份与本项目基线；[票据 02 PTC 变化检查](acceptance/2026-10-27-upstream-sync-check-02.md)：75 个逐对象检查点、公共差异记录与保留依据；[票据 03 stock read 对照](acceptance/2026-10-27-upstream-sync-check-03.md)：14 个检查点、上限按值比较、已有关联差异带负向探针；[票据 04 引擎发布评估](acceptance/2026-10-27-upstream-sync-check-04.md)：已发布版本全量枚举按语义版本分渠道、补丁与组合只到待验证、部分来源与超时如实记录；[票据 05 重复检查与审阅决定](acceptance/2026-10-27-upstream-sync-check-05.md)：跨轮分类、决定格式与校验、维护者录入与复查操作；[票据 06 真实来源验收与交接](acceptance/2026-10-27-upstream-sync-check-06.md)：真实本机 DSH 与真实发布源四轮运行、SYNC-01～10 PASS、SYNC-11 Windows PASS 且 macOS/Linux 保留 GAP、跟进项交接路径。四个区域在 Windows 实跑；候选包内容、macOS/Linux 实跑与目标切换仍为 GAP |
 | 收口与按需维护 | [收口计划](plans/2026-10-26-project-closeout-plan.md) | [收口记录](acceptance/2026-10-26-project-closeout.md)、[报告归档](evidence/tetris-ab/README.md)；日常推荐 PTC，Hashline 可选，未自动切换配置 |
 | PTC、read/tag/edit、窗口与 seen | [基础规格 v3](specs/2026-10-22-ptc-hashline-requirements-spec.md)、[ADR-0001](adr/0001-inherit-bounded-seen-guard.md)、[ADR-0002](adr/0002-own-ptc-gate-assets.md) | [初期追溯](acceptance/2026-10-23-acceptance-traceability.md)、[运行修复](acceptance/2026-10-23-runtime-fix-acceptance.md) |
@@ -32,6 +33,7 @@
 
 ## 背景与维护规则
 
+- 意图门研究：[有效性与优化选项](background/2026-10-27-intent-gate-effectiveness-and-options.md)、[方案 B 可行性](background/2026-10-27-intent-gate-b-feasibility.md)；权威需求已迁入[正式规格](specs/2026-10-27-intent-gate-b-requirements.md)，技术参数留工程评审，产品尚未实施。
 - 背景研究：[10-22 选型](background/2026-10-22-dsh-hashline-selection-analysis.md)、[10-23 功能盘点](background/2026-10-23-dsh-hashline-feature-analysis.md)、[10-24 实现路线](background/2026-10-24-hashline-implementation-landscape.md)、[10-26 评测代码分析](background/2026-10-26-real-model-evaluation-code-analysis.md)。它们保留研究时点的版本、观察和建议，不覆盖现行规格。
 - 迁入证据：[PTC gate 资源清单](evidence/2026-10-22-ptc-gate-inventory.txt)。
 - 开发细则：[证据可追溯](agents/evidence-traceability.md)、[本地 issue](agents/issue-tracker.md)、[票据状态](agents/triage-labels.md)、[领域用语](agents/domain.md)、[文档维护与清理](agents/documentation.md)。
