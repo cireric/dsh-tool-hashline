@@ -46,19 +46,30 @@ import { clip, firstLineOf, textOfBlocks } from '../presets/ptc-hashline/operati
 
 export { decodeArtifact, parseRecords, scanZstdFrames }
 
-/** Mirrors the watchdog's GATE_LINE_RE: first line, literal token, six buckets. */
-const GATE_LINE_RE = /^Intent:\s*(research|implementation|investigation|evaluation|fix|open-ended)\b/i
-/** Mirrors GATEISH_RE: something gate-shaped was written but the bucket is wrong. */
-const GATEISH_RE = /^Intent:/i
-/** Mirrors BEHAVIOR_TOOLS in presets/ptc-hashline/intent-gate-watchdog.mjs. */
+/**
+ * The LINE judgement delegates to the live gate module, so this reader cannot drift from
+ * the rule it reports on: since 2026-10-27 that rule is "first line starts with Intent:
+ * and carries a non-empty body" (spec 2026-10-27-intent-gate-b-requirements IG-B-02), with
+ * no bucket vocabulary. Six-bucket lines written under the retired 2026-09-30 rule still
+ * satisfy it, so reading a historical log stays faithful.
+ */
+import { checkDeclaration } from '../presets/ptc-hashline/intent-gate-watchdog.mjs'
+/**
+ * The STRUCTURAL reading scope below (which call counts as behavior-changing, hence which
+ * message is its carrier) is retained to read logs produced by the retired per-turn tool-name
+ * gate, which is the only rule those logs were written under. It is not the current trigger:
+ * the request-level gate owes one declaration per user-opened request and keys nothing on
+ * tool names. Re-framing the structural read is the ticket-07 migration.
+ */
 const BEHAVIOR_TOOLS = new Set([
   'write', 'edit', 'bash', 'pwsh',
   'explorer', 'librarian', 'oracle', 'implementer', 'designer',
   'subagent', 'subagent_fork', 'subagent_codex', 'subagent_claude_code', 'ralph',
   'ask_user_question',
 ])
-/** The gate's refusal text, distinct from the watchdog's own notices. */
+/** The gate's refusal text, distinct from its own notices. */
 const DENY_MARK = '[intent-gate]'
+/** The retired per-session mode marker (no observe/enforce switch exists any more). */
 const MODE_NOTICE = '[intent-gate-watchdog] mode='
 
 class UsageError extends Error {}
@@ -75,12 +86,16 @@ export function messageText(message) {
   return text
 }
 
-/** Judge one carrier message's first line with the watchdog's current rule. */
+/**
+ * Judge one carrier message's first line with the gate's own check.
+ * @param firstLine - the message's first line, or undefined when it had no text.
+ * @returns 'no-text' | 'valid' | 'invalid' (marker present, body empty) | 'missing'.
+ */
 export function judgeFirstLine(firstLine) {
   if (firstLine === undefined || firstLine.trim() === '') return 'no-text'
-  if (GATE_LINE_RE.test(firstLine)) return 'valid'
-  if (GATEISH_RE.test(firstLine)) return 'invalid'
-  return 'missing'
+  const verdict = checkDeclaration(String(firstLine))
+  if (verdict.ok) return 'valid'
+  return verdict.reason === 'empty-body' ? 'invalid' : 'missing'
 }
 
 /**

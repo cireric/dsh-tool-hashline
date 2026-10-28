@@ -374,7 +374,8 @@
           #
           #   • persona.prefix (patched above) — orchestrator persona: Phase-0 intent gate,
           #     on-demand delegation criteria, evidence gate, hand-off line, failure recovery.
-          #   • intent-gate-watchdog.mjs       — the per-turn gate (remind + deny) and its flip.
+          #   • intent-gate-watchdog.mjs       — the request-level declaration gate (buffer the
+          #     whole reply, validate the Intent line, then publish and dispatch — or stop).
           #
           # What it deliberately does NOT add (removed 2026-09-21 after measurement):
           #   • no named role tools and no role allow-lists — three paired runs on the same
@@ -395,30 +396,22 @@
           # docs/decisions/0002-continue-evolving.md for the measurement behind it.
           # ─────────────────────────────────────────────────────────────────────────────
 
-          # 意图门看门狗：per-turn 的 Phase 0 纪律在「漏了」时没有任何代价，于是静默衰减
-          #（本项目**取证当时**实测：26 轮里只有 2 轮的可见回复输出过 —— 这是取证当时的窗口，
-          # 不是今天的读数：口径 / 窗口 / 日期见 docs/pitfalls.md #19，别把 8% 和 85% 混着读）。
-          # 判据（2026-09-17 起）= ① 存在档：上一轮属于会改变行为的轮次，而门行没有落在**承载第一次动手的
-          # 那条消息**里（它必须是该消息的首行）⇒ 提醒一次；只读轮次与纯回答不提醒（persona 的 Phase 0 也只
-          # 对这类轮次要求门行）。**同一条消息里的门行算数**；②「门行早于动手」只作对照读数（见 #19）。
-          # 见插件头部注释与 scripts/verify-intent-gate-watchdog.cjs。
+          # 请求级意图门（2026-10-27 方案 B，票据 01）。判据已从「按内层工具名拒绝」迁移为「正式回复
+          # 先校验、后展示与派发」：插件在官方 llm/stream waterfall 上暂存整段生成，检查首行 `Intent:`
+          # 标记与非空正文（大小写/空格不敏感），通过才逐块原样放行；不通过则该次回复不发布、程序零
+          # 启动，并以策略失败（INTENT_DECLARATION_*）说明原因停止。六桶词表与 tools/pre-execute
+          # 内层拒绝随之退役，persona、资源摘要与契约检查同口径迁移，不保留互相冲突的双重约束。
+          # 暂存有界（字符 / 毫秒）：两个上限在此声明，scripts/check-preset.mjs 断言其值；命中上限按
+          # 策略失败停止而不是放行未经检查的正文。测时口径与逐条证据见
+          # docs/acceptance/2026-10-27-intent-gate-b-01-declare-before-publish.md。
+          # 该行 id 与文件名保持不变：打包安装、profile 安装器、交付验收与运维基线都按此路径寻址。
           - id: intent-gate-watchdog
             name: 'dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs'
-            # 闸门（tools/pre-execute）随本行配置：`observe` 只记账 + 注入竞态诊断行，`enforce` 才真的拒绝
-            # （每轮最多一次）。配置缺失/写错都退回记账（fail-safe），不会因为一处笔误开始拦人。
-            # 配置写错**看不见**（本部署无日志通道）：所以插件每**会话**注入一行 mode 标记，
-            # `scripts/verify-the orchestrator preset.cjs` 拿它与**本文件的声明**对照（不一致 ⇒ ✗ FAIL）。
-            # **2026-09-18 开闸（enforce）**：前置 = 观察期里没有出现过**真注入**的 RACE_REPORT；读法必须用
-            # **注入前缀**（落在 agent/inbox/spliced / user/message），不能用子串扫 —— 引用插件源码 / 正文 /
-            # 模型复述都会命中（实测 6/39 假阳性，见 pitfalls #23）。
-            # 冻结读数：docs/evidence/2026-09-18-gate-flip-prerequisite.json
-            # **2026-09-30 verbatim-gate（ADR 0003 追加段）**：marker 判据 = 首行 `Intent:` + 六桶之一
-            # （桶词+词边界，大小写不敏感）；拒绝理由三态 MISSING/INVALID/LATE，reader 拒绝账按理由分桶、
-            # 假拒候选改按严格判据 —— 口径登记在 docs/pitfalls.md #19。
-            # **回滚条件（2026-09-21 改判，唯一登记处 = docs/decisions/0003）**：开闸后 RACE_REPORT 恒不注入，
-            # 竞态的可见形态换成它的镜像 ——「真拒了一次、而该轮最终仍判 ① 合规」= 假拒候选：插件注入
-            # FALSE_DENY，reader 独立算出同一个数（`闸门拒绝: … ｜ 假拒候选 n`）。读到 n>0 ⇒ 改回 observe。
             config:
-              gate: enforce
+              maxBufferedChars: 262144
+              maxBufferMs: 120000
+              # 规格固定「每次需声明的用户输入最多自动修复一次」（IG-B-06）：在行里声明是为了让
+              # check-preset 钉住它，而不是把它变成可调旋钮（插件内部还会把任何更大值压回 1）。
+              maxRepairs: 1
 
 

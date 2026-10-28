@@ -1,245 +1,312 @@
-// intent-gate-watchdog.mjs — the orchestrator preset preset companion plugin.
-//
-// WHY THIS EXISTS
-// The orchestrator persona's Phase 0 "Intent Gate" (classify in ONE cheap line
-// before acting) is a per-turn RULE WITH ZERO CONSEQUENCE: nothing fails when a
-// turn skips it. Measured on this project's own session log (2026-09-14): 26
-// turns, the gate line appeared in 2 visible replies (turns 1-2) and never again
-// — it collapsed at turn 3 and stayed collapsed. The rule also sits at the far
-// end of the prompt (the preset persona IS the system prompt's `prefix`), so
-// recency weighted the last ~100k tokens of tool output far above it.
-//
-// HOW IT WORKS — three official hook points, each with in-tree precedent:
-//   * `session/event` — the session firehose, typed as `SessionEvent` (so every
-//     persisted event type arrives, tool events included; core/session/src/index.ts:72).
-//     Two things are observed per turn: whether the marker appeared in the assistant
-//     text, and whether a BEHAVIOR-CHANGING tool ran (see design choice 5).
-//     Precedents: llm/token-meter/src/index.ts:119,
-//     context/agent-instructions/src/index.ts:307, core/agent-loop/src/runtime-context.ts:129.
-//   * `agent/pre-step` — a waterfall whose decision may carry messages back
-//     (`PreStepDecision`, packages/core/agent/src/runtime-types.ts:111-119). When the
-//     PREVIOUS turn's reply lacked the marker, append ONE reminder message.
-//     Skeleton from packages/guard/repeat-tool-reminder/src/index.ts:229 — the
-//     official "advisory nudge" guard: delegate with `next()`, then fold in only
-//     its own message, never vetoing.
-//   * `tools/pre-execute` — the ONLY point that can stop a call (pitfalls #20;
-//     packages/core/tools/src/index.ts:1465-1468; PTC inner dispatches pass through it too,
-//     ptc.ts:541-545). Ships in `observe` mode by default — see design choice 7.
-//
-// DESIGN CHOICES (each one is a path where a naive version fails silently)
-//   1. NEVER VETO. The downstream decision is awaited first and returned
-//      unchanged unless it is `enter` — another listener's `reject` must not be
-//      overridden, and blocking steps is not this plugin's job.
-//   2. ONCE PER TURN, AND ONLY WHEN A REAL USER MESSAGE ENTERS. A turn has many
-//      steps (151 steps over 27 turns in the measurement); without this the
-//      reminder would repeat on every tool-call step. Machine-driven turns
-//      (subagent notices, goal rounds) are skipped by requiring a `user` source.
-//   3. ORCHESTRATOR ONLY (depth 0). Role children have their own personas and run
-//      cheaper models; the gate is an orchestrator discipline. Depth is resolved
-//      the way the harness resolves it — `Math.max` of the persisted header floor
-//      and the runtime option (subagent/src/depth.ts:28-36) — DELIBERATELY copied
-//      from role-presentation.mjs rather than shared: `dev_reload_preset` only
-//      bumps `?v=N` on `.mjs` files referenced from agent.cordis.yml, so a shared
-//      sibling module would keep one frozen specifier and a fix to it would never
-//      reach a new session. Keep the two copies in sync.
-//   4. FAIL LOUD, NEVER BREAK THE STEP. Every path is wrapped; failures go to
-//      ctx.logger.warn, and a downstream failure is rethrown rather than
-//      swallowed. NOTE this deployment has NO log sink (docs/pitfalls.md #9), so
-//      the channel that actually makes a regression visible is
-//      `scripts/verify-intent-gate-watchdog.cjs` — keep it green.
-//   5. ONLY NUDGE TURNS THE RULE ACTUALLY COVERS. The persona scopes Phase 0 to
-//      behavior-changing turns (delegate / refuse / ask / edit files), so a read-only
-//      lookup or a plain answer must NOT be nagged. Eligibility is resolved from the
-//      DATA PLANE, never from prose: a turn counts as acting when one of its tool
-//      calls names a behavior tool. In PTC that name arrives on
-//      `tool/ptc-dispatch`/`tool/ptc-dispatch-start`, which carry no `turn` — so the
-//      root call id is mapped back through `tool/call`; a native agent's name arrives
-//      on `tool/call` itself. Boundary: an "I refuse, no tool" turn is not detectable
-//      and therefore never nudged.
-//      ⚠ BEHAVIOR_TOOLS is a deliberate second copy of the same list in
-//      `scripts/verify-the orchestrator preset.cjs` (its compliance denominator). Drift is visible,
-//      not silent: when the two disagree the compliance rate flips.
-//   6. "DECLARED" MEANS THE MARKER SAT ON THE FIRST LINE OF THE MESSAGE THAT CARRIES
-//      THE FIRST BEHAVIOR ACTION — or of an earlier message in the same turn. The earlier
-//      form is the better one and is still MEASURED (the verifier reports it as the 前置
-//      contrast reading, `rec.declSeq < rec.firstActCarrier`); it is no longer what this
-//      plugin nags about, and it is no longer the obligation. Two harness facts bound the
-//      shape that IS required:
-//        · text and tool calls inside one assistant message are a SINGLE generation
-//          (agent-loop/src/agent.ts:466-489), so the line has to be in that message while
-//          the call is being made — which is exactly what `tools/pre-execute` sees;
-//        · a message with no tool call ENDS the turn (agent.ts:487-488), so
-//          "declare in a message of its own, then act" is impossible in this harness.
-//      One criterion, three readers: this plugin's reminder, its pre-execute gate, and the
-//      verifier's compliance numerator (`verify-the orchestrator preset.cjs`). The two drifted apart once
-//      already (2026-09-16, "anywhere" vs "first line"), which is why the口径 is registered
-//      in docs/pitfalls.md #19. Keep them equal.
-//   8. THE MODE IS IN THE DATA PLANE, AND THE DENY SAYS WHICH MISTAKE IT SAW (2026-09-21).
-//      A `gate` typo silently degrades to observe (choice 7) and this deployment has no log sink
-//      (#9), so ONE `[intent-gate-watchdog] mode=enforce|observe` line is injected per session and
-//      the reader asserts on it. Same change: the deny reason split into two wordings ("no line at
-//      all" vs. "the line came after this action"), and enforce mode gained the race tripwire
-//      (`FALSE_DENY`) that observe mode always had in `RACE_REPORT` — without it, the ordering
-//      assumption this plugin rests on would be unfalsifiable exactly once the gate has teeth.
-//
-//   7. THE GATE IS OPT-IN AND FAIL-SAFE. `apply(ctx, config)` reads `config.gate`; anything
-//      other than the literal 'enforce' means observe-only. The reason is an ORDERING
-//      assumption that cannot be proven statically — whether the CURRENT message's
-//      `assistant/message` event reaches this listener before `tools/pre-execute` fires — so
-//      observe mode reports a suspected race as a data-plane line instead of denying what may
-//      be a compliant call, and 'enforce' is switched on only after that report stays empty.
-//      At most ONE deny per turn, so a model that ignores the reason is never walled in.
-//
-//   9. VERBATIM GATE (2026-09-30, ADR 0003 追加段). "Declared" now means the message's FIRST LINE
-//      matches `^Intent:\\s*(<one of the six buckets>)\\b`, case-insensitive — a substring `Intent:`
-//      anywhere in the first line no longer counts (measured 2026-09-30: `Intent: 随便` passed both
-//      this plugin and the reader as pure substring matches). ONLY the bucket word is validated:
-//      the separator `—`, the because-clause and the commitment tail stay prompt-side (pitfalls #16's
-//      trade-off, not overturned). Deny reasons split three ways — MISSING (no gate-ish line at all) /
-//      INVALID (a first line starting with `Intent:` whose bucket is not one of the six) / LATE
-//      (unreachable today, wording kept). The reader's compliance molecule stays LOOSE on purpose
-//      (historical comparability, #19); its strict reading and this plugin share ONE regex, pinned
-//      byte-for-byte by the unit test's D contract across plugin + reader + persona buckets.
-//
-// Zero `@deepseek-ai/*` imports on purpose (a preset directory lives under the
-// user home, where Node cannot resolve the harness packages); Node builtins are
-// allowed. The injected message must match `createUserMessage`'s shape exactly
-// (llm/src/message.ts: `createUserMessage` + `MessageSourceMap`), which is why
-// `pluginMessage` re-implements it.
-//
-// WARNING 0.2.0 (session format v4): the source `kind` must be THIS producer's own
-// name. The old `kind: 'plugin'` is the retired v3 wrapper and is refused on
-// admission with "format v4 message requires a producer-owned source kind"
-// (session-format-v3-to-v4/src/message-sources.ts:10). Measured 2026-09-29: this
-// plugin died exactly there, on the first turn of a session, while injecting the
-// per-session mode marker.
+/**
+ * Request-level intent gate for the ptc-hashline preset (方案 B, tickets 01-02).
+ *
+ * WHAT CHANGED AND WHY THE FILE KEEPS ITS NAME. This module used to be a per-turn
+ * "watchdog": it denied the FIRST behavior tool call whose carrier message lacked a
+ * six-bucket Intent: line, i.e. it gated on inner tool names and refused mid-program.
+ * That mechanism is replaced (spec 2026-10-27-intent-gate-b-requirements, IG-B-01/02/04/05):
+ * the obligation is now attached to a REQUEST, not to a tool name, and it is enforced
+ * BEFORE anything is published or dispatched. The file name and the preset row id stay
+ * "intent-gate-watchdog" because they are addressed by the packed install, the profile
+ * installers, the delivery acceptance and the operations baselines; renaming an asset
+ * path is not part of these tickets and would churn baselines they do not touch.
+ *
+ * THE SEAM. "llm/stream" is an official waterfall (dsh-llm): a listener may call next()
+ * and buffer the adapter's chunks, then either replay them verbatim or yield its own
+ * chunks. The agent loop builds the durable assistant/message only AFTER the stream ends
+ * (agent-loop step()) and only THEN executes the tool calls it carries, so one fully
+ * buffered attempt gives exactly the guarantee the spec asks for: the formal reply body
+ * is validated before it is published (no agent/assistant-stream frame, no session
+ * append) and before any tool program starts (no dispatch, no side effect).
+ *
+ * WHY TRIGGERING IS REQUEST-SCOPED. A declaration is owed on the FIRST formal reply after
+ * a NEW real user input (IG-B-01). The loop's own signal for that is "agent/pre-step":
+ * its messages are the messages claimed from the inbox for this step, so a real user
+ * message enters the inbox only when the user spoke, and a tool result or an injected
+ * notice never does. We latch that per session and consume it at the next model request
+ * of that session; a machine-opened step clears the latch, so tool continuations of the
+ * same request owe nothing (IG-B-01: 同请求工具续步、进度和收尾不重复).
+ *
+ * SCOPE. Only depth-0 agents (the preset's managed main agent) are gated: a delegated
+ * child re-mounts this preset row into its own scope, and IG-B-13 keeps the gate out of
+ * subagents and helper calls. Auxiliary model calls pass through untouched, identified by
+ * the two fields that are true of them and false of a loop-built conversation request:
+ * the loop stamps 'purpose' on compaction/session-title calls, and a hand-built one-shot
+ * passes 'system' text (a loop request always leaves it undefined).
+ *
+ * BOUNDED REPAIR (ticket 02, IG-B-05/06/07). A rejected attempt is not the end of the
+ * request: the gate spends ONE repair per user-opened request. It ends the attempt as a
+ * policy failure, and "agent/request-error" — the loop's own recovery hook — appends a
+ * correction notice to the SESSION LOG (producer-owned source, form notice) and returns
+ * { kind: 'retry' }; the loop then rebuilds the request from session.deriveMessages(), so
+ * the correction is part of the official record and the regenerated request is
+ * reconstructible from it. Nothing mutates the frozen request, and the notice says
+ * explicitly that it grants no new authority (IG-B-07). A second rejection is terminal and
+ * reports the single repair as exhausted; normal tool continuations never touch the
+ * budget, and a real provider failure is delegated (next()) instead of being repaired —
+ * cancellation, network errors, timeouts and truncation therefore cost no repair
+ * (IG-B-10), and a generic retry policy cannot turn one declaration miss into two.
+ *
+ * FAILURE ACCOUNTING (IG-B-11/12). The three outcomes stay distinct and traceable:
+ * the provider's own completion, this gate's policy rejection, and a real failure. A
+ * rejected attempt keeps its usage chunk so the durable assistant/attempt stream still
+ * shows what the generation cost; when the adapter reported no usage the record has none
+ * (unknown, never a fabricated zero). Rejected text and tool calls never escape and the
+ * rejected replay metadata is never attached to the accepted answer, which keeps its own.
+ *
+ * INPUT EXCEPTIONS (ticket 03, IG-B-01/03/09). Two inputs do not owe the line, and the
+ * exemption is deliberately narrow so it can never hide a goal change: a BARE
+ * acknowledgement ("谢谢" / "thanks") and a BARE continuation ("继续" / "continue") — exact
+ * forms after normalisation, never a substring or a word inside a sentence. A continuation
+ * additionally needs this session to already hold an accepted understanding, and it is
+ * suppressed when the previous request ended in a stop (an exhausted repair, a failure or a
+ * truncation), because then the user's "继续" is a NEW request that declares again and gets
+ * its own repair (IG-B-06's exception). An exemption also never covers a reply that calls a
+ * tool: acting without declaring is exactly what this gate exists to prevent (IG-B-09). The
+ * semantic short check — goal, deliverable, object, scope, completion criteria — stays with
+ * the main agent in its existing generation (IG-B-03); nothing here infers meaning.
+ *
+ * CLARIFICATION WAITING (ticket 04, IG-B-03/16). The host owns the question surface:
+ * ask_user_question (dsh-tool-ask-user) records a durable tool call and, in this preset's
+ * blocking mode, does not return until the human answers, so the request is paused by the
+ * host rather than by a flag this module invents. What the gate adds is the accounting the
+ * host does not do: while a question is open, (a) ticket 03's conversational exemptions are
+ * OFF — a bare "继续" while A/B is on the table is not an answer and not a social ping, it
+ * owes a declaration like any other request; (b) a reply that would CALL A TOOL is rejected,
+ * because acting before the user answered is exactly what "silence is not consent" forbids
+ * (IG-B-16/IG-B-09); (c) an answer that arrives as the host's own user-question-reply message
+ * is always treated as a real input that owes a declaration — never as an acknowledgement,
+ * never as a continuation. All of it is per session, so one session asking a question cannot
+ * lock another one, and a new independent request in the same session clears the wait.
+ *
+ * STEERING BEFORE DISPATCH (ticket 05, IG-B-08/09). The host delivers a user's mid-run input
+ * as steering: it waits in agent.inbox.nextStep until the loop claims it at the next step.
+ * A reply composed BEFORE that input arrived cannot be trusted to reflect it, so the gate
+ * refuses to let its calls run: an accepted attempt that would dispatch while a steer is
+ * pending is ended as INTENT_STALE_ACTION (nothing published, nothing dispatched, no repair
+ * spent), and an ALREADY RUNNING program is stopped at its next inner dispatch through the
+ * official tools/pre-execute waterfall. Calls that already executed stay executed — the gate
+ * never claims or performs a rollback — and the loop then consumes the steering input at the
+ * next step, where the request re-declares under the new requirement. The judgement of
+ * WHETHER an input changes the goal is the persona's, not this module's: a harmless progress
+ * ping is paused and re-judged exactly like a real correction, and the persona continues the
+ * same plan after saying where it is.
+ *
+ * BOUNDED RESOURCES (IG-B-15 / IGB-AC-08). Buffering is bounded in characters and in
+ * wall-clock time; both caps and the repair budget are declared in the preset row and
+ * asserted by scripts/check-preset.mjs so they cannot drift silently. Exceeding either cap
+ * does NOT release an unvalidated reply and does NOT spend a repair: it ends the attempt
+ * as a policy failure that names the cap. Timing rule used by the acceptance harness: the
+ * gate's extra wait is the gap between the provider's own chunk timestamps at the adapter
+ * and the first published "agent/assistant-stream" frame; both are observed outside this
+ * module.
+ *
+ * LANGUAGE SPLIT. Text that the USER reads (a stopped request) is Chinese, like the rest of
+ * this deployment's user-facing gate copy; text that only the MODEL reads (the correction
+ * notice) is English, like the persona it must instruct.
+ *
+ * Zero @deepseek-ai/* imports on purpose: a preset directory lives under the user home,
+ * where Node cannot resolve the harness packages. Node builtins are allowed.
+ */
 
 import { randomUUID } from 'node:crypto'
+import { performance } from 'node:perf_hooks'
 
 export const name = 'intent-gate-watchdog'
 
 /**
- * The gate line, verbatim-gate caliber (ADR 0003 追加段 §1, 2026-09-30): the FIRST LINE of a
- * message must start with the literal token `Intent:` followed by ONE OF THE SIX BUCKETS —
- * `Intent: 随便` used to pass as a substring match, on both this plugin and the reader.
- * Deliberately NOT validated: the separator, the because-clause, the commitment tail (content
- * quality stays prompt-side, pitfalls #16). Case-insensitive to keep false denies down.
- * Keep in sync with the reader's STRICT_GATE_RE (scripts/verify-the orchestrator preset.cjs) — the unit
- * test's D contract pins the two regex literals byte-for-byte.
+ * Declared bounds (mirrored in preset.patch.yml and asserted by check-preset).
+ * maxBufferedChars counts the model-authored characters held in memory for one attempt
+ * (text and tool-call argument deltas, which is where the bytes are); maxBufferMs bounds
+ * how long one attempt may stay buffered before it is judged; maxRepairs is the spec's
+ * fixed "at most one automatic repair per user-opened request" (IG-B-06) — it is declared
+ * here so a future edit cannot quietly widen it, not offered as a tuning knob.
  */
-const GATE_LINE_RE = /^Intent:\s*(research|implementation|investigation|evaluation|fix|open-ended)\b/i
-/**
- * "The model wrote SOMETHING gate-line-shaped": first line starts with the token but the bucket
- * is not one of the six. That is the INVALID deny reason — the correction it needs ("pick a
- * legal bucket") differs from MISSING's ("write the line at all"), per pitfalls #19's lesson
- * that the wording must aim at the mistake actually made.
- */
-const GATEISH_RE = /^Intent:/i
+export const DEFAULT_LIMITS = Object.freeze({ maxBufferedChars: 262144, maxBufferMs: 120000, maxRepairs: 1 })
+
+/** Leading filler tolerated before the marker: BOM, NBSP, spaces, tabs (never a newline). */
+const LEADING_FILLER = /^[\uFEFF\u00A0 \t]+/u
 
 /**
- * Tools whose use makes a turn "behavior-changing" — the turns the persona's Phase 0
- * line is required on. Keep in sync with BEHAVIOR_TOOLS in scripts/verify-the orchestrator preset.cjs.
+ * The marker: the literal token "Intent:" as the first content of the first line.
+ * Case-insensitive and whitespace-tolerant (IG-B-02: 大小写、空格差异不单独构成拒绝);
+ * the token itself is never translated, and the six-bucket vocabulary is GONE — what
+ * follows the colon is natural language, so nothing about it is validated mechanically.
  */
-const BEHAVIOR_TOOLS = new Set([
-  'write', 'edit', 'bash', 'pwsh',
-  'explorer', 'librarian', 'oracle', 'implementer', 'designer',
-  'subagent', 'subagent_fork', 'subagent_codex', 'subagent_claude_code', 'ralph',
-  'ask_user_question',
-])
-
-/** The single reminder appended when the previous turn skipped the gate. */
-const REMINDER = [
-  '[intent-gate-watchdog] 上一轮是会改变行为的轮次（委派 / 拒绝 / 提问 / 改文件），但门行没有出现在**承载第一次动手的那条消息**里 —— 它必须是那条消息的首行。',
-  '桶只取六个：research / implementation / investigation / evaluation / fix / open-ended；`Intent:` 是字面 token，照抄勿译。这一行的读者是**用户**：别照抄他的话，也别塞内部记账（turn/step 号、插件状态、证据文件名、脚本通过数）。',
-  '例（与本轮无关）：Intent: fix — 你要的是定位 401 的根因并修掉（依据：你贴的报错）；我先复现再改。',
-].join('\n')
+const MARKER = /^intent[ \t]*:/iu
 
 /**
- * The gate's deny reason: its single, in-place shot at telling the model what is missing.
- * THREE states with SEPARATE wordings (2026-09-21 two, 2026-09-30 three — ADR 0003 追加段 §2):
- * MISSING = "no gate-ish line at all this turn"; INVALID = "a line starting with `Intent:` was
- * written but the bucket is not one of the six" (the model wrote but wrote wrong — the MISSING
- * copy would aim the correction at a mistake it did not make, #19's lesson); LATE = "the line
- * came after this action" (unreachable today, wording kept for when state genuinely changes).
- * All keep the `Intent:` template; the unit test asserts on that token, not on prose.
+ * The two conversational incomes that owe no declaration — EXACT forms only. Short lists on
+ * purpose: they are the whole mechanical surface of "社交回应/正常继续", they are asserted by
+ * the unit test, and anything with extra words ("收到，但把 X 改成 Y") normalises to a longer
+ * string and therefore owes a declaration. Meaning is the persona's job (IG-B-03), not this
+ * module's.
  */
-const GATE_REASON_MISSING = [
-  '[intent-gate] 这一次调用没有门行垫底 —— 本轮还没有出现过那个六桶行。',
-  '常见错法（2026-10-01 现场实测）：写了「意图：…」「意图判定：…」这类中文变体（中文词或中文冒号）都**不算数** —— token 必须逐字符是 ASCII 的 `Intent:`（半角冒号 + 一个空格），桶词也用英文原词，别翻译。',
-  '先在下一条消息写上它（是该消息的**首行**），再重发刚才的调用：',
-  'Intent: <桶> — <你要的结果>（依据：<你话里让我这么读的那一点>）；我打算 <做法>。',
-].join('\n')
-
-const GATE_REASON_INVALID = [
-  '[intent-gate] 门行写了，但桶不合法 —— 首行的桶词必须是这六个之一：research / implementation / investigation / evaluation / fix / open-ended（大小写不限）。',
-  '在下一条消息把桶改对（仍以 `Intent:` 开头、仍是首行），再重发刚才的调用：',
-  'Intent: <桶> — <你要的结果>（依据：<你话里让我这么读的那一点>）；我打算 <做法>。',
-].join('\n')
-
-const GATE_REASON_LATE = [
-  '[intent-gate] 本轮的门行晚了 —— 它在这次动手**之后**才出现，而它必须落在**承载第一次动手的那条消息**里、且是那条消息的首行。',
-  '在下一条消息里把它补到开头（首行），再重发刚才的调用：',
-  'Intent: <桶> — <你要的结果>（依据：<你话里让我这么读的那一点>）；我打算 <做法>。',
-].join('\n')
+export const ACKNOWLEDGEMENTS = Object.freeze(['谢谢', '多谢', '谢了', '感谢', '收到', '好的', '好', '嗯', '嗯嗯', '明白', '明白了', 'ok', 'okay', 'thanks', 'thank you', 'thx', '👍', '🆗'])
+export const CONTINUATIONS = Object.freeze(['继续', '继续吧', '接着', '接着做', '往下', '往下做', 'go on', 'continue', 'keep going', 'carry on', 'resume'])
 
 /**
- * Observe-mode diagnostic (design choice 7). Injected — and therefore written into the session
- * log — when the gate saw no declaration at call time but the turn still scores compliant.
- * That pair is a false-deny candidate; logger.warn has no sink in this deployment (pitfalls #9),
- * so the data plane is the only channel that keeps it falsifiable.
+ * The host's own surfaces for a clarification, kept as strings because this module may not
+ * import host packages: the tool is registered by dsh-tool-ask-user, and the answer message
+ * kind is declared by dsh-user-questions (MessageSourceMap augmentation, 'user-question-reply'
+ * with { callId, outcome: 'answered' }). A drift here would show up as the acceptance cases
+ * failing, not as a silent behaviour change.
  */
-const RACE_REPORT = [
-  '[intent-gate-watchdog] observe 取证：闸门在第一次动手到达时**没有看到**门行，而该轮最终判为合规 —— 假拒候选（事件时序竞态）。',
-  '⇒ 开闸（config: { gate: enforce }）之前必须先查清这一条；它是数据面证据，别删。',
-].join('\n')
+export const QUESTION_TOOL = 'ask_user_question'
+export const ANSWER_SOURCE_KIND = 'user-question-reply'
+
+/** Trailing punctuation that does not change what the user said. */
+const TRAILING_PUNCTUATION = /[\s.!。！~～?？,，、]+$/u
 
 /**
- * Enforce-mode TWIN of RACE_REPORT (2026-09-21). Once the gate enforces, the observe-mode pair
- * (`wouldDeny && !denied`) can never hold — the first unmet call is denied and `denied` latches —
- * so the one ordering assumption this plugin rests on would go invisible exactly when the gate has
- * teeth. Its signature in enforce mode is the mirror image: a call WAS denied, yet the turn still
- * scores compliant (① 存在). That can only happen if the declaration sat in the carrier message and
- * its `assistant/message` event reached this listener too late = a FALSE deny. Same job as
- * RACE_REPORT: the data-plane evidence that rolls the gate back to observe (docs/decisions/0003).
+ * Normalise one user input for the exact-form comparison: whitespace collapsed, trailing
+ * punctuation dropped, case folded. Nothing else — no stemming, no keyword search.
+ * @param text - the raw text of the real user messages in this step.
  */
-const FALSE_DENY = [
-  '[intent-gate-watchdog] enforce 取证：闸门拒了一次，而该轮最终仍判为合规（门行就在承载首次动手的那条消息里）—— 假拒候选（事件时序竞态）。',
-].join('\n')
+export function normalizeInput(text) {
+  return String(text ?? '').replace(/\s+/gu, ' ').trim().replace(TRAILING_PUNCTUATION, '').toLowerCase()
+}
 
 /**
- * 拒绝理由的第一行：**点名被拒的工具**，并区分「模型直呼」与「run_code 内层派发」。
- * 为什么（2026-10-01 实测 session-bc1983d7 seq 981）：理由只写「这一次调用没有门行垫底」时，
- * PTC 会把 deny 包成 program 级异常（code run failed (exception): ToolCallError: …），模型遂把
- * 拒绝归因给 run_code 载体，推出「门对载体生效、只读也欠门行」，并把这句错误机制写进了给用户的
- * 回答。闸门的落点其实是**内层派发**（tool/ptc-dispatch-start{name} 先于 ordered prepare，
- * 见 pitfalls #17 追加段）—— 不点名工具，这条误读就会复现。
- * 三态文案（GATE_REASON_*）一字不动：reader 按结果文本分桶，这里只是**前置**一行。
- * @param toolName - exec.name，被拒的那次调用的工具名。
- * @param inner - 该调用是不是 run_code 程序里的内层派发（exec.parent 存在即内层）。
+ * Classify one real user input for the gate.
+ * @param text - the raw text of the real user messages in this step.
+ * @param state - this session's record: { accepted, lastOutcome }.
+ * @returns 'acknowledge' | 'continue' | 'owes' (owes = the declaration is required).
  */
-const denyHeader = (toolName, inner) => '被拒的是'
-  + (inner ? ' run_code 程序里的内层 ' : ' ')
-  + '**' + toolName + '** 调用'
-  + (toolName === 'bash' || toolName === 'pwsh'
-    ? '（shell 一律算动手 —— 闸门判**工具名**，不解析命令，只读命令也算）'
-    : '')
-  + '。\n'
+export function classifyInput(text, state) {
+  const normalized = normalizeInput(text)
+  if (normalized === '') return 'owes'
+  // While a question is open nothing is a bare acknowledgement: the words may be an option
+  // label, and silence already means nothing (IG-B-16). The answer itself owes a declaration.
+  if (state !== undefined && state.awaitingAnswer === true) return 'owes'
+  if (ACKNOWLEDGEMENTS.includes(normalized)) return 'acknowledge'
+  if (CONTINUATIONS.includes(normalized)) {
+    // "承接已有理解" needs an understanding to carry, and a request that ENDED in a stop
+    // hands the user a new request, not a continuation (IG-B-06's exhausted-retry exception).
+    return state !== undefined && state.accepted > 0 && state.lastOutcome === 'accepted' ? 'continue' : 'owes'
+  }
+  return 'owes'
+}
+
+/** Machine-readable reasons for one attempt's verdict. */
+export const REASON = Object.freeze({
+  NO_TEXT: 'no-text',
+  MISSING: 'missing-marker',
+  EMPTY_BODY: 'empty-body',
+  LIMIT_CHARS: 'limit-chars',
+  LIMIT_TIME: 'limit-time',
+  GATE_ERROR: 'gate-error',
+  AWAITING_ANSWER: 'awaiting-answer',
+  STALE_ACTION: 'stale-action',
+  STATE_UNTRUSTED: 'state-untrusted',
+})
 
 /**
- * Per-session mode marker (2026-09-21). `config.gate` is read once in apply(); anything but the
- * literal 'enforce' falls back to observe (fail-safe, design choice 7) — and this deployment has NO
- * log sink (docs/pitfalls.md #9), so "is enforce actually in force?" had no answer a script could
- * read. ONE line per session, injected at its first user-opened step, puts that answer in the data
- * plane. Deliberately not per turn: an injected message is persisted forever (pitfalls #19), so this
- * stays 1:1 with sessions rather than with turns.
+ * The three declaration misses: reasons a rewrite can fix and a conversational input may be
+ * excused for (ticket 03). Ticket 04's awaiting-answer stop is deliberately NOT here — it is
+ * a terminal "the request is paused until you answer", not a wording problem to repair.
  */
-const MODE_NOTICE_PREFIX = '[intent-gate-watchdog] mode='
-const MODE_ENFORCE = MODE_NOTICE_PREFIX + 'enforce'
-const MODE_OBSERVE = MODE_NOTICE_PREFIX + 'observe'
-const modeNotice = (enforcing) => (enforcing ? MODE_ENFORCE : MODE_OBSERVE)
-  + ' —— 本会话的意图门模式（数据面标记：gate 配置写错会静默落到 observe，而本部署没有日志通道，pitfalls #9）。'
+const DECLARATION_MISSES = new Set([REASON.NO_TEXT, REASON.MISSING, REASON.EMPTY_BODY])
 
-/** Deep-freeze a plain value in place (mirrors llm's `freezeMessage`). */
+const REASON_TEXT = {
+  [REASON.NO_TEXT]: '这条回复没有任何正文（只有工具调用），因此没有意图声明',
+  [REASON.MISSING]: '首行没有以字面标记 "Intent:" 开头',
+  [REASON.EMPTY_BODY]: '"Intent:" 之后只有空白，没有说明目标与下一步的正文',
+  [REASON.LIMIT_CHARS]: '本条回复超过本机制暂存上限（字符），已按上限停止而不是放行未经检查的正文',
+  [REASON.LIMIT_TIME]: '本条回复的整段生成超过本机制暂存等待上限（毫秒），已按上限停止而不是放行未经检查的正文',
+  [REASON.GATE_ERROR]: '本机制无法完成这次机械检查（内部错误），已停止而不是放行未经检查的正文',
+  [REASON.AWAITING_ANSWER]: '本会话已经向你提问、而你还没有得到回答，这次回复却要动手；问题待答期间不执行任何工具',
+  [REASON.STALE_ACTION]: '用户在你生成这条回复期间又追加了要求，这条回复里的调用是在那之前形成的；未执行的调用已停下，已执行的动作保留',
+  [REASON.STATE_UNTRUSTED]: '本会话的意图门记录缺失、损坏或无法关联，无法可信重建已确认的理解与待答状态；按保守状态暂停这一次请求，请重新说明你的要求',
+}
+
+/** The same reasons in the model's language, for the correction notice. */
+const REASON_TEXT_FOR_MODEL = {
+  [REASON.NO_TEXT]: 'the reply carried no text at all (only a tool call), so it declared nothing',
+  [REASON.MISSING]: 'the first line of the reply did not start with the literal marker Intent:',
+  [REASON.EMPTY_BODY]: 'the first line started with Intent: but carried no text after it',
+  [REASON.AWAITING_ANSWER]: 'the reply wanted to call a tool while your own question to the user is still unanswered',
+}
+
+/**
+ * Failure codes are policy-owned: they must never read like a provider or transport fact,
+ * so a real failure and this gate's decision stay distinguishable in logs and reports.
+ */
+const FAILURE_CODE = {
+  [REASON.NO_TEXT]: 'INTENT_DECLARATION_MISSING',
+  [REASON.MISSING]: 'INTENT_DECLARATION_MISSING',
+  [REASON.EMPTY_BODY]: 'INTENT_DECLARATION_EMPTY',
+  [REASON.LIMIT_CHARS]: 'INTENT_DECLARATION_LIMIT',
+  [REASON.LIMIT_TIME]: 'INTENT_DECLARATION_LIMIT',
+  [REASON.GATE_ERROR]: 'INTENT_GATE_ERROR',
+  [REASON.AWAITING_ANSWER]: 'INTENT_DECLARATION_AWAITING_ANSWER',
+  [REASON.STALE_ACTION]: 'INTENT_STALE_ACTION',
+  [REASON.STATE_UNTRUSTED]: 'INTENT_STATE_UNTRUSTED',
+}
+
+/** Reported when the single automatic repair was already spent for this user request. */
+export const REPAIR_EXHAUSTED_CODE = 'INTENT_DECLARATION_REPAIR_EXHAUSTED'
+
+/**
+ * The user-facing stop reason. Its reader is the user whose request was stopped, so it
+ * says what was wrong, that nothing ran, and the exact shape that satisfies the check.
+ * The provider's own outcome is explicitly separated from this policy decision (IG-B-11).
+ * @param reason - the verdict's reason.
+ * @param extras - { repaired, providerKind }: whether a repair was already spent, and the
+ *   provider's own terminal kind when it was not a plain success.
+ */
+export function stopMessage(reason, extras = {}) {
+  const repaired = extras.repaired === true
+  return [
+    '[intent-gate] 本次请求已停止：' + REASON_TEXT[reason] + '。',
+    '正文没有展示，这条回复里的工具调用一个也没有执行（provider 正常生成完成，是意图门的策略拒绝，不是网络或模型故障）。',
+    repaired
+      ? '本次用户请求已经用过唯一一次自动修复机会，仍不合格，因此不再自动重试；你重新发一次请求即是一次新的声明机会。'
+      : '合格形状（首行，"Intent:" 逐字符照抄）：Intent: <用自然语言说明你要交付什么，以及下一步打算怎么做>',
+    extras.providerKind === undefined ? '' : '（provider 的原始终态是 ' + String(extras.providerKind) + '，没有被改写成声明问题）',
+  ].filter(line => line !== '').join('\n')
+}
+
+/**
+ * The correction notice: the repair's instruction, written for the MODEL, appended to the
+ * session log as its own message so the regenerated request can be rebuilt from the
+ * official record (IG-B-07). It restates the constraint boundary on purpose — a repair is
+ * not user approval and grants no new scope.
+ * @param reason - why the previous attempt was rejected.
+ * @param providerKind - the rejected attempt's provider terminal kind.
+ * @param repair - 1-based index of this repair.
+ */
+export function repairNotice(reason, providerKind, repair = 1) {
+  return [
+    '[intent-gate] Your previous reply for this request was withheld: ' + (REASON_TEXT_FOR_MODEL[reason] ?? String(reason)) + '.',
+    'Nothing from it was shown to the user and none of its tool calls were executed; the provider had finished normally (' + String(providerKind) + '), so this is a policy rejection, not a network or model failure. This is mechanical check ' + String(repair) + ' of the shape only — it says nothing about whether you understood the request.',
+    'Rewrite the same reply for the same user request: start its first line with the literal marker Intent: (copy it verbatim, do not translate it) followed by, in plain language, what the user will get and what you will do next; then continue with the rest of the answer or the program.',
+    'The user request, its constraints and its scope are unchanged. This notice is not the user speaking: it adds no goal, grants no new authority and is not approval of anything. Write the whole reply again — the withheld text is not carried over.',
+  ].join('\n')
+}
+
+/**
+ * A session user message produced by THIS plugin: the shape createUserMessage builds
+ * (fresh id, role user, text content, producer-owned source), deep-frozen like the
+ * harness's own messages. 'kind' is this producer's own name — session format v4 refuses
+ * a shared catch-all kind.
+ */
+function pluginMessage(text, summary) {
+  return deepFreeze({
+    id: randomUUID(),
+    role: 'user',
+    content: [{ type: 'text', text }],
+    source: { kind: name, form: 'notice', summary: boundSummary(summary) },
+  })
+}
+
+/** Keep the notice's one-line account inside the harness's 120-character register bound. */
+function boundSummary(summary) {
+  const text = String(summary)
+  return text.length <= 120 ? text : text.slice(0, 117) + '...'
+}
+
+/** Deep-freeze a plain value in place (mirrors llm's freezeMessage). */
 function deepFreeze(value) {
   if (value !== null && typeof value === 'object') {
     for (const child of Object.values(value)) deepFreeze(child)
@@ -249,39 +316,83 @@ function deepFreeze(value) {
 }
 
 /**
- * Re-implementation of `createUserMessage` (llm/src/message.ts: `createUserMessage`
- * plus `MessageSourceMap`): a fresh randomUUID identity, role `user`, text content,
- * and a `notice`-form source owned by THIS producer.
- *
- * `kind` is the plugin's own name: v4 has no shared catch-all `plugin` kind
- * ("each producer declares its own kind in its own module"), and `kind: 'plugin'`
- * is refused on admission. Keep in sync with that file if the shape ever changes.
+ * The first line of the formal reply body, or null when there is no body at all.
+ * @param text - concatenated text blocks of the attempt, in block order.
  */
-function pluginMessage(text, kind, summary) {
-  return deepFreeze({
-    id: randomUUID(),
-    role: 'user',
-    content: [{ type: 'text', text }],
-    source: { kind, form: 'notice', summary },
-  })
+export function firstLineOf(text) {
+  if (typeof text !== 'string' || text.trim() === '') return null
+  const end = text.indexOf('\n')
+  const line = end === -1 ? text : text.slice(0, end)
+  return line.endsWith('\r') ? line.slice(0, -1) : line
 }
 
-/** Concatenate the text blocks of one assistant message. */
-function messageText(message) {
-  const blocks = message?.content
-  if (!Array.isArray(blocks)) return ''
-  let text = ''
-  for (const block of blocks) {
-    if (block?.type === 'text' && typeof block.text === 'string') text += block.text + '\n'
+/**
+ * The whole mechanical check: first-line marker plus non-empty body. This is the ONLY
+ * automated judgement; it does not and cannot tell whether the declaration understands
+ * the user (spec "机械检查与语义质量" — that stays with the main agent's self-check and
+ * the separate effect evaluation).
+ * @param text - concatenated text blocks of the attempt, in block order.
+ * @returns the verdict: { ok: true, firstLine } or { ok: false, reason, firstLine }.
+ */
+export function checkDeclaration(text) {
+  const firstLine = firstLineOf(text)
+  if (firstLine === null) return { ok: false, reason: REASON.NO_TEXT, firstLine: '' }
+  const trimmed = firstLine.replace(LEADING_FILLER, '')
+  const marker = MARKER.exec(trimmed)
+  if (marker === null) return { ok: false, reason: REASON.MISSING, firstLine }
+  if (trimmed.slice(marker[0].length).trim() === '') return { ok: false, reason: REASON.EMPTY_BODY, firstLine }
+  return { ok: true, firstLine }
+}
+
+/**
+ * Mirror of the harness's own block assembly (dsh-llm BlockAssembler), reduced to what
+ * the gate needs: the final block per index, in first-appearance order, with a block-end
+ * block taking precedence over the deltas that preceded it. Validating the FINAL text is
+ * deliberate (IGB-AC-01: 最终文本覆盖不能绕过最终检查) — a delta that looks like a
+ * declaration and a final block that does not must not pass.
+ * @param chunks - the buffered attempt, in stream order.
+ */
+export function assembleAttempt(chunks) {
+  const partials = new Map()
+  const order = []
+  let finish
+  const ensure = (index, blockType) => {
+    let partial = partials.get(index)
+    if (partial === undefined) {
+      partial = { blockType, text: '', block: undefined }
+      partials.set(index, partial)
+      order.push(index)
+    }
+    return partial
   }
+  for (const chunk of chunks) {
+    switch (chunk?.type) {
+      case 'block-start': ensure(chunk.index, chunk.blockType); break
+      case 'text-delta': { const partial = ensure(chunk.index, 'text'); if (partial.block === undefined) partial.text += chunk.text; break }
+      case 'reasoning-delta': { const partial = ensure(chunk.index, 'reasoning'); if (partial.block === undefined) partial.text += chunk.text; break }
+      case 'tool-call-delta': { const partial = ensure(chunk.index, 'tool-call'); if (partial.block === undefined) partial.text += chunk.argumentsDelta; break }
+      case 'block-end': { const partial = ensure(chunk.index, chunk.block?.type); if (partial.block === undefined) partial.block = chunk.block; break }
+      case 'finish': finish = chunk.reason; break
+      default: break // usage and unknown chunks carry no block content
+    }
+  }
+  const blocks = order.map(index => {
+    const partial = partials.get(index)
+    return partial.block !== undefined ? partial.block : { type: partial.blockType, text: partial.text }
+  })
+  return { blocks, finish }
+}
+
+/** Concatenated text of one attempt's blocks, in block order (spec: 正文 = text blocks only). */
+export function bodyText(blocks) {
+  let text = ''
+  for (const block of blocks) if (block?.type === 'text' && typeof block.text === 'string') text += block.text
   return text
 }
 
 /**
- * Resolve an agent's delegation depth the way the harness does.
- * @returns the depth, or `undefined` when the runtime option is present but
- *   malformed (the harness throws a TypeError there; this plugin reports it and
- *   skips rather than guessing at a child's identity).
+ * Resolve the agent's delegation depth the way the harness does; undefined when the
+ * runtime option is present but malformed (report and skip instead of guessing).
  */
 function resolveDepth(agent) {
   const header = agent?.session?.header?.delegationDepth ?? 0
@@ -292,223 +403,501 @@ function resolveDepth(agent) {
 }
 
 /**
- * Install the watchdog's listeners.
+ * Whether a step's claimed inbox messages carry human input: the user's own message, or the
+ * host's answer to a question this session asked (dsh-user-questions steers that as a
+ * user-role message with its own source kind). Injected notices and tool results are neither.
+ */
+function openedByUser(messages) {
+  return Array.isArray(messages) && messages.some(message => isHumanInput(message))
+}
+
+/** Whether one message is human input rather than an injected notice or a tool result. */
+function isHumanInput(message) {
+  const kind = message?.source?.kind
+  return kind === 'user' || kind === ANSWER_SOURCE_KIND
+}
+
+/** The text of the real user messages in one step, joined — the input the classifier reads. */
+function userInputText(messages) {
+  if (!Array.isArray(messages)) return ''
+  let text = ''
+  for (const message of messages) {
+    if (!isHumanInput(message) || !Array.isArray(message.content)) continue
+    for (const block of message.content) if (block?.type === 'text' && typeof block.text === 'string') text += block.text
+    text += '\n'
+  }
+  return text.trim()
+}
+
+/**
+ * Whether the agent holds a human input that the loop has not claimed yet (steering for the
+ * nearest step). This is the host's own queue, read through its public inbox — the gate does
+ * not timestamp messages or guess from their text.
+ * @param agent - the agent whose inbox to read.
+ */
+export function pendingSteer(agent) {
+  const queue = agent?.inbox?.nextStep
+  if (!Array.isArray(queue)) return false
+  return queue.some(message => isHumanInput(message))
+}
+
+/** Whether an assembled attempt would call a tool — an exemption never excuses that. */
+export function callsATool(blocks) {
+  return blocks.some(block => block?.type === 'tool-call')
+}
+
+/** Declared bounds, with the documented defaults for anything absent or unusable. */
+function resolveLimits(config) {
+  const raw = config !== null && typeof config === 'object' ? config : {}
+  const positive = (value, fallback) => (Number.isSafeInteger(value) && value > 0 ? value : fallback)
+  const repairs = Number.isSafeInteger(raw.maxRepairs) && raw.maxRepairs >= 0 ? raw.maxRepairs : DEFAULT_LIMITS.maxRepairs
+  return {
+    maxBufferedChars: positive(raw.maxBufferedChars, DEFAULT_LIMITS.maxBufferedChars),
+    maxBufferMs: positive(raw.maxBufferMs, DEFAULT_LIMITS.maxBufferMs),
+    // Never above the spec's single automatic repair, whatever a config claims.
+    maxRepairs: Math.min(repairs, DEFAULT_LIMITS.maxRepairs),
+  }
+}
+
+/** Conservative character accounting: every model-authored string a buffered attempt holds. */
+function chunkChars(chunk) {
+  switch (chunk?.type) {
+    case 'text-delta':
+    case 'reasoning-delta': return typeof chunk.text === 'string' ? chunk.text.length : 0
+    case 'tool-call-delta': return typeof chunk.argumentsDelta === 'string' ? chunk.argumentsDelta.length : 0
+    case 'block-end': return typeof chunk.block?.text === 'string' ? chunk.block.text.length : (typeof chunk.block?.arguments === 'string' ? chunk.block.arguments.length : 0)
+    default: return 0
+  }
+}
+
+/**
+ * Install the gate.
  * @param ctx - plugin context; listeners are scoped to it and disposed with it.
+ * @param config - { maxBufferedChars, maxBufferMs, maxRepairs }; absent or unusable values
+ *   fall back to DEFAULT_LIMITS. The gate has no observe/enforce switch: it is the
+ *   delivered behaviour, and check:preset plus the host acceptance assert it is in force.
  */
 export function apply(ctx, config) {
-  // Fail-safe, not fail-silent: anything but the literal 'enforce' keeps the gate in observe
-  // mode, so a mistyped key can never start denying calls. The switch itself is pinned by the
-  // unit test's two gate assertions (observe never denies / enforce denies once).
-  const gateEnforcing = config !== null && typeof config === 'object' && config.gate === 'enforce'
-  const warn = (message) => ctx.logger?.warn('[' + name + '] ' + message)
+  const limits = resolveLimits(config)
+  const warn = message => ctx.logger?.warn('[' + name + '] ' + message)
+  /** sessionId -> { turn, repairs, intake } for the user-opened request currently being answered. */
+  const owed = new Map()
+  /** sessionId -> { agent, session }: the managed agent seen at the last step boundary. */
+  const bound = new Map()
+  /** sessionId -> { reason, providerKind } for a rejection whose repair has been spent. */
+  const awaitingRepair = new Map()
+  /**
+   * The gate's per-session state is DERIVED FROM THE FORMAL SESSION LOG, never from a private
+   * side-channel (ticket 06, IG-B-14). Resume, reload and compaction replay the same events,
+   * so the wait, the spent repair and the latest understanding survive them by construction
+   * instead of being re-seeded from memory. The log is the only source: the assistant messages
+   * the gate accepted (their first line is re-checked with the same mechanical rule), this
+   * plugin's own correction notices (which is how a spent repair stays spent), the question
+   * calls and their settles, and every turn's end reason.
+   */
+  const reportsPending = content => {
+    if (!Array.isArray(content)) return false
+    return content.some(block => block?.type === 'text' && typeof block.text === 'string' && /"pending"\s*:\s*true/u.test(block.text))
+  }
 
-  /** sessionId -> turn -> { declSeq, firstActCarrier, acting }（判据见 design choice 6）。 */
-  const turns = new Map()
-  /** sessionId -> callId -> { turn, carrier } —— 派发事件（无 turn）靠它归属轮次与「载体消息」。 */
-  const callTurns = new Map()
-  /** sessionId -> 单调递增的 assistant 消息序号；只在同一轮内比较先后。 */
-  const msgSeq = new Map()
-  /** sessionId -> 最近一条 assistant 消息的序号 —— 紧随其后的 tool/call 就产生自它。 */
-  const lastMsg = new Map()
-  /** sessionId -> the turn this plugin already reminded. */
-  const reminded = new Map()
-  /** sessionId -> its mode notice was already injected (once per SESSION, never per turn). */
-  const modeAnnounced = new Set()
-  /** sessionId -> the turn of the most recent turn-carrying event (tools/pre-execute has none). */
-  const lastTurn = new Map()
-  /** sessionId -> the turn a REAL user message opened; machine-driven turns are out of scope. */
-  const userTurn = new Map()
-  /** sessionId -> turn -> { wouldDeny, denied } — what the gate saw, and what it did. */
-  const gateSeen = new Map()
-  const gateRec = (sessionId, turn) => {
-    let byTurn = gateSeen.get(sessionId)
-    if (byTurn === undefined) { byTurn = new Map(); gateSeen.set(sessionId, byTurn) }
-    let rec = byTurn.get(turn)
-    if (rec === undefined) { rec = { wouldDeny: false, denied: false }; byTurn.set(turn, rec) }
-    return rec
-  }
-  const recFor = (sessionId, turn) => {
-    let byTurn = turns.get(sessionId)
-    if (byTurn === undefined) { byTurn = new Map(); turns.set(sessionId, byTurn) }
-    let rec = byTurn.get(turn)
-    if (rec === undefined) {
-      rec = { declSeq: undefined, gateishSeq: undefined, firstActCarrier: undefined, acting: false }
-      byTurn.set(turn, rec)
-    }
-    return rec
-  }
-  /** 记一次行为动作：**首个**动作的载体消息序号决定该轮合不合规（design choice 6）。 */
-  const noteAction = (sessionId, turn, carrier) => {
-    const rec = recFor(sessionId, turn)
-    rec.acting = true
-    if (rec.firstActCarrier === undefined) rec.firstActCarrier = carrier
-  }
-  /** 合规（① 存在档）= 确实动过手，且门行落在**承载第一次动手的那条消息**或其之前（含同一条）。 */
-  const compliant = (rec) => rec !== undefined && rec.acting === true
-    && rec.declSeq !== undefined && rec.firstActCarrier !== undefined
-    && rec.declSeq <= rec.firstActCarrier
+  const emptyState = () => ({
+    accepted: 0,
+    lastOutcome: 'none',
+    awaitingAnswer: false,
+    questionCallId: undefined,
+    repairsThisRequest: 0,
+    trusted: true,
+  })
 
-  ctx.on('session/event', (session, event) => {
-    try {
-      const sessionId = session?.id
-      if (sessionId === undefined) return
-      if (typeof event?.data?.turn === 'number') lastTurn.set(sessionId, event.data.turn)
-      if (event?.type === 'assistant/message') {
-        const turn = event.data?.turn
-        if (typeof turn !== 'number') return
-        // 每条 assistant 消息都占一个序号（**包括没有文本的纯工具调用消息** —— 它正是那些
-        // tool/call 的载体消息；漏掉它，载体映射会整体前移一格）。
-        const seq = (msgSeq.get(sessionId) ?? 0) + 1
-        msgSeq.set(sessionId, seq)
-        lastMsg.set(sessionId, seq)
-        const text = messageText(event.data?.message)
-        if (text.trim() !== '') {
-          const rec = recFor(sessionId, turn)
-          const firstLine = text.split('\n')[0]
-          // 认**第一次**出现的门行（verbatim-gate：首行 = `Intent:` + 六桶之一，大小写不敏感），之后不再改判。
-          if (rec.declSeq === undefined && GATE_LINE_RE.test(firstLine)) {
-            rec.declSeq = seq
-          }
-          // INVALID 的判别输入：首行以 `Intent:` 开头但桶不合法 ⇒「写了但写错」，拒绝理由走 INVALID 而非 MISSING。
-          if (rec.gateishSeq === undefined && GATEISH_RE.test(firstLine)) {
-            rec.gateishSeq = seq
-          }
-        }
-        const byTurn = turns.get(sessionId)
-        if (byTurn !== undefined) for (const key of [...byTurn.keys()]) if (key < turn - 1) byTurn.delete(key)
-        return
-      }
-      // `tool/call` names the tool AND carries the turn. In PTC the outer call is
-      // `run_code`, so its id is remembered and the inner names resolve through it.
-      if (event?.type === 'tool/call') {
-        const turn = event.data?.turn
-        if (typeof turn !== 'number') return
-        // 载体 = 产生这次调用的那条消息（tool/call 事件紧随它的 assistant/message）。
-        const carrier = lastMsg.get(sessionId) ?? -1
-        const callId = event.data?.callId
-        if (typeof callId === 'string') {
-          let byCall = callTurns.get(sessionId)
-          if (byCall === undefined) { byCall = new Map(); callTurns.set(sessionId, byCall) }
-          byCall.set(callId, { turn, carrier })
-          for (const [id, seen] of byCall) if (seen.turn < turn - 1) byCall.delete(id)
-        }
-        if (BEHAVIOR_TOOLS.has(event.data?.name)) noteAction(sessionId, turn, carrier)
-        return
-      }
-      if (event?.type === 'tool/ptc-dispatch' || event?.type === 'tool/ptc-dispatch-start') {
-        const name = event.data?.name
-        if (!BEHAVIOR_TOOLS.has(name)) return
-        const owner = callTurns.get(sessionId)?.get(event.data?.rootCallId)
-        if (owner === undefined) {
-          // Loud, never silent: an unattributable dispatch means the eligibility rule
-          // above can no longer see this turn. Asserted by the unit test's PTC case.
-          warn('behavior tool "' + String(name) + '" has no attributable turn (rootCallId ' + String(event.data?.rootCallId) + ')')
+  /** Fold one committed session event into the derived state. */
+  const foldEvent = (state, event) => {
+    const data = event?.data
+    switch (event?.type) {
+      case 'user/message': {
+        if (isHumanInput(data)) {
+          // A new request: its repair budget is its own. The wait is intentionally NOT cleared
+          // here — the input that arrives while a question is open still owes a declaration
+          // (ticket 04), and the pre-step clears the wait right after classifying it.
+          state.repairsThisRequest = 0
           return
         }
-        noteAction(sessionId, owner.turn, owner.carrier)
+        if (data?.source?.kind === name) {
+          state.repairsThisRequest += 1
+          if (!Array.isArray(data?.content)) state.trusted = false
+        }
+        return
       }
-    } catch (err) {
-      warn('session/event observer failed: ' + String(err))
+      case 'assistant/message': {
+        const message = data?.message
+        if (!Array.isArray(message?.content)) {
+          state.trusted = false
+          return
+        }
+        if (checkDeclaration(bodyText(message.content)).ok) state.accepted += 1
+        return
+      }
+      case 'tool/call': {
+        if (data?.name !== QUESTION_TOOL) return
+        if (typeof data.callId !== 'string') state.trusted = false
+        state.awaitingAnswer = true
+        state.questionCallId = data.callId
+        return
+      }
+      case 'tool/ptc-dispatch-start': {
+        if (data?.name !== QUESTION_TOOL) return
+        state.awaitingAnswer = true
+        state.questionCallId = data.subCallId
+        return
+      }
+      case 'tool/result': {
+        if (data?.name !== QUESTION_TOOL) return
+        state.awaitingAnswer = false
+        state.questionCallId = undefined
+        return
+      }
+      case 'tool/ptc-dispatch': {
+        if (data?.name !== QUESTION_TOOL) return
+        const pending = reportsPending(data.content)
+        state.awaitingAnswer = pending
+        if (!pending) state.questionCallId = undefined
+        return
+      }
+      case 'turn/end': {
+        const kind = data?.reason?.kind
+        if (typeof kind !== 'string') {
+          state.trusted = false
+          return
+        }
+        if (kind === 'completed') state.lastOutcome = 'accepted'
+        else if (kind === 'error') state.lastOutcome = state.repairsThisRequest > 0 ? 'exhausted' : 'failed'
+        else state.lastOutcome = 'failed'
+        return
+      }
+      default: return
     }
-  })
+  }
+
+  /** Derived state cache: everything up to seq is already folded into state. */
+  const derived = new WeakMap()
 
   /**
-   * The gate — ORDERS, never vetoes: the downstream decision is awaited first and returned
-   * untouched unless it is `allow`. Deny is gated on `gateEnforcing` (design choice 7).
+   * Read (and incrementally extend) this session's derived state from its own log. A session
+   * whose record cannot be read is UNTRUSTED: nothing may be guessed about a request whose
+   * record is unavailable, corrupt or unreadable (IG-B-14).
    */
-  ctx.on('tools/pre-execute', async (exec, next) => {
-    let decision
-    try {
-      decision = await next()
-    } catch (err) {
-      warn('downstream tools/pre-execute failed: ' + String(err))
-      throw err
+  const stateOf = session => {
+    if (session === undefined || typeof session.snapshotEvents !== 'function') {
+      const unreadable = emptyState()
+      unreadable.trusted = false
+      return unreadable
     }
+    const cached = derived.get(session)
+    const state = cached === undefined ? emptyState() : cached.state
+    const from = cached === undefined ? 0 : cached.seq + 1
+    let lastSeq = cached === undefined ? -1 : cached.seq
     try {
-      if (decision?.kind !== 'allow') return decision
-      const toolName = exec?.name
-      if (!BEHAVIOR_TOOLS.has(toolName)) return decision
-      const sessionId = exec?.agent?.session?.id
-      if (sessionId === undefined) return decision
-      const turn = lastTurn.get(sessionId)
-      if (turn === undefined || userTurn.get(sessionId) !== turn) return decision
-      const rec = recFor(sessionId, turn)
-      // 载体 = 产生这次调用的那条消息；同一条消息里的门行算数，这正是 ① 档的定义。
-      const carrier = lastMsg.get(sessionId) ?? -1
-      if (rec.declSeq !== undefined && rec.declSeq <= carrier) return decision
-      const gate = gateRec(sessionId, turn)
-      gate.wouldDeny = true
-      if (!gateEnforcing || gate.denied) return decision
-      gate.denied = true
-      // Three states (ADR 0003 追加段 §2) — see GATE_REASON_MISSING / GATE_REASON_INVALID / GATE_REASON_LATE:
-      // MISSING = no gate-ish first line anywhere; INVALID = one was written but the bucket is not
-      // one of the six; LATE = a valid line exists but sits after this carrier (unreachable today,
-      // wording kept for when state genuinely changes).
-      const reason = rec.declSeq !== undefined ? GATE_REASON_LATE
-        : rec.gateishSeq !== undefined ? GATE_REASON_INVALID
-        : GATE_REASON_MISSING
-      // 首行点名工具与派发层级：exec.parent 存在即 PTC 内层派发（harness core/tools/src/index.ts:341-346）。
-      // 三态文案不动，只前置 —— reader 的 denyReasonOf 与 #19 的历史读法都不受影响。
-      return { kind: 'deny', reason: denyHeader(toolName, exec?.parent !== undefined) + reason }
-    } catch (err) {
-      warn('could not evaluate the intent gate: ' + String(err))
-      return decision
+      for (const event of session.snapshotEvents(from)) {
+        foldEvent(state, event)
+        if (typeof event?.seq === 'number') lastSeq = event.seq
+      }
+    } catch (error) {
+      warn('could not read the session log: ' + String(error))
+      state.trusted = false
     }
-  })
+    derived.set(session, { seq: lastSeq, state })
+    return state
+  }
+
+  /**
+   * Sessions whose untrusted record already forced one stop. The report happens once per
+   * session per process: the user is told, that request stops, and the next request starts from
+   * the conservative defaults instead of being blocked forever by a record it cannot repair.
+   */
+  const reportedUntrusted = new WeakSet()
+
+  /**
+   * Drop what was derived from an untrusted record and continue from the conservative
+   * defaults: the corrupt region is not re-read, so the user's next input is handled by the
+   * normal entry points instead of being blocked by a record that cannot be repaired.
+   */
+  const resetDerived = session => {
+    try {
+      const events = session.snapshotEvents()
+      const last = events.length === 0 ? -1 : events[events.length - 1]?.seq
+      derived.set(session, { seq: typeof last === 'number' ? last : -1, state: emptyState() })
+    } catch (error) {
+      warn('could not reset the derived state: ' + String(error))
+      derived.delete(session)
+    }
+  }
 
   ctx.on('agent/pre-step', async (payload, next) => {
     let decision
     try {
       decision = await next()
-    } catch (err) {
-      // Never swallow a downstream failure: report it and let it propagate.
-      warn('downstream agent/pre-step failed: ' + String(err))
-      throw err
+    } catch (error) {
+      warn('downstream agent/pre-step failed: ' + String(error))
+      throw error
     }
     try {
-      const { agent, messages, turn } = payload ?? {}
-      if (decision?.kind !== 'enter') return decision                       // (1) never veto
-      if (!Array.isArray(messages) || !messages.some(m => m?.source?.kind === 'user')) return decision  // (2)
-      const depth = resolveDepth(agent)
+      if (decision?.kind !== 'enter') return decision
+      const sessionId = payload?.agent?.session?.id
+      if (sessionId === undefined) return decision
+      const depth = resolveDepth(payload.agent)
       if (depth === undefined) {
         warn('agent.options.subagentDepth is malformed; skipping instead of guessing the depth')
         return decision
       }
-      if (depth !== 0) return decision                                      // (3) orchestrator only
-      const sessionId = agent?.session?.id
-      if (sessionId === undefined) return decision
-      userTurn.set(sessionId, turn)
-      // 模式标记：每**会话**一次，不是每轮 —— 注入的消息永久落库（pitfalls #19）。
-      const extra = []
-      if (!modeAnnounced.has(sessionId)) {
-        modeAnnounced.add(sessionId)
-        extra.push(pluginMessage(modeNotice(gateEnforcing), name, 'intent gate mode'))
+      if (depth !== 0) return decision
+      bound.set(sessionId, { agent: payload.agent, session: payload.agent.session })
+      if (openedByUser(payload.messages)) {
+        // A new real user input opens a new request: its budget is its own, and any
+        // half-finished repair state belongs to the request that ended.
+        const state = stateOf(payload.agent.session)
+        // The user spoke (an answer to the question, or a new request): the wait is over.
+        // The ANSWER itself still owes a declaration — classifyInput returns 'owes' for any
+        // input while the question was open, including the host's user-question-reply kind.
+        owed.set(sessionId, {
+          turn: payload.turn,
+          agent: payload.agent,
+          repairs: 0,
+          intake: classifyInput(userInputText(payload.messages), state),
+          answeredQuestion: state.awaitingAnswer === true,
+        })
+        // The user spoke (an answer, or a new independent request): the wait is over for the
+        // steps that follow THIS input. The input itself was classified above while the wait
+        // was still open, which is what makes an answer owe a declaration.
+        state.awaitingAnswer = false
+        state.questionCallId = undefined
+        awaitingRepair.delete(sessionId)
+      } else {
+        // A machine-opened step (tool result, notice, steering re-attach) is the same
+        // request continuing: the first reply already happened, so nothing is owed.
+        owed.delete(sessionId)
       }
-      const inject = (...notes) => ({ ...decision, messages: [...decision.messages, ...extra, ...notes] })
-      if (reminded.get(sessionId) === turn) return extra.length > 0 ? inject() : decision   // (2) once per turn
-      // 记录不存在（上一轮没有任何 assistant 消息）**不算漏**。只有「确实动过手、且门行没赶在
-      // 动手之前」才提醒 —— 判据与合规分子同口径（design choice 6），两处已经漂移过一次。
-      const previous = turns.get(sessionId)?.get(turn - 1)
-      if (previous === undefined || previous.acting !== true) return extra.length > 0 ? inject() : decision
-      const gate = gateSeen.get(sessionId)?.get(turn - 1)
-      if (compliant(previous)) {
-        // 竞态取证（design choice 7 + 2026-09-21 追加）——两条都不是提醒，是**证据**：
-        //   observe ⇒ `wouldDeny && !denied`：闸门在动作到达时没看到门行，而该轮最终合规；
-        //   enforce ⇒ 它的镜像 `denied && compliant`：真拒过一次，而该轮最终合规 = 假拒。
-        // enforce 下前者恒不成立（首拒即 latch），所以没有后者的话，开闸后竞态整个不可见。
-        if (gate?.wouldDeny === true && gate.denied !== true) {
-          return inject(pluginMessage(RACE_REPORT, name, 'intent gate race evidence'))
-        }
-        if (gate?.denied === true) {
-          return inject(pluginMessage(FALSE_DENY, name, 'intent gate false-deny evidence'))
-        }
-        return extra.length > 0 ? inject() : decision
-      }
-      reminded.set(sessionId, turn)
-      return inject(pluginMessage(REMINDER, name, 'intent gate missing'))
-    } catch (err) {
-      warn('could not inject the intent-gate reminder: ' + String(err))
+      return decision
+    } catch (error) {
+      warn('could not record the intent-declaration obligation: ' + String(error))
       return decision
     }
   })
+
+  ctx.on('llm/stream', (options, next) => gateStream(options, next))
+
+  /**
+   * An already-running program reaches the gate at each inner dispatch. When the user has
+   * steered since it started, the next call is refused: what already ran stays run, what has
+   * not run does not start, and the model re-judges under the new input (IG-B-08). Scoped to
+   * the managed main agent like everything else (IG-B-13).
+   */
+  ctx.on('tools/pre-execute', async (exec, next) => {
+    let decision
+    try {
+      decision = await next()
+    } catch (error) {
+      warn('downstream tools/pre-execute failed: ' + String(error))
+      throw error
+    }
+    try {
+      if (decision?.kind !== 'allow') return decision
+      const agent = exec?.agent
+      if (agent === undefined || resolveDepth(agent) !== 0) return decision
+      if (!pendingSteer(agent)) return decision
+      return {
+        kind: 'deny',
+        reason: '[intent-gate] 用户在你运行这个程序期间追加了要求，这个调用没有执行（已经执行的部分保留）；先按新要求重新判断并更新意图声明，再继续。',
+      }
+    } catch (error) {
+      warn('could not check for a steering input before dispatch: ' + String(error))
+      return decision
+    }
+  })
+
+  /**
+   * The repair hook. A rejection we raised is retried exactly once: the correction notice
+   * is appended to the session log first (so the retried request — rebuilt from that log —
+   * carries it), then we claim the retry. Every other failure, including our own exhausted
+   * stop and any real provider failure, is delegated untouched (IG-B-10).
+   */
+  ctx.on('agent/request-error', async (payload, next) => {
+    let awaiting
+    try {
+      const sessionId = payload?.agent?.session?.id
+      awaiting = sessionId === undefined ? undefined : awaitingRepair.get(sessionId)
+      const code = payload?.failure?.code
+      // One failure, one repair: this must be the exact rejection that spent the budget.
+      // Anything else — an exhausted stop, a real provider failure, another plugin's retry
+      // of the same attempt — is delegated unchanged, so a generic retry policy can never
+      // turn one declaration miss into two repairs (IG-B-06/IG-B-10).
+      if (awaiting === undefined || code !== FAILURE_CODE[awaiting.reason] || payload?.signal?.aborted === true) {
+        awaiting = undefined
+        return await next()
+      }
+      const session = payload.agent.session
+      const notice = pluginMessage(
+        repairNotice(awaiting.reason, awaiting.providerKind),
+        'intent gate: declaration repair 1/1 (' + String(awaiting.reason) + ')',
+      )
+      session.append('user/message', notice, { surfaceOp: 'append' })
+      awaitingRepair.delete(sessionId)
+      return { kind: 'retry' }
+    } catch (error) {
+      warn('could not issue the intent-declaration repair: ' + String(error))
+      if (awaiting !== undefined) awaitingRepair.delete(payload?.agent?.session?.id)
+      return await next()
+    }
+  })
+
+  /**
+   * Buffer one attempt, judge it, then replay it, repair it, or end it as a policy failure.
+   * @param options - the request envelope observed at the waterfall.
+   * @param next - resolves the adapter stream (may itself be another listener's).
+   */
+  async function* gateStream(options, next) {
+    const sessionId = options?.sessionId
+    // A conversation request owns a declaration; an auxiliary model call does not
+    // (IG-B-13). Two fields identify the auxiliary case without importing host packages:
+    // the loop stamps 'purpose' on compaction/session-title calls, and a hand-built
+    // one-shot passes 'system' text, which the loop never does.
+    if (options?.purpose !== undefined || options?.system !== undefined) {
+      yield* next()
+      return
+    }
+    const binding = sessionId === undefined ? undefined : bound.get(sessionId)
+    const record = sessionId === undefined ? undefined : owed.get(sessionId)
+    const state = stateOf(binding?.session)
+    const awaiting = state.awaitingAnswer === true
+    // No declaration is owed outside a user-opened request — but an OPEN QUESTION still
+    // forbids acting in the same request's later steps, so those attempts are inspected too
+    // (ticket 04). Everything else passes straight through.
+    if (record === undefined && !awaiting) {
+      yield* next()
+      return
+    }
+
+    const buffered = []
+    let chars = 0
+    let overChars = false
+    let overTime = false
+    const startedAt = performance.now()
+    try {
+      for await (const chunk of next()) {
+        buffered.push(chunk)
+        chars += chunkChars(chunk)
+        if (chars > limits.maxBufferedChars) overChars = true
+        if (performance.now() - startedAt > limits.maxBufferMs) overTime = true
+        if (chunk?.type === 'finish') break
+      }
+    } catch (error) {
+      // A real transport/provider failure keeps its own meaning; only the cost already
+      // reported upstream is passed on so the failed attempt does not look free.
+      for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
+      throw error
+    }
+
+    const { blocks, finish } = assembleAttempt(buffered)
+    const providerKind = finish?.kind
+    const judgeable = providerKind === 'stop' || providerKind === 'tool-calls'
+    // Order matters: a provider terminal outcome that is not a plain success (aborted,
+    // error, max-tokens) is replayed untouched and is never relabelled as a declaration
+    // problem or as one of our caps (IG-B-10). It also means this request did not complete,
+    // so a later bare "继续" is a new request rather than a continuation (IG-B-06).
+    if (!judgeable) {
+      for (const chunk of buffered) yield chunk
+        return
+    }
+    // Ticket 06 (IG-B-14): a record that cannot be rebuilt is never silently passed through.
+    // The request is stopped once, with the reason, and the session then continues from the
+    // conservative defaults so the user can restate what they want.
+    const session = binding?.session
+    if (record !== undefined && !state.trusted && session !== undefined && !reportedUntrusted.has(session)) {
+      reportedUntrusted.add(session)
+      resetDerived(session)
+      for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
+      yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(REASON.STATE_UNTRUSTED), code: FAILURE_CODE[REASON.STATE_UNTRUSTED] } } }
+      return
+    }
+
+    // Ticket 05: a human input arrived while this reply was being generated, so anything it
+    // would DO was composed without it. Pausing the call is the point; the loop then consumes
+    // that input at the next step and the request re-declares under it.
+    if (record !== undefined && callsATool(blocks) && pendingSteer(binding?.agent)) {
+      // Withhold the calls, keep the words: the loop then finishes this reply without
+      // dispatching anything, the parked steering is claimed at the next turn, and the
+      // request re-declares there under the new requirement. Ending the turn as an ERROR
+      // here would leave the steering parked with nothing to claim it, which is the one
+      // outcome that loses the correction entirely.
+        for (const chunk of buffered) {
+        if (chunk?.type === 'tool-call-delta') continue
+        if (chunk?.type === 'block-start' && chunk.blockType === 'tool-call') continue
+        if (chunk?.type === 'block-end' && chunk.block?.type === 'tool-call') continue
+        if (chunk?.type === 'finish') continue
+        yield chunk
+      }
+      yield { type: 'finish', reason: { kind: 'stop' } }
+      return
+    }
+
+    // Ticket 04: a question this session already asked is still open, so this reply may not
+    // act on it — "silence is not consent" (IG-B-16). Asking again, or answering in prose, is
+    // fine; calling a tool is not, and this is not a wording problem to repair: the request
+    // stays paused until the user answers.
+    if (awaiting && callsATool(blocks)) {
+      for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(REASON.AWAITING_ANSWER), code: FAILURE_CODE[REASON.AWAITING_ANSWER] } } }
+      return
+    }
+    if (record === undefined) {
+      // An un-latched attempt while a question is open: nothing else to judge.
+      for (const chunk of buffered) yield chunk
+      return
+    }
+    const reason = overChars ? REASON.LIMIT_CHARS
+      : overTime ? REASON.LIMIT_TIME
+        : declarationReason(blocks)
+    if (reason === undefined) {
+      for (const chunk of buffered) yield chunk
+        return
+    }
+
+    // Ticket 03: the two conversational incomes owe no line. The exemption is bounded on
+    // purpose — it never covers a mechanism stop (a cap is not a conversational reply) and
+    // never covers a reply that would call a tool, so no action can ride an exemption
+    // (IG-B-09). A reply with no text at all is still a miss: there is nothing to accept.
+    const exempt = record.intake !== 'owes' && DECLARATION_MISSES.has(reason) && !callsATool(blocks) && bodyText(blocks).trim() !== ''
+    if (exempt) {
+      for (const chunk of buffered) yield chunk
+        return
+    }
+
+    // Rejection: the spent generation stays traceable (usage), nothing else escapes.
+    for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
+    const repairable = DECLARATION_MISSES.has(reason) && record.repairs < limits.maxRepairs
+    if (repairable) {
+      // Spend the one repair now: the budget is consumed by the DECISION, so a provider
+      // failure during the repair attempt cannot hand out a second one (IG-B-06).
+      record.repairs += 1
+      if (sessionId !== undefined) awaitingRepair.set(sessionId, { reason, providerKind })
+    } else if (DECLARATION_MISSES.has(reason)) {
+      // Budget exhausted: this is the stop the spec asks to be explicit about.
+        yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(reason, { repaired: true }), code: REPAIR_EXHAUSTED_CODE } } }
+      return
+    }
+    yield {
+      type: 'finish',
+      reason: { kind: 'error', failure: { message: stopMessage(reason, { repaired: false }), code: FAILURE_CODE[reason] } },
+    }
+  }
+
+  /** The declaration verdict for one assembled attempt, or undefined when it passes. */
+  function declarationReason(blocks) {
+    let verdict
+    try {
+      verdict = checkDeclaration(bodyText(blocks))
+    } catch (error) {
+      warn('could not evaluate the intent declaration: ' + String(error))
+      return REASON.GATE_ERROR
+    }
+    return verdict.ok ? undefined : verdict.reason
+  }
 }

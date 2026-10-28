@@ -42,15 +42,18 @@ async function mountBeforeAgentCreation(config: Record<string, unknown>) {
 }
 
 describe.skipIf(!HAS_PLUGIN)('de-brand plugin keeps the preset persona (D2)', () => {
-  it('mounts on an existing agent and keeps Phase 0, the buckets and the suffix', async () => {
+  it('mounts on an existing agent and keeps Phase 0, the declaration shape and the suffix', async () => {
     const harness = await createPersonaHarness()
     onTestFinished(() => harness.dispose())
     const plugin = await loadIdentityPlugin(PLUGIN_DIR)
     plugin.apply(harness.ctx, DEPLOYED_CONFIG)
     const text = await harness.render()
     expect(text).toContain('## Phase 0 — Intent Gate')
-    expect(text).toContain('Intent: <bucket> — <what the user wants, in outcome terms>')
-    expect(text).toContain('| Surface form | Bucket | What decides it (never the phrasing) |')
+    // The shipped shape is the request-level declaration (spec 2026-10-27): a literal
+    // marker plus natural language. The six-bucket vocabulary is retired, so its absence
+    // is part of the contract, not just its replacement.
+    expect(text).toContain('Intent: <what the user will get, in outcome terms>')
+    expect(text).not.toContain('Buckets, exactly six')
     expect(text.endsWith(SHIPPED_SUFFIX)).toBe(true)
   })
 

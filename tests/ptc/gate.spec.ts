@@ -2,10 +2,17 @@ import { describe, expect, it, onTestFinished } from 'vitest'
 import { defineTool } from '@deepseek-ai/dsh-tools'
 import { createPtcHarness, readFixture, writeFixture } from './harness.ts'
 
-const q = (value: string) => JSON.stringify(value)
-const intent = 'Intent: fix — adjust line 2 of the fixture; I will read then patch it.'
+/**
+ * The retired tool-name gate has to STAY retired. Until 2026-10-27 this file asserted the
+ * opposite: a program whose carrier message lacked a six-bucket line was denied on its
+ * first `write`/`edit`/`bash` dispatch, mid-program, with the whole program dying with it.
+ * The request-level gate (spec 2026-10-27-intent-gate-b-requirements) moved the obligation
+ * to the model stream, so with the gate mounted there must be NO refusal at dispatch time —
+ * including for the very calls the old mechanism denied. Keeping this as the negative
+ * control is what stops the old rule from quietly reappearing beside the new one.
+ */
 
-const feedTurn = (harness: Awaited<ReturnType<typeof createPtcHarness>>, text: string) => harness.beginTurn({ text })
+const q = (value: string) => JSON.stringify(value)
 
 const editProgram = (file: string) => `
   const r = await tools.read({ file_path: ${q(file)} })
@@ -13,50 +20,51 @@ const editProgram = (file: string) => `
   return { out }
 `
 
-describe('intent gate over PTC (FR-1/FR-14)', () => {
-  it('denies the first behavior action of a turn without the intent line', async () => {
-    const harness = await createPtcHarness({ watch: true })
+describe('intent gate is no longer decided on tool names (IG-B-01/02 replacement)', () => {
+  it('executes an edit program whose reply carried no declaration line at all', async () => {
+    const harness = await createPtcHarness({ gate: true })
     onTestFinished(() => harness.cleanup())
-    const file = await writeFixture(harness.dir, 'gated.txt', 'one\ntwo\nthree\n')
-    feedTurn(harness, 'I will edit the file now.')
-    const denied = await harness.runCode(editProgram(file), { callId: 'root-1' })
-    expect(denied.isError).toBe(true)
-    const message = denied.error?.message ?? ''
-    expect(message).toContain('Intent')
-    expect(await readFixture(file)).toBe('one\ntwo\nthree\n')
-
-    // At most one deny per turn: the same turn's next attempt is not walled in.
-    const second = await harness.runCode(editProgram(file), { callId: 'root-1' })
-    expect(second.isError).toBe(false)
-    expect(await readFixture(file)).toBe('one\nTWO\nthree\n')
-  })
-
-  it('allows the behavior action when the carrier message declares a valid bucket', async () => {
-    const harness = await createPtcHarness({ watch: true })
-    onTestFinished(() => harness.cleanup())
-    const file = await writeFixture(harness.dir, 'allowed.txt', 'one\ntwo\nthree\n')
-    feedTurn(harness, intent)
+    const file = await writeFixture(harness.dir, 'ungated.txt', 'one\ntwo\nthree\n')
+    await harness.beginTurn({ text: 'I will edit the file now.' })
     const result = await harness.runCode(editProgram(file), { callId: 'root-1' })
     expect(result.isError).toBe(false)
     expect(await readFixture(file)).toBe('one\nTWO\nthree\n')
   })
 
-  it('leaves a read-only program alone without an intent line', async () => {
-    const harness = await createPtcHarness({ watch: true })
+  it('does not wall a program in after its first behavior call', async () => {
+    const harness = await createPtcHarness({ gate: true })
+    onTestFinished(() => harness.cleanup())
+    const first = await writeFixture(harness.dir, 'first.txt', 'a\nb\n')
+    const second = await writeFixture(harness.dir, 'second.txt', 'c\nd\n')
+    await harness.beginTurn({ text: 'Two edits, no declaration line.' })
+    const result = await harness.runCode(`
+      for (const name of ['first.txt', 'second.txt']) {
+        const r = await tools.read({ file_path: name })
+        await tools.edit({ input: '[' + r.path + '#' + r.tag + ']\\nPUT 2.=2:\\n+CHANGED' })
+      }
+      return { done: true }
+    `, { callId: 'root-1' })
+    expect(result.isError).toBe(false)
+    expect(await readFixture(first)).toBe('a\nCHANGED\n')
+    expect(await readFixture(second)).toBe('c\nCHANGED\n')
+  })
+
+  it('leaves a read-only program alone', async () => {
+    const harness = await createPtcHarness({ gate: true })
     onTestFinished(() => harness.cleanup())
     const file = await writeFixture(harness.dir, 'readonly.txt', 'one\ntwo\n')
-    feedTurn(harness, 'Just looking.')
+    await harness.beginTurn({ text: 'Just looking.' })
     const result = await harness.runCode(`const r = await tools.read({ file_path: ${q(file)} }); return { tag: r.tag }`)
     expect(result.isError).toBe(false)
   })
 
-  it('does not match a renamed edit tool (negative control for name-based gating)', async () => {
-    const harness = await createPtcHarness({ watch: true })
+  it('does not match a renamed edit tool either (nothing here keys on names)', async () => {
+    const harness = await createPtcHarness({ gate: true })
     onTestFinished(() => harness.cleanup())
     const file = await writeFixture(harness.dir, 'renamed.txt', 'one\ntwo\n')
     harness.ctx.tools.register(defineTool({
       name: 'edit_hashline',
-      description: 'Renamed edit fixture (must bypass the name-based gate).',
+      description: 'Renamed edit fixture.',
       parameters: { file_path: { type: 'string', required: true } },
       output: { schema: { type: 'string' }, render: (_args, value) => [{ type: 'text', text: value }] },
       async execute(args) {
@@ -65,17 +73,16 @@ describe('intent gate over PTC (FR-1/FR-14)', () => {
         return 'renamed edit applied'
       },
     }))
-    feedTurn(harness, 'No gate line here.')
+    await harness.beginTurn({ text: 'No gate line here.' })
     const result = await harness.runCode(`const out = await tools.edit_hashline({ file_path: ${q(file)} }); return { out }`)
     expect(result.isError).toBe(false)
     expect(await readFixture(file)).toBe('one\nRENAMED\n')
   })
 
-  it('keeps the upstream tag guidance inside a denied-then-accepted PTC turn', async () => {
-    const harness = await createPtcHarness({ watch: true })
+  it('keeps the upstream tag guidance inside a PTC program', async () => {
+    const harness = await createPtcHarness({ gate: true })
     onTestFinished(() => harness.cleanup())
     const file = await writeFixture(harness.dir, 'tagless.txt', 'one\ntwo\n')
-    feedTurn(harness, intent)
     const result = await harness.runCode(`
       const r = await tools.read({ file_path: ${q(file)} })
       const wrong = r.tag === '0000' ? '1111' : '0000'

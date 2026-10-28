@@ -15,9 +15,13 @@ const fail = (message) => failures.push(message)
 
 const PRESET_ID = 'ptc-hashline'
 const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
+// The gate module ships in the bundle and is loaded from the install root, so it must stay on
+// the builtin-only surface; importing it here also pins the buffering caps it declares.
+const { DEFAULT_LIMITS: GATE_LIMITS } = await import('../presets/ptc-hashline/intent-gate-watchdog.mjs')
+
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': 'b60c1846157504db50514aae9ac8730a381bbc92c36d3dce7af07ade938d8c3e',
-  'intent-gate-watchdog.mjs': 'a7c4b4aabfb8c32b4d44a03c0bc4168b7e05c42f56d3f9cb320c3e71b6800b50',
+  'personas/orchestrator.md': '3704ddc301b3e578e0d6de4210a6479d2cb3f01a81338ad7e67bf06beb07b562',
+  'intent-gate-watchdog.mjs': '815ef4a17c7199a1097542a0ab0e01030a70407b6673fa0a653dd9b5a21bcec1',
 }
 
 const read = relative => readFileSync(join(repo, relative), 'utf8')
@@ -97,9 +101,25 @@ require_('tool-edit', entry => {
 require_('tool-presentation', entry => {
   if (entry.config?.mode !== 'ptc') fail('tool-presentation.mode must be ptc')
 })
+// The request-level intent gate (spec 2026-10-27, ticket 01) replaced the per-turn tool-name
+// gate, so the row no longer carries a gate mode: it is the delivered behaviour. What the row
+// must keep declaring is the ASSET path and the bounded buffering caps, and those caps must
+// equal what the module itself defaults to (drift here silently changes what "limit" means).
 require_('intent-gate-watchdog', entry => {
-  if (entry.config?.gate !== 'enforce') fail('intent-gate-watchdog.gate must be enforce')
-  if (entry.name !== 'dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs') fail('watchdog must load from this bundle')
+  if (entry.name !== 'dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs') fail('intent gate must load from this bundle')
+  for (const [key, value] of Object.entries(GATE_LIMITS)) {
+    if (entry.config?.[key] !== value) fail('intent-gate-watchdog.' + key + ' must be ' + value)
+  }
+  if ('gate' in (entry.config ?? {})) fail('intent-gate-watchdog must not carry a gate mode any more (no observe/enforce switch)')
+})
+// The clarification pause (spec 2026-10-27 IG-B-16, ticket 04) is delivered by the host's
+// BLOCKING ask_user_question: in 'timed' mode the tool returns a pending result and invites
+// the model to continue other work, which is the opposite of "发问后暂停当前请求". The gate's
+// waiting accounting assumes the blocking shape, so pin it here.
+require_('tool-ask-user', entry => {
+  if (entry.name !== '@deepseek-ai/dsh-tool-ask-user') fail('tool-ask-user row must mount @deepseek-ai/dsh-tool-ask-user')
+  const mode = entry.config?.mode
+  if (mode !== undefined && mode !== 'legacy') fail('tool-ask-user must keep the blocking legacy ask (got mode: ' + String(mode) + ')')
 })
 require_('tool-subagent', entry => {
   if (entry.config?.maxDepth !== 1) fail('tool-subagent.maxDepth must be 1')

@@ -22,6 +22,8 @@
     "test:delivery": "node scripts/delivery-acceptance-cli.mjs",
     "sync:check": "node scripts/sync-check.mjs",
     "test:host-policy": "node scripts/test-default-edit-host.mjs",
+    "test:host-gate": "node scripts/test-intent-gate-host.mjs",
+    "test:surface-gate": "node scripts/test-intent-gate-surface.mjs",
     "eval:freeze": "node scripts/evaluation/driver.mjs freeze",
     "eval:check": "node scripts/evaluation/driver.mjs check"
   },

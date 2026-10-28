@@ -1,7 +1,7 @@
 /**
  * PTC acceptance harness: a real `ToolRuntime` in `mode: 'ptc'` over the local
- * filesystem, this plugin, the upstream `edit`, and (optionally) the copied
- * intent-gate watchdog.
+ * filesystem, this plugin, the upstream `edit`, and (optionally) the preset's
+ * request-level intent gate.
  *
  * Programs are executed by {@link InProcessPtcRuntime}, which implements the
  * production `PtcRuntime` contract; every inner call therefore travels through
@@ -22,14 +22,18 @@ import ToolRuntime from '@deepseek-ai/dsh-tools'
 import type { ToolExecutionResult } from '@deepseek-ai/dsh-tools'
 import * as ToolEdit from '@hy-sde-org/dsh-tool-edit'
 // @ts-ignore -- plain ESM asset copied verbatim from the gate baseline
-import * as Watchdog from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
+import * as IntentGate from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
 import * as ToolRead from '../../packages/tool-read/src/index.ts'
 import { InProcessPtcRuntime } from './carrier.ts'
 
 export interface PtcHarnessOptions {
   read?: ToolRead.Config
-  /** Mount the intent gate in enforce mode. */
-  watch?: boolean
+  /**
+   * Mount the preset's request-level intent gate. Mounting it here is the point: this
+   * tier must show that tool dispatch is NOT gated by tool names any more (the gate reads
+   * the model stream, not `tools/pre-execute`).
+   */
+  gate?: boolean
   /** Mount stock tool-fs (for the duplicate-provider negative control). */
   stockRead?: boolean
   /** Mount the production observation policy. Defaults to true. */
@@ -85,7 +89,7 @@ export async function createPtcHarness(options: PtcHarnessOptions = {}): Promise
     mode: 'auto',
     ...options.policyModule === undefined ? {} : { contentPolicyModule: options.policyModule },
   })
-  if (options.watch === true) await ctx.plugin(Watchdog as never, { gate: 'enforce' } as never)
+  if (options.gate === true) await ctx.plugin(IntentGate as never, { maxBufferedChars: 262144, maxBufferMs: 120000 } as never)
 
   let calls = 0
   let userMessages = 0

@@ -258,43 +258,70 @@ console.log(JSON.stringify({ tag, path: read.value.path, disk, moved: true, remo
     fail('profile read->MV->read->edit failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
   }
 
-  step('intent gate over the profile-installed watchdog asset')
+  step('intent gate over the profile-installed gate asset')
   const gateDriver = join(profileDir, 'gate.mjs')
   writeFileSync(gateDriver, `import { Context } from '@deepseek-ai/cordis'
-import * as Watchdog from ${JSON.stringify(pathToFileURL(watchdogPath ?? '').href)}
+import * as Gate from ${JSON.stringify(pathToFileURL(watchdogPath ?? '').href)}
 
-const allow = () => Promise.resolve({ kind: 'allow' })
-const session = { id: 'gate-check', header: { cwd: process.cwd() }, append: () => 1 }
-async function decisionFor(text) {
+// The gate derives everything it knows from the session log (ticket 06), so the probe
+// session carries one: an empty log is a session with no accepted understanding yet.
+const session = {
+  id: 'gate-check',
+  header: { cwd: process.cwd() },
+  events: [],
+  snapshotEvents(from = 0) { return this.events.slice(from) },
+  append(type, data) { this.events.push({ type, seq: this.events.length, time: 0, data }); return this.events.length },
+}
+/** One scripted attempt: a text block, then a terminal finish. */
+const attemptFor = text => [
+  { type: 'block-start', index: 0, blockType: 'text' },
+  { type: 'text-delta', index: 0, text },
+  { type: 'block-end', index: 0, block: { type: 'text', text } },
+  { type: 'finish', reason: { kind: 'stop' } },
+]
+/**
+ * Drive the two official seams the request-level gate uses: a real user message opens
+ * the step (agent/pre-step), then one model attempt goes through llm/stream.
+ */
+async function run(text) {
   const ctx = new Context()
-  await ctx.plugin(Watchdog, { gate: 'enforce' })
+  await ctx.plugin(Gate, { maxBufferedChars: 262144, maxBufferMs: 120000 })
   const agent = { ctx, session, options: {} }
   await ctx.waterfall('agent/pre-step', {
     agent,
-    messages: [{ role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text }] }],
+    messages: [{ role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'go' }] }],
     turn: 1,
     step: 1,
   }, () => Promise.resolve({ kind: 'enter', messages: [] }))
-  ctx.emit('session/event', session, { type: 'turn/start', data: { turn: 1 } })
-  ctx.emit('session/event', session, { type: 'assistant/message', data: { turn: 1, message: { role: 'assistant', content: [{ type: 'text', text }] } } })
-  ctx.emit('session/event', session, { type: 'tool/call', data: { turn: 1, step: 1, callId: 'root-1', name: 'run_code', arguments: '{}' } })
-  ctx.emit('session/event', session, { type: 'tool/ptc-dispatch-start', data: { rootCallId: 'root-1', name: 'edit' } })
-  const decision = await ctx.waterfall('tools/pre-execute', { name: 'edit', agent, parent: {} }, allow)
+  const seen = []
+  const stream = ctx.waterfall('llm/stream', {
+    provider: 'profile-check',
+    model: 'fixed',
+    messages: [],
+    sessionId: session.id,
+  }, async function* () { for (const chunk of attemptFor(text)) yield chunk })
+  for await (const chunk of stream) seen.push(chunk)
   await ctx.fiber.dispose()
-  return decision
+  return seen
 }
-const denied = await decisionFor('I will edit the file now.')
-if (denied.kind !== 'deny' || !String(denied.reason).includes('Intent')) {
-  throw new Error('gate did not deny a missing intent line: ' + JSON.stringify(denied))
+const rejected = await run('I will edit the file now.')
+const stop = rejected.at(-1)
+if (stop?.type !== 'finish' || stop.reason?.kind !== 'error' || stop.reason.failure?.code !== 'INTENT_DECLARATION_MISSING') {
+  throw new Error('gate did not stop a reply without a declaration: ' + JSON.stringify(rejected))
 }
-const allowed = await decisionFor('Intent: fix — adjust the file; I will patch it.')
-if (allowed.kind !== 'allow') throw new Error('gate denied a valid intent line: ' + JSON.stringify(allowed))
-console.log(JSON.stringify({ denied: denied.kind, allowed: allowed.kind }))
+if (rejected.some(chunk => chunk.type === 'text-delta')) {
+  throw new Error('the rejected reply body was released to the loop: ' + JSON.stringify(rejected))
+}
+const accepted = await run('Intent: fix the file; I will patch it, then re-read it.')
+if (accepted.length !== 4 || accepted.at(-1)?.reason?.kind !== 'stop') {
+  throw new Error('gate did not pass a declared reply through untouched: ' + JSON.stringify(accepted))
+}
+console.log(JSON.stringify({ rejected: stop.reason.failure.code, acceptedChunks: accepted.length }))
 `)
   try {
     const out = run(process.execPath, [gateDriver], { cwd: profileDir, timeout: 120_000 })
     const result = JSON.parse(out.trim().split('\n').at(-1))
-    ok('gate denied without a line and allowed with one: ' + JSON.stringify(result))
+    ok('gate stopped a reply without a declaration and passed a declared one through: ' + JSON.stringify(result))
   } catch (error) {
     fail('profile gate check failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
   }
