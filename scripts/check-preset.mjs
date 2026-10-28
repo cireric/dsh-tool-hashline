@@ -20,8 +20,8 @@ const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
 const { DEFAULT_LIMITS: GATE_LIMITS } = await import('../presets/ptc-hashline/intent-gate-watchdog.mjs')
 
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': '3704ddc301b3e578e0d6de4210a6479d2cb3f01a81338ad7e67bf06beb07b562',
-  'intent-gate-watchdog.mjs': '815ef4a17c7199a1097542a0ab0e01030a70407b6673fa0a653dd9b5a21bcec1',
+  'personas/orchestrator.md': '29c0d73d064caf6312f8793348ff9e0237dac36ade7aabbbc5b92a3aad4a0ca5',
+  'intent-gate-watchdog.mjs': '685f8eda04e8e436aaba06cdaf350e49174841903d8acad7f93900d712caf3e0',
 }
 
 const read = relative => readFileSync(join(repo, relative), 'utf8')

@@ -57,7 +57,7 @@ pnpm sync:check
 
 完整默认策略宿主验收另有 `pnpm test:host-policy --pack .scratch/<本轮唯一目录>`：先在独立验证副本运行 `pnpm check` 构建，再由此命令打包安装、通过真实 registry 挂完整 preset，并用固定适配器驱动真实 Agent、子代理和官方进程 PTC。它不调用真实模型，不证明模型纪律或收益；默认保留临时安装和逐条证据。也可传入 `test:delivery --keep` 留下的一次性 `dsh-profile-acceptance` 路径与新留证目录。不要在运行宿主链接的源码树里构建。
 
-请求级意图门另有两层验收：`pnpm test:host-gate --pack <新留证目录>` 跑 46 个整宿主用例（声明、修复、输入例外、澄清等待、中途纠正、日志推导恢复与交叉），`pnpm test:surface-gate --pack <新留证目录>` 在客户端呈现边界（`agent/assistant-stream` 帧即控制器原样转发给浏览器的载荷）证明校验前零可见正文。宿主用例的说明：`pnpm test:host-gate` 用同一隔离打包安装与真实 launcher，固定适配器提供模型输出，逐条断言「发布、调用记录、程序开始、磁盘副作用」四个观察点，覆盖声明检查的接受/拒绝、块与分块拼接、最终文本优先、子代理与非目标 preset 不拦、辅助调用免声明与暂存上限。它同样不调用真实模型，只证明流程约束，不证明模型是否理解。
+请求级意图门另有两层验收：`pnpm test:host-gate --pack <新留证目录>` 跑 50 个整宿主用例（声明、声明专用修复与同请求续步、输入例外、澄清等待、中途纠正、日志推导恢复与交叉），`pnpm test:surface-gate --pack <新留证目录>` 在客户端呈现边界（`agent/assistant-stream` 帧即控制器原样转发给浏览器的载荷）证明校验前零可见正文。宿主用例的说明：`pnpm test:host-gate` 用同一隔离打包安装与真实 launcher，固定适配器提供模型输出，逐条断言「发布、调用记录、程序开始、磁盘副作用」四个观察点，覆盖声明检查的接受/拒绝、块与分块拼接、最终文本优先、子代理与非目标 preset 不拦、辅助调用免声明与暂存上限。唯一一次自动修复自 2026-10-28 起是**声明专用**生成（该步请求的工具目录为空），声明发布后由同一请求续步，见[工程验收](docs/acceptance/2026-10-28-declaration-repair-engineering.md)与 [ADR-0006](docs/adr/0006-declaration-only-repair-and-business-continuation.md)。它同样不调用真实模型，只证明流程约束，不证明模型是否理解。
 
 `check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。`test:delivery` 是真实宿主交付验收：它会 `pnpm pack` 四个交付包、装进一次性 DSH_HOME、用真实 launcher 装配 profile、跑门禁并把逐条证据写进 `docs/acceptance/<日期>-delivery-acceptance-report.md`（耗时数分钟；`--no-gates` 只跑装配与工作流）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
 

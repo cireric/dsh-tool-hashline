@@ -41,8 +41,10 @@ const programChunks = (text: string): Chunk[] => [
 async function mount(config: Record<string, unknown> = {}) {
   const ctx = new Context()
   await ctx.plugin(Gate as never, config as never)
-  /** Every append the gate performed, in order (the repair notice and nothing else). */
+  /** Every append the gate performed, in order (it issues none of its own any more). */
   const appended: { type: string; data: any; intent: any }[] = []
+  /** Commit + notify, as the real Session does. */
+  const commit = commitTo(ctx)
   /** Live session objects by id, so the stream helper can commit to the right log. */
   const sessions = new Map<string, any>()
   const agent = (sessionId: string, depth = 0) => {
@@ -68,7 +70,18 @@ async function mount(config: Record<string, unknown> = {}) {
     /** The host's steering queue for the nearest step (ticket 05 reads it). */
     const inbox = { nextStep: [] as any[] }
     sessions.set(sessionId, session)
-    return { session, options: {}, inbox }
+    return {
+      session,
+      options: {},
+      inbox,
+      /** Public agent API: the loop delivers these as the next step's claimed messages. */
+      followups: [] as any[],
+      injected: [] as any[],
+      followup(message: any) { this.followups.push(message) },
+      inject(message: any) { this.injected.push(message) },
+      /** Steering is the loop's documented way for a listener to keep a turn going. */
+      steer(message: any) { this.injected.push(message); this.inbox.nextStep.push(message) },
+    }
   }
   return {
     ctx,
@@ -83,22 +96,46 @@ async function mount(config: Record<string, unknown> = {}) {
         () => Promise.resolve({ kind: 'enter', messages: [] }),
       )
     },
-    /** One machine-opened step (a tool result continued the same request). */
+    /**
+     * One machine-opened step: the loop splices whatever the gate queued into the inbox and
+     * claims it, so a repair notice or a continuation reaches this step's request.
+     */
     async machineStep(target: ReturnType<typeof agent>, turn = 1) {
+      target.inbox.nextStep.push(...target.followups.splice(0))
+      const claimed = target.inbox.nextStep.splice(0)
+      for (const message of claimed) commit(target.session, 'user/message', message)
+      const messages = claimed.length > 0
+        ? claimed
+        : [{ role: 'tool', source: { kind: 'tool', callId: 'call-1' }, content: [{ type: 'text', text: 'ok' }] }]
       await (ctx as any).waterfall(
         'agent/pre-step',
-        { agent: target, messages: [{ role: 'tool', source: { kind: 'tool', callId: 'call-1' }, content: [{ type: 'text', text: 'ok' }] }], turn, step: 1 },
+        { agent: target, messages, turn, step: 1 },
         () => Promise.resolve({ kind: 'enter', messages: [] }),
       )
+      return claimed
+    },
+    /** The driver's idle transition: where the gate opens the declaration-only repair. */
+    async idle(target: ReturnType<typeof agent>) {
+      await (ctx as any).emit('agent/status', { agent: target, status: 'idle' })
+    },
+    /** The tool schemas the next step would be offered (the declaration step offers none). */
+    async assemble(target: ReturnType<typeof agent>, tools = [{ name: 'run_code', description: 'x', parameters: {} }]) {
+      const assembly = await (ctx as any).waterfall(
+        'system-prompt/assemble',
+        { sections: [], contexts: [], tools: [], variables: {} },
+        { agent: target, scope: target },
+        () => Promise.resolve({ sections: [], contexts: [], tools, variables: {} }),
+      )
+      return (assembly.tools ?? []).map((tool: any) => tool.name)
     },
     /**
      * Run one attempt through the waterfall and collect what the loop would receive, then
      * commit what the loop would commit: an accepted reply and a completed turn, or the
      * failure the gate's stop causes. That log is the only state the gate has (ticket 06).
      */
-    async stream(target: ReturnType<typeof agent> | string, chunks: Chunk[], extra: Record<string, unknown> = {}) {
-      const sessionId = typeof target === 'string' ? target : target.session.id
-      const log = typeof target === 'string' ? (sessions.get(target) as any) : target.session
+    async stream(targetOrId: ReturnType<typeof agent> | string, chunks: Chunk[], extra: Record<string, unknown> = {}, control: { crashAfterCommit?: boolean } = {}) {
+      const sessionId = typeof targetOrId === 'string' ? targetOrId : targetOrId.session.id
+      const log = typeof targetOrId === 'string' ? (sessions.get(targetOrId) as any) : targetOrId.session
       const options = { provider: 'p', model: 'm', messages: [], sessionId, ...extra }
       const iterable = (ctx as any).waterfall('llm/stream', options, async function* () { for (const chunk of chunks) yield chunk })
       const seen: Chunk[] = []
@@ -109,14 +146,20 @@ async function mount(config: Record<string, unknown> = {}) {
       // log to commit to; the gate's pass-through is all that is under test there.
       if (log !== undefined) {
         if (!stopped && text !== '') {
-          log.events.push({ type: 'assistant/message', seq: log.events.length, time: 0, data: { message: { role: 'assistant', content: [{ type: 'text', text }] } } })
+          commit(log, 'assistant/message', { message: { role: 'assistant', content: [{ type: 'text', text }] } })
         }
-        log.events.push({
-          type: 'turn/end',
-          seq: log.events.length,
-          time: 0,
-          data: { turn: 1, reason: stopped ? { kind: 'error', error: { code: (seen[0] as any).reason.failure.code, message: 'stopped' } } : { kind: 'completed' } },
-        })
+        // The loop's own stop boundary, before the turn boundary commits. A listener may ask
+        // for one more step here, and the loop then re-reads its inbox instead of closing.
+        const target = typeof targetOrId === 'string' ? undefined : targetOrId
+        // The process can die between the commit and the turn's stop boundary. A case that
+        // simulates that stops here: nothing queued, no turn/end, no replay of anything.
+        if (control.crashAfterCommit === true) return seen
+        if (target !== undefined) {
+          await (ctx as any).serial('agent/turn-stopping', { agent: target, turn: 1 })
+        }
+        if (target === undefined || target.inbox.nextStep.length === 0) {
+          commit(log, 'turn/end', { turn: 1, reason: stopped ? { kind: 'error', error: { code: (seen[0] as any).reason.failure.code, message: 'stopped' } } : { kind: 'completed' } })
+        }
       }
       return seen
     },
@@ -129,6 +172,16 @@ async function mount(config: Record<string, unknown> = {}) {
       )
     },
   }
+}
+
+/**
+ * Commit one session event the way the harness's fake session does, AND notify it the way the
+ * real Session does — the gate hangs its continuation off 'session/event', so a silent push
+ * would test a world the host never creates.
+ */
+const commitTo = (ctx: any) => (session: any, type: string, data: unknown) => {
+  session.events.push({ type, seq: session.events.length, time: 0, data })
+  ctx.emit('session/event', session, session.events[session.events.length - 1])
 }
 
 const textOf = (chunks: Chunk[]) => chunks.filter(chunk => chunk.type === 'text-delta').map(chunk => String(chunk.text)).join('')
@@ -230,56 +283,136 @@ describe('request-level intent gate: what is out of scope', () => {
   })
 })
 
-describe('request-level intent gate: bounded repair (ticket 02)', () => {
-  it('spends one repair, records its notice, and then accepts the corrected reply', async () => {
+describe('request-level intent gate: declaration-only repair (2026-10-28 plan)', () => {
+  /** The whole shape: withhold, spend the repair as a tool-free declaration step, then continue. */
+  const declareOnce = async (h: Awaited<ReturnType<typeof mount>>, target: any, attempts: Chunk[], text = 'go') => {
+    await h.userStep(target, 1, text)
+    const withheld = await h.stream(target, attempts)
+    expect(await h.requestError(target, codeOf(withheld) as string)).toBeUndefined()
+    await h.idle(target)
+    return withheld
+  }
+
+  it('withholds the attempt and opens a TOOL-FREE declaration step instead of retrying in place', async () => {
     const h = await mount()
     const target = h.agent('repair-a')
+    expect(await h.assemble(target)).toEqual(['run_code'])
     await h.userStep(target)
-    const first = await h.stream('repair-a', textChunks('No declaration here.'))
-    expect(codeOf(first)).toBe('INTENT_DECLARATION_MISSING')
-    const outcome = await h.requestError(target, 'INTENT_DECLARATION_MISSING')
-    expect(outcome).toEqual({ kind: 'retry' })
-    expect(h.appended).toHaveLength(1)
-    const [notice] = h.appended
-    expect(notice.type).toBe('user/message')
-    expect(notice.intent).toEqual({ surfaceOp: 'append' })
-    expect(notice.data.source.kind).toBe('intent-gate-watchdog')
-    expect(notice.data.source.form).toBe('notice')
-    expect(notice.data.role).toBe('user')
-    expect(String(notice.data.content[0].text)).toContain('Intent:')
-    expect(String(notice.data.content[0].text)).toMatch(/grants no new authority/u)
-    const second = textChunks('Intent: answer the question; I will explain it in prose.')
-    expect(await h.stream('repair-a', second)).toEqual(second)
+    const withheld = await h.stream('repair-a', programChunks('No declaration here.'))
+    expect(codeOf(withheld)).toBe('INTENT_DECLARATION_MISSING')
+    expect(textOf(withheld)).toBe('')
+    expect(withheld.some(chunk => chunk.type === 'tool-call-delta')).toBe(false)
+    expect(String((withheld.at(-1) as any).reason.failure.message)).toMatch(/正在自动重新生成声明/u)
+    // A retry inside the same step would be handed the same assembled tools, so the failure
+    // stays terminal and the repair arrives as its own step.
+    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    expect(h.appended).toHaveLength(0)
+    await h.idle(target)
+    expect(target.followups).toHaveLength(1)
+    const notice = target.followups[0]
+    expect(notice.source.kind).toBe('intent-gate-watchdog')
+    expect(notice.source.form).toBe('notice')
+    expect(notice.role).toBe('user')
+    expect(String(notice.content[0].text)).toContain('Intent:')
+    expect(String(notice.content[0].text)).toMatch(/DECLARATION-ONLY/u)
+    expect(String(notice.content[0].text)).toMatch(/grants no new authority/u)
+    // the declaration step itself: no tool schema is offered at all
+    const claimed = await h.machineStep(target)
+    expect(claimed).toHaveLength(1)
+    expect(await h.assemble(target)).toEqual([])
+    const declared = textChunks('Intent: answer the question; I will explain it in prose.')
+    expect(await h.stream(target, declared)).toEqual(declared)
+    // published declaration, then the SAME request continues with its tools back
+    expect(target.injected).toHaveLength(1)
+    expect(String(target.injected[0].content[0].text)).toContain('Do not repeat or restate the Intent: line')
+    await h.machineStep(target)
+    expect(await h.assemble(target)).toEqual(['run_code'])
+    const business = textChunks('The fixture is small; here is the answer.')
+    expect(await h.stream('repair-a', business)).toEqual(business)
     await h.ctx.fiber.dispose()
   })
 
-  it('stops once the single repair is spent, and delegates the stop instead of repairing again', async () => {
+  it('ends the request as a protocol pause when the declaration step fails too', async () => {
+    for (const [sessionId, attempt] of [
+      ['pause-a', textChunks('no marker again')],
+      ['pause-b', textChunks('Intent:   ')],
+      ['pause-c', programChunks('Intent: act now; I will write it.')],
+    ] as const) {
+      const h = await mount()
+      const target = h.agent(sessionId)
+      await declareOnce(h, target, textChunks('undeclared first reply'))
+      await h.machineStep(target)
+      const stopped = await h.stream(target, attempt as unknown as Chunk[])
+      expect(codeOf(stopped), sessionId).toBe('INTENT_DECLARATION_REPAIR_EXHAUSTED')
+      expect(textOf(stopped), sessionId).toBe('')
+      expect(stopped.some(chunk => chunk.type === 'tool-call-delta'), sessionId).toBe(false)
+      expect(String((stopped.at(-1) as any).reason.failure.message), sessionId).toMatch(/意图声明未能生成，工作尚未执行/u)
+      // no third generation, and the next step is a normal one again
+      expect(await h.requestError(target, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')).toBeUndefined()
+      await h.idle(target)
+      expect(target.followups, sessionId).toHaveLength(0)
+      expect(await h.assemble(target), sessionId).toEqual(['run_code'])
+      await h.ctx.fiber.dispose()
+    }
+  })
+
+  it('keeps the declaration body cap separate from a provider truncation', async () => {
+    const h = await mount({ maxDeclarationChars: 24 })
+    const target = h.agent('cap-a')
+    await declareOnce(h, target, textChunks('undeclared first reply'))
+    await h.machineStep(target)
+    const tooLong = await h.stream(target, textChunks('Intent: ' + 'x'.repeat(64)))
+    expect(codeOf(tooLong)).toBe('INTENT_DECLARATION_REPAIR_EXHAUSTED')
+    expect(String((tooLong.at(-1) as any).reason.failure.message)).toMatch(/24 字符/u)
+    await h.ctx.fiber.dispose()
+
+    // a truncated generation keeps the provider's meaning and is never called a declaration miss
+    const other = await mount()
+    const second = other.agent('cap-b')
+    await other.userStep(second)
+    const truncated: Chunk[] = [{ type: 'finish', reason: { kind: 'max-tokens' } }]
+    expect(await other.stream(second, truncated)).toEqual(truncated)
+    expect(await other.requestError(second, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    expect(await other.assemble(second)).toEqual(['run_code'])
+    await other.ctx.fiber.dispose()
+  })
+
+  it('lets a human input that lands during the declaration win: no continuation is queued', async () => {
     const h = await mount()
-    const target = h.agent('repair-b')
-    await h.userStep(target)
-    expect(codeOf(await h.stream('repair-b', textChunks('still no declaration')))).toBe('INTENT_DECLARATION_MISSING')
-    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toEqual({ kind: 'retry' })
-    // the repair attempt misses again: terminal, and no second notice
-    expect(codeOf(await h.stream('repair-b', textChunks('nope, no marker again')))).toBe('INTENT_DECLARATION_REPAIR_EXHAUSTED')
-    expect(await h.requestError(target, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')).toBeUndefined()
-    expect(h.appended).toHaveLength(1)
+    const target = h.agent('steer-decl')
+    await declareOnce(h, target, textChunks('undeclared first reply'))
+    await h.machineStep(target)
+    // the user speaks while the declaration-only reply is being generated
+    target.inbox.nextStep.push({ role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text: 'also rename the file' }] })
+    const declared = textChunks('Intent: answer the question; I will explain it in prose.')
+    expect(await h.stream(target, declared)).toEqual(declared)
+    expect(target.injected).toHaveLength(0)
     await h.ctx.fiber.dispose()
   })
 
-  it('gives each new user input its own repair', async () => {
+  it('gives each new user input its own repair, and a continuation notice never spends one', async () => {
     const h = await mount()
     const target = h.agent('repair-c')
-    await h.userStep(target, 1)
-    await h.stream('repair-c', textChunks('undeclared one'))
-    await h.requestError(target, 'INTENT_DECLARATION_MISSING')
-    await h.stream('repair-c', textChunks('undeclared two'))
-    await h.requestError(target, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
-    // a new real user message opens a new request with a fresh budget
-    await h.userStep(target, 2)
-    const again = textChunks('undeclared three')
-    expect(codeOf(await h.stream('repair-c', again))).toBe('INTENT_DECLARATION_MISSING')
-    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toEqual({ kind: 'retry' })
-    expect(h.appended).toHaveLength(2)
+    // four notices from this producer: two repairs and two continuations
+    for (const text of ['repair one', 'repair two']) {
+      target.session.events.push({ type: 'user/message', seq: target.session.events.length, time: 0, data: { role: 'user', source: { kind: 'intent-gate-watchdog', form: 'notice' }, content: [{ type: 'text', text: '[intent-gate] ' + text }] } })
+    }
+    target.session.events.push({ type: 'turn/end', seq: target.session.events.length, time: 0, data: { turn: 1, reason: { kind: 'error', error: { code: 'x' } } } })
+    // a fresh user request still has its own repair, even though the log holds notices
+    await declareOnce(h, target, textChunks('undeclared one'))
+    expect(target.followups).toHaveLength(1)
+    const declared = textChunks('Intent: answer the first ask; I will reply in prose.')
+    expect(await h.stream(target, declared)).toEqual(declared)
+    expect(target.injected).toHaveLength(1)
+    // the continuation notice is in the log now; it must not spend the NEXT request's repair
+    await h.machineStep(target)
+    target.session.events.push({ type: 'turn/end', seq: target.session.events.length, time: 0, data: { turn: 2, reason: { kind: 'completed' } } })
+    await h.userStep(target, 3, 'second ask')
+    const second = await h.stream('repair-c', textChunks('undeclared two'))
+    expect(codeOf(second)).toBe('INTENT_DECLARATION_MISSING')
+    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    await h.idle(target)
+    expect(target.followups).toHaveLength(1)
     await h.ctx.fiber.dispose()
   })
 
@@ -289,10 +422,13 @@ describe('request-level intent gate: bounded repair (ticket 02)', () => {
     await h.userStep(target)
     expect(codeOf(await h.stream('repair-d', textChunks('Intent: ' + 'x'.repeat(200))))).toBe('INTENT_DECLARATION_LIMIT')
     expect(await h.requestError(target, 'INTENT_DECLARATION_LIMIT')).toBeUndefined()
-    expect(h.appended).toHaveLength(0)
+    await h.idle(target)
+    expect(target.followups).toHaveLength(0)
     // the request's repair is still available: a normal rejection now gets its one notice
     expect(codeOf(await h.stream('repair-d', textChunks('undeclared')))).toBe('INTENT_DECLARATION_MISSING')
-    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toEqual({ kind: 'retry' })
+    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    await h.idle(target)
+    expect(target.followups).toHaveLength(1)
     await h.ctx.fiber.dispose()
   })
 
@@ -303,7 +439,8 @@ describe('request-level intent gate: bounded repair (ticket 02)', () => {
     const errored: Chunk[] = [{ type: 'finish', reason: { kind: 'error', failure: { message: 'socket hang up', code: 'NETWORK' } } }]
     expect(await h.stream('repair-e', errored)).toEqual(errored)
     expect(await h.requestError(target, 'NETWORK')).toBeUndefined()
-    expect(h.appended).toHaveLength(0)
+    await h.idle(target)
+    expect(target.followups).toHaveLength(0)
     // and the request keeps its repair
     expect(codeOf(await h.stream('repair-e', textChunks('undeclared')))).toBe('INTENT_DECLARATION_MISSING')
     await h.ctx.fiber.dispose()
@@ -317,7 +454,58 @@ describe('request-level intent gate: bounded repair (ticket 02)', () => {
     const aborted = new AbortController()
     aborted.abort()
     expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING', aborted.signal)).toBeUndefined()
-    expect(h.appended).toHaveLength(0)
+    await h.idle(target)
+    expect(target.followups).toHaveLength(0)
+    await h.ctx.fiber.dispose()
+  })
+
+  it('re-publishes and replays nothing when the process dies between the declaration commit and the continuation', async () => {
+    const h = await mount()
+    const target = h.agent('crash-a')
+    await h.userStep(target)
+    expect(codeOf(await h.stream(target, textChunks('no declaration at all')))).toBe('INTENT_DECLARATION_MISSING')
+    expect(await h.requestError(target, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    await h.idle(target)
+    await h.machineStep(target)
+    expect(await h.assemble(target)).toEqual([]) // the repair really was tool-free
+    const declared = textChunks('Intent: write the fixture; I will write it once.')
+    const turnsBefore = target.session.events.filter(event => event.type === 'turn/end').length
+    expect(await h.stream(target, declared, {}, { crashAfterCommit: true })).toEqual(declared)
+    // The declaration is committed, but the turn never reached its stop boundary: the
+    // continuation of the same request was never queued, and no turn boundary was committed.
+    expect(target.injected).toHaveLength(0)
+    expect(target.session.events.filter(event => event.type === 'turn/end')).toHaveLength(turnsBefore)
+    const commitsBefore = target.session.events.filter(event => event.type === 'assistant/message').length
+    expect(commitsBefore).toBe(1)
+
+    // The process is gone: what is left is the session log.
+    const resumed = h.agent('crash-a')
+    resumed.session.events.push(...target.session.events)
+    expect(resumed.session.events.filter(event => event.type === 'assistant/message')).toHaveLength(commitsBefore)
+    // the declaration phase was process state, so resume is NOT tool-less and replays nothing
+    expect(await h.assemble(resumed)).toEqual(['run_code'])
+    expect(resumed.injected).toHaveLength(0)
+    expect(resumed.followups).toHaveLength(0)
+
+    // and the user's next request is judged normally, with its own repair budget
+    await h.userStep(resumed, 2, 'restated ask')
+    expect(codeOf(await h.stream(resumed, textChunks('still undeclared')))).toBe('INTENT_DECLARATION_MISSING')
+    expect(await h.requestError(resumed, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    await h.idle(resumed)
+    expect(resumed.followups).toHaveLength(1)
+    expect(String(resumed.followups[0].content[0].text)).toMatch(/Intent:/u)
+    await h.ctx.fiber.dispose()
+  })
+
+  it('lets the next real input discard a declaration phase that never got its step', async () => {
+    const h = await mount()
+    const target = h.agent('repair-g')
+    await h.userStep(target)
+    await h.stream('repair-g', textChunks('undeclared'))
+    await h.requestError(target, 'INTENT_DECLARATION_MISSING')
+    // the process never reaches idle: the user speaks again instead
+    await h.userStep(target, 2, 'a different ask')
+    expect(await h.assemble(target)).toEqual(['run_code'])
     await h.ctx.fiber.dispose()
   })
 })
@@ -592,10 +780,13 @@ describe('request-level intent gate: state from the formal log (ticket 06)', () 
     const before = h.agent('resume-b')
     await h.userStep(before, 1, 'Do the thing.')
     expect(codeOf(await h.stream(before, programChunks('no declaration here')))).toBe('INTENT_DECLARATION_MISSING')
-    expect(await h.requestError(before, 'INTENT_DECLARATION_MISSING')).toEqual({ kind: 'retry' })
+    expect(await h.requestError(before, 'INTENT_DECLARATION_MISSING')).toBeUndefined()
+    await h.idle(before)
+    expect(await h.machineStep(before)).toHaveLength(1) // the repair notice is claimed into the log
     expect(codeOf(await h.stream(before, programChunks('still none')))).toBe('INTENT_DECLARATION_REPAIR_EXHAUSTED')
     expect(await h.requestError(before, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')).toBeUndefined()
-    expect(h.appended).toHaveLength(1) // exactly one correction notice, in the log
+    // exactly ONE correction notice is in the record: that is what a spent budget is derived from
+    expect(before.session.events.filter((event: any) => event.type === 'user/message' && event.data?.source?.kind === 'intent-gate-watchdog')).toHaveLength(1)
     const after = resume(h, before)
     await h.userStep(after, 2, '继续')
     // the continuation carries no authority: the previous request was stopped, and the log says so

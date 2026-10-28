@@ -34,16 +34,25 @@
  * the loop stamps 'purpose' on compaction/session-title calls, and a hand-built one-shot
  * passes 'system' text (a loop request always leaves it undefined).
  *
- * BOUNDED REPAIR (ticket 02, IG-B-05/06/07). A rejected attempt is not the end of the
- * request: the gate spends ONE repair per user-opened request. It ends the attempt as a
- * policy failure, and "agent/request-error" — the loop's own recovery hook — appends a
- * correction notice to the SESSION LOG (producer-owned source, form notice) and returns
- * { kind: 'retry' }; the loop then rebuilds the request from session.deriveMessages(), so
- * the correction is part of the official record and the regenerated request is
- * reconstructible from it. Nothing mutates the frozen request, and the notice says
- * explicitly that it grants no new authority (IG-B-07). A second rejection is terminal and
- * reports the single repair as exhausted; normal tool continuations never touch the
- * budget, and a real provider failure is delegated (next()) instead of being repaired —
+ * DECLARATION-ONLY REPAIR (2026-10-28 declaration-repair plan, revising IG-B-05/06/07). A
+ * rejected attempt is not the end of the request: the gate spends ONE repair per user-opened
+ * request, and that repair is a DECLARATION, not a re-run of the reply. The withheld attempt
+ * is terminal (nothing published, nothing dispatched), and the repair runs as its own step
+ * with NO TOOL SCHEMAS (system-prompt/assemble), because a retry inside the same step would
+ * be handed the same assembled tools — which is exactly the request that produced no
+ * declaration at all. The step is opened by the public agent.followup once the driver is idle,
+ * so it reuses the ordinary turn machinery (lifecycle, cancellation, cost, record) instead of
+ * a recursive model call. Its only accepted output is a non-empty declaration body within
+ * maxDeclarationChars; a tool call, a missing marker, an empty body or an over-long body is
+ * the PROTOCOL PAUSE and never a third generation. The accepted declaration is committed and
+ * published FIRST, and the SAME request then continues in its next step with the full tool
+ * catalog: the gate asks for that step at the turn's own stop boundary (agent.steer, the
+ * loop's documented way to keep a turn going), so the request declares once and works
+ * afterwards and the durable order is declaration-then-work. Both notices come
+ * from this producer and are told apart by a fixed prefix, so the derived budget counts the
+ * repair and not the continuation. Nothing mutates the frozen request, and both notices say
+ * explicitly that they grant no new authority (IG-B-07). Normal tool continuations never touch
+ * the budget, and a real provider failure is delegated (next()) instead of being repaired —
  * cancellation, network errors, timeouts and truncation therefore cost no repair
  * (IG-B-10), and a generic retry policy cannot turn one declaration miss into two.
  *
@@ -121,8 +130,12 @@ export const name = 'intent-gate-watchdog'
  * how long one attempt may stay buffered before it is judged; maxRepairs is the spec's
  * fixed "at most one automatic repair per user-opened request" (IG-B-06) — it is declared
  * here so a future edit cannot quietly widen it, not offered as a tuning knob.
+ * maxDeclarationChars bounds the BODY of the declaration-only repair request. It is a
+ * statement about the declaration, not about provider generation: the repair keeps the
+ * route's own output-token limit, so a truncated attempt is still reported as the
+ * provider's truncation and never as a badly shaped declaration (2026-10-28 plan, R07).
  */
-export const DEFAULT_LIMITS = Object.freeze({ maxBufferedChars: 262144, maxBufferMs: 120000, maxRepairs: 1 })
+export const DEFAULT_LIMITS = Object.freeze({ maxBufferedChars: 262144, maxBufferMs: 120000, maxRepairs: 1, maxDeclarationChars: 2000 })
 
 /** Leading filler tolerated before the marker: BOM, NBSP, spaces, tabs (never a newline). */
 const LEADING_FILLER = /^[\uFEFF\u00A0 \t]+/u
@@ -199,6 +212,10 @@ export const REASON = Object.freeze({
   AWAITING_ANSWER: 'awaiting-answer',
   STALE_ACTION: 'stale-action',
   STATE_UNTRUSTED: 'state-untrusted',
+  /** The declaration-only request emitted a tool call although no tool was offered. */
+  TOOLS_IN_DECLARATION: 'tools-in-declaration',
+  /** The declaration-only request's body is longer than the declared body cap. */
+  DECLARATION_LONG: 'declaration-too-long',
 })
 
 /**
@@ -208,8 +225,19 @@ export const REASON = Object.freeze({
  */
 const DECLARATION_MISSES = new Set([REASON.NO_TEXT, REASON.MISSING, REASON.EMPTY_BODY])
 
+/**
+ * The declaration-only phase's verdicts that end the request as a PROTOCOL PAUSE: the single
+ * repair is spent, no usable declaration was produced, and nothing ran (2026-10-28 plan
+ * requirement 7). They are never repairable, so they never ask for a third generation, and
+ * they all share ONE code — a pause, not a second failure kind. Everything outside this set
+ * (a cap this gate enforced, or this gate failing to check at all) keeps its own mechanism
+ * code so a real limit or an internal error never reads as "the model declared badly"
+ * (IG-B-10/15).
+ */
+const DECLARATION_PAUSES = new Set([...DECLARATION_MISSES, REASON.TOOLS_IN_DECLARATION, REASON.DECLARATION_LONG])
+
 const REASON_TEXT = {
-  [REASON.NO_TEXT]: '这条回复没有任何正文（只有工具调用），因此没有意图声明',
+  [REASON.NO_TEXT]: '没有可计入正文的非空文本（reasoning 和工具参数都不算正文）',
   [REASON.MISSING]: '首行没有以字面标记 "Intent:" 开头',
   [REASON.EMPTY_BODY]: '"Intent:" 之后只有空白，没有说明目标与下一步的正文',
   [REASON.LIMIT_CHARS]: '本条回复超过本机制暂存上限（字符），已按上限停止而不是放行未经检查的正文',
@@ -218,6 +246,8 @@ const REASON_TEXT = {
   [REASON.AWAITING_ANSWER]: '本会话已经向你提问、而你还没有得到回答，这次回复却要动手；问题待答期间不执行任何工具',
   [REASON.STALE_ACTION]: '用户在你生成这条回复期间又追加了要求，这条回复里的调用是在那之前形成的；未执行的调用已停下，已执行的动作保留',
   [REASON.STATE_UNTRUSTED]: '本会话的意图门记录缺失、损坏或无法关联，无法可信重建已确认的理解与待答状态；按保守状态暂停这一次请求，请重新说明你的要求',
+  [REASON.TOOLS_IN_DECLARATION]: '声明专用阶段不提供任何工具，这条回复却仍然带着工具调用',
+  [REASON.DECLARATION_LONG]: '声明专用阶段的正文超过了约定的字符上限',
 }
 
 /** The same reasons in the model's language, for the correction notice. */
@@ -226,6 +256,8 @@ const REASON_TEXT_FOR_MODEL = {
   [REASON.MISSING]: 'the first line of the reply did not start with the literal marker Intent:',
   [REASON.EMPTY_BODY]: 'the first line started with Intent: but carried no text after it',
   [REASON.AWAITING_ANSWER]: 'the reply wanted to call a tool while your own question to the user is still unanswered',
+  [REASON.TOOLS_IN_DECLARATION]: 'the reply carried a tool call, but the declaration repair offers no tools at all',
+  [REASON.DECLARATION_LONG]: 'the reply was longer than the declaration body cap',
 }
 
 /**
@@ -248,6 +280,16 @@ const FAILURE_CODE = {
 export const REPAIR_EXHAUSTED_CODE = 'INTENT_DECLARATION_REPAIR_EXHAUSTED'
 
 /**
+ * The first line of every notice this plugin writes. The repair and the continuation are
+ * two DIFFERENT messages from the same producer, and the derived state must count only the
+ * repair as a spent budget (2026-10-28 plan §3): one notice per phase would otherwise spend
+ * a repair every time the gate speaks. The prefix is content, not a schema field, so logs
+ * written before this change keep counting exactly as they did.
+ */
+export const REPAIR_NOTICE_PREFIX = '[intent-gate] Your previous reply for this request was withheld'
+export const CONTINUATION_NOTICE_PREFIX = '[intent-gate] Your declaration for this request was accepted'
+
+/**
  * The user-facing stop reason. Its reader is the user whose request was stopped, so it
  * says what was wrong, that nothing ran, and the exact shape that satisfies the check.
  * The provider's own outcome is explicitly separated from this policy decision (IG-B-11).
@@ -268,6 +310,90 @@ export function stopMessage(reason, extras = {}) {
 }
 
 /**
+ * What the user reads when the first reply of the request failed the shape check and the
+ * declaration repair is being started. It is NOT a stop: the request continues in the
+ * declaration-only step, so the copy must not claim the repair was used up.
+ * @param reason - why the attempt was withheld.
+ * @param extras - { providerKind }: the withheld attempt's provider terminal kind.
+ */
+export function repairStartedMessage(reason, extras = {}) {
+  return [
+    '[intent-gate] 这条回复没有通过声明检查：' + REASON_TEXT[reason] + '。',
+    '正文没有展示，这条回复里的工具调用一个也没有执行（provider 正常生成完成，是意图门的策略拒绝，不是网络或模型故障）。',
+    '正在自动重新生成声明：这是本次请求唯一一次自动修复（1/1），下一条回复只写 ' + 'Intent:' + ' 开头的声明、不提供工具；声明合格后同一请求的工作会自动继续，你不需要再发一次请求。',
+    extras.providerKind === undefined ? '' : '（provider 的原始终态是 ' + String(extras.providerKind) + '，没有被改写成声明问题）',
+  ].filter(line => line !== '').join('\n')
+}
+
+/**
+ * What the user reads when the declaration-only repair did not produce a usable
+ * declaration: a PROTOCOL PAUSE, not a business failure and not a provider failure. The
+ * budget stays spent and no third generation is attempted (2026-10-28 plan requirement 7).
+ * @param reason - the declaration-phase verdict.
+ * @param extras - { providerKind, maxChars }.
+ */
+export function declarationStopMessage(reason, extras = {}) {
+  const detail = reason === REASON.DECLARATION_LONG && extras.maxChars !== undefined
+    ? REASON_TEXT[reason] + '（' + String(extras.maxChars) + ' 字符）'
+    : REASON_TEXT[reason]
+  return [
+    '[intent-gate] 意图声明未能生成，工作尚未执行：' + detail + '。',
+    '声明专用阶段没有展示任何正文、没有执行任何工具（provider 正常生成完成，是意图门的策略拒绝，不是网络或模型故障）。',
+    '本次请求的唯一一次自动修复已经用掉，不会再有第三次自动生成；你重新发一次请求即是一次新的声明机会。',
+    extras.providerKind === undefined ? '' : '（provider 的原始终态是 ' + String(extras.providerKind) + '，没有被改写成声明问题）',
+  ].filter(line => line !== '').join('\n')
+}
+
+/**
+ * The continuation notice: written for the MODEL, queued for the next step of the SAME
+ * request once the declaration has been accepted and published. It grants nothing — the
+ * declaration is on the record, and the work it names is the work the user asked for.
+ */
+export function continuationNotice() {
+  return [
+    CONTINUATION_NOTICE_PREFIX + ' and published. Continue the same request.',
+    'Do not repeat or restate the Intent: line — it is already in the record. Do the work you declared, starting with the next step you named, and use your tools normally.',
+    'The user request, its constraints and its scope are unchanged, and nothing new is authorized: this notice is not the user speaking. If the work needs a choice only the user can make, stop and ask through tools.ask_user_question instead of guessing.',
+  ].join('\n')
+}
+
+/**
+ * One structured diagnostic per judged attempt. It carries only identities, counts, the
+ * failure class and the effective caps: never the rejected body, the reasoning text or the
+ * tool arguments (2026-10-28 plan, P2), and it is never presented as an accepted answer.
+ * @param attempt - { sessionId, stage, reason, providerKind, blocks, usage, repairs,
+ *   elapsedMs, limits }.
+ */
+export function attemptDiagnostic(attempt) {
+  const blocks = Array.isArray(attempt?.blocks) ? attempt.blocks : []
+  const countOf = type => blocks.filter(block => block?.type === type).length
+  const body = bodyText(blocks)
+  const limits = attempt?.limits ?? DEFAULT_LIMITS
+  return {
+    kind: 'intent-gate-diagnostic',
+    stage: attempt?.stage ?? 'unknown',
+    reason: attempt?.reason ?? 'accepted',
+    providerKind: attempt?.providerKind ?? null,
+    sessionId: attempt?.sessionId ?? null,
+    blocks: blocks.length,
+    textBlocks: countOf('text'),
+    reasoningBlocks: countOf('reasoning'),
+    toolCallBlocks: countOf('tool-call'),
+    bodyEmpty: body.trim() === '',
+    bodyChars: body.length,
+    repairs: attempt?.repairs ?? 0,
+    usage: attempt?.usage ?? null,
+    elapsedMs: attempt?.elapsedMs ?? null,
+    limits: {
+      maxBufferedChars: limits.maxBufferedChars,
+      maxBufferMs: limits.maxBufferMs,
+      maxRepairs: limits.maxRepairs,
+      maxDeclarationChars: limits.maxDeclarationChars,
+    },
+  }
+}
+
+/**
  * The correction notice: the repair's instruction, written for the MODEL, appended to the
  * session log as its own message so the regenerated request can be rebuilt from the
  * official record (IG-B-07). It restates the constraint boundary on purpose — a repair is
@@ -275,13 +401,16 @@ export function stopMessage(reason, extras = {}) {
  * @param reason - why the previous attempt was rejected.
  * @param providerKind - the rejected attempt's provider terminal kind.
  * @param repair - 1-based index of this repair.
+ * @param maxChars - the declaration body cap this repair is held to.
  */
-export function repairNotice(reason, providerKind, repair = 1) {
+export function repairNotice(reason, providerKind, repair = 1, maxChars = DEFAULT_LIMITS.maxDeclarationChars) {
   return [
-    '[intent-gate] Your previous reply for this request was withheld: ' + (REASON_TEXT_FOR_MODEL[reason] ?? String(reason)) + '.',
-    'Nothing from it was shown to the user and none of its tool calls were executed; the provider had finished normally (' + String(providerKind) + '), so this is a policy rejection, not a network or model failure. This is mechanical check ' + String(repair) + ' of the shape only — it says nothing about whether you understood the request.',
-    'Rewrite the same reply for the same user request: start its first line with the literal marker Intent: (copy it verbatim, do not translate it) followed by, in plain language, what the user will get and what you will do next; then continue with the rest of the answer or the program.',
-    'The user request, its constraints and its scope are unchanged. This notice is not the user speaking: it adds no goal, grants no new authority and is not approval of anything. Write the whole reply again — the withheld text is not carried over.',
+    REPAIR_NOTICE_PREFIX + ': ' + (REASON_TEXT_FOR_MODEL[reason] ?? String(reason)) + '.',
+    'Nothing from it was shown to the user and none of its tool calls were executed; the provider had finished normally (' + String(providerKind) + '), so this is a policy rejection, not a network or model failure.',
+    'This is the ONE automatic declaration repair for this request (' + String(repair) + '/' + String(DEFAULT_LIMITS.maxRepairs) + '), and it is a DECLARATION-ONLY reply: no tool is offered, so you cannot act in it and must not try to.',
+    'Output one thing only: a first line starting with the literal marker Intent: (copy it verbatim, do not translate it), followed on that same line by, in plain language, what the user will get and what you will do next — at most ' + String(maxChars) + ' characters of body in total.',
+    'Do not deliver the answer here, do not write a program or code, do not echo the user\'s own words back, and do not describe internal bookkeeping. Once the line is accepted the request continues automatically in a new step where your tools are available again — do not restate the declaration there.',
+    'The user request, its constraints and its scope are unchanged. This notice is not the user speaking: it adds no goal, grants no new authority and is not approval of anything. Write the whole reply again in that shape — the withheld text is not carried over.',
   ].join('\n')
 }
 
@@ -441,6 +570,14 @@ export function pendingSteer(agent) {
   return queue.some(message => isHumanInput(message))
 }
 
+/** The text a message carries, joined in block order (empty when it carries none). */
+function noticeText(message) {
+  if (!Array.isArray(message?.content)) return ''
+  let text = ''
+  for (const block of message.content) if (block?.type === 'text' && typeof block.text === 'string') text += block.text
+  return text
+}
+
 /** Whether an assembled attempt would call a tool — an exemption never excuses that. */
 export function callsATool(blocks) {
   return blocks.some(block => block?.type === 'tool-call')
@@ -454,6 +591,7 @@ function resolveLimits(config) {
   return {
     maxBufferedChars: positive(raw.maxBufferedChars, DEFAULT_LIMITS.maxBufferedChars),
     maxBufferMs: positive(raw.maxBufferMs, DEFAULT_LIMITS.maxBufferMs),
+    maxDeclarationChars: positive(raw.maxDeclarationChars, DEFAULT_LIMITS.maxDeclarationChars),
     // Never above the spec's single automatic repair, whatever a config claims.
     maxRepairs: Math.min(repairs, DEFAULT_LIMITS.maxRepairs),
   }
@@ -486,6 +624,15 @@ export function apply(ctx, config) {
   const bound = new Map()
   /** sessionId -> { reason, providerKind } for a rejection whose repair has been spent. */
   const awaitingRepair = new Map()
+  /**
+   * sessionId -> { stage, scheduled, reason, providerKind } for the declaration-only phase of
+   * the request whose repair was spent. This is the one piece of state that is NOT derived from
+   * the log, because it describes the shape of the NEXT generation rather than a fact about the
+   * past: 'declaration' means the repair step offers no tools, 'publishing' means the accepted
+   * declaration is being committed and the continuation is due right after it. A turn boundary
+   * clears it, so a restart resumes with the full tool catalog instead of guessing.
+   */
+  const declarations = new Map()
   /**
    * The gate's per-session state is DERIVED FROM THE FORMAL SESSION LOG, never from a private
    * side-channel (ticket 06, IG-B-14). Resume, reload and compaction replay the same events,
@@ -522,8 +669,14 @@ export function apply(ctx, config) {
           return
         }
         if (data?.source?.kind === name) {
-          state.repairsThisRequest += 1
-          if (!Array.isArray(data?.content)) state.trusted = false
+          if (!Array.isArray(data?.content)) {
+            state.trusted = false
+            return
+          }
+          // Only the REPAIR notice spends the budget. The continuation notice is this plugin
+          // speaking in the same request; counting it would spend a second repair for a phase
+          // that is already paid for (2026-10-28 plan §3).
+          if (noticeText(data).startsWith(REPAIR_NOTICE_PREFIX)) state.repairsThisRequest += 1
         }
         return
       }
@@ -670,6 +823,9 @@ export function apply(ctx, config) {
         state.awaitingAnswer = false
         state.questionCallId = undefined
         awaitingRepair.delete(sessionId)
+        // A fresh real input is a fresh request: a declaration phase left over from a request
+        // that never got its repair step must not shape THIS one (no tool-less first reply).
+        declarations.delete(sessionId)
       } else {
         // A machine-opened step (tool result, notice, steering re-attach) is the same
         // request continuing: the first reply already happened, so nothing is owed.
@@ -679,6 +835,117 @@ export function apply(ctx, config) {
     } catch (error) {
       warn('could not record the intent-declaration obligation: ' + String(error))
       return decision
+    }
+  })
+
+  /**
+   * The declaration-only request must OFFER NO TOOLS (2026-10-28 plan requirement 3). The tool
+   * schemas are assembled once per step ("system-prompt/assemble"), before the request is built,
+   * so removing them here is the only seam that changes what the provider is actually given; a
+   * request waterfall could not (LlmCallConfig carries no tools, dsh-llm call-config.ts).
+   * Listener participates only for the managed main agent's declaration step.
+   */
+  ctx.on('system-prompt/assemble', async (assembly, context, next) => {
+    let decided
+    try {
+      decided = await next()
+    } catch (error) {
+      warn('downstream system-prompt/assemble failed: ' + String(error))
+      throw error
+    }
+    try {
+      const agent = context?.agent
+      const sessionId = agent?.session?.id
+      if (sessionId === undefined) return decided
+      if (declarations.get(sessionId)?.stage !== 'declaration') return decided
+      if (resolveDepth(agent) !== 0) return decided
+      return { ...decided, tools: [] }
+    } catch (error) {
+      warn('could not remove the tools of the declaration step: ' + String(error))
+      return decided
+    }
+  })
+
+  /**
+   * Open the declaration-only step. The repair is NOT a retry of the withheld attempt: a retry
+   * re-runs the same step with the same assembled tools, which is exactly the request that
+   * produced no declaration. The failure therefore stays terminal, and this public follow-up —
+   * the same call a user turn uses — opens one new turn whose request is built without tools.
+   */
+  ctx.on('agent/status', payload => {
+    try {
+      if (payload?.status !== 'idle') return
+      const agent = payload?.agent
+      const sessionId = agent?.session?.id
+      if (sessionId === undefined || resolveDepth(agent) !== 0) return
+      const phase = declarations.get(sessionId)
+      if (phase === undefined || phase.stage !== 'declaration' || phase.scheduled === true) return
+      phase.scheduled = true
+      agent.followup(pluginMessage(
+        repairNotice(phase.reason, phase.providerKind, 1, limits.maxDeclarationChars),
+        'intent gate: declaration repair 1/1 (' + String(phase.reason) + ')',
+      ))
+    } catch (error) {
+      warn('could not open the declaration-only repair step: ' + String(error))
+    }
+  })
+
+  /**
+   * The accepted declaration has been COMMITTED and published (the observable fact this hook
+   * keys on: the durable assistant/message). The continuation of the same request is due now,
+   * but it cannot be queued from here — a durable inbox splice is itself a session append, and
+   * an append may not re-enter while another append is publishing (measured: "session append
+   * cannot reenter while another append is being published"). So this hook only records that
+   * the continuation is due; the turn's own stop boundary below delivers it.
+   */
+  ctx.on('session/event', (session, event) => {
+    try {
+      const sessionId = session?.id
+      if (sessionId === undefined) return
+      const phase = declarations.get(sessionId)
+      if (phase === undefined) return
+      // The turn that carries the WITHHELD attempt ends while its declaration phase is still
+      // waiting to be opened (the loop reports the failure, then closes the turn). Clearing it
+      // here would discard the repair before the follow-up can open it, so an unscheduled
+      // declaration phase survives exactly one turn boundary; a human input or the repair
+      // turn's own boundary ends it (see the pre-step above and below).
+      if (event?.type === 'turn/end') {
+        if (phase.stage === 'declaration' && phase.scheduled !== true) return
+        declarations.delete(sessionId)
+        return
+      }
+      if (phase.stage !== 'publishing' || event?.type !== 'assistant/message') return
+      phase.stage = 'continuation-due'
+    } catch (error) {
+      warn('could not record the accepted declaration: ' + String(error))
+    }
+  })
+
+  /**
+   * The continuation of the SAME request: the turn is at its stop boundary, the accepted
+   * declaration is already published, and this listener asks for one more step with the full
+   * tool catalog (the loop's documented way to keep a turn going: "a listener that objects
+   * steers and the machine re-reads its inbox"). The request therefore declares once and then
+   * works, and the durable order stays declaration-first (2026-10-28 plan requirement 5).
+   * A human input that arrived in the meantime wins: nothing is queued behind it, and the
+   * request re-declares under that input instead of continuing on the old declaration.
+   */
+  ctx.on('agent/turn-stopping', payload => {
+    try {
+      const agent = payload?.agent
+      const sessionId = agent?.session?.id
+      if (sessionId === undefined) return
+      const phase = declarations.get(sessionId)
+      if (phase?.stage !== 'continuation-due') return
+      declarations.delete(sessionId)
+      if (resolveDepth(agent) !== 0) return
+      if (pendingSteer(agent)) {
+        warn('the declaration was published, but a human input is waiting: the request re-declares instead of continuing')
+        return
+      }
+      agent.steer(pluginMessage(continuationNotice(), 'intent gate: declaration accepted, continue the same request'))
+    } catch (error) {
+      warn('could not continue the request after the accepted declaration: ' + String(error))
     }
   })
 
@@ -714,10 +981,15 @@ export function apply(ctx, config) {
   })
 
   /**
-   * The repair hook. A rejection we raised is retried exactly once: the correction notice
-   * is appended to the session log first (so the retried request — rebuilt from that log —
-   * carries it), then we claim the retry. Every other failure, including our own exhausted
-   * stop and any real provider failure, is delegated untouched (IG-B-10).
+   * The repair hook. A rejection we raised spends the request's single repair and opens the
+   * declaration-only phase; every other failure, including our own exhausted stop and any
+   * real provider failure, is delegated untouched (IG-B-10).
+   *
+   * It deliberately does NOT answer { kind: 'retry' }. A retry re-enters the SAME step, and a
+   * step assembles its tool schemas once, before the first attempt — so the retried request
+   * would still be offered every tool, which is the request that just produced no declaration
+   * at all. The withheld attempt therefore stays terminal, and the declaration-only turn is
+   * opened from 'agent/status' once the driver is idle (see the follow-up below).
    */
   ctx.on('agent/request-error', async (payload, next) => {
     let awaiting
@@ -733,17 +1005,22 @@ export function apply(ctx, config) {
         awaiting = undefined
         return await next()
       }
-      const session = payload.agent.session
-      const notice = pluginMessage(
-        repairNotice(awaiting.reason, awaiting.providerKind),
-        'intent gate: declaration repair 1/1 (' + String(awaiting.reason) + ')',
-      )
-      session.append('user/message', notice, { surfaceOp: 'append' })
       awaitingRepair.delete(sessionId)
-      return { kind: 'retry' }
+      declarations.set(sessionId, {
+        stage: 'declaration',
+        scheduled: false,
+        reason: awaiting.reason,
+        providerKind: awaiting.providerKind,
+      })
+      // Delegated on purpose: the default action is terminal, so this attempt's text and calls
+      // disappear with the turn, and the repair arrives as its own request.
+      return await next()
     } catch (error) {
-      warn('could not issue the intent-declaration repair: ' + String(error))
-      if (awaiting !== undefined) awaitingRepair.delete(payload?.agent?.session?.id)
+      warn('could not open the intent-declaration repair: ' + String(error))
+      if (awaiting !== undefined) {
+        awaitingRepair.delete(payload?.agent?.session?.id)
+        declarations.delete(payload?.agent?.session?.id)
+      }
       return await next()
     }
   })
@@ -765,12 +1042,16 @@ export function apply(ctx, config) {
     }
     const binding = sessionId === undefined ? undefined : bound.get(sessionId)
     const record = sessionId === undefined ? undefined : owed.get(sessionId)
+    const phase = sessionId === undefined ? undefined : declarations.get(sessionId)
+    // The declaration-only repair step is machine-opened: no latch is owed for it, and it is
+    // judged by its own rules below rather than by the request's obligation.
+    const declarationOnly = phase?.stage === 'declaration'
     const state = stateOf(binding?.session)
     const awaiting = state.awaitingAnswer === true
     // No declaration is owed outside a user-opened request — but an OPEN QUESTION still
     // forbids acting in the same request's later steps, so those attempts are inspected too
     // (ticket 04). Everything else passes straight through.
-    if (record === undefined && !awaiting) {
+    if (record === undefined && !awaiting && !declarationOnly) {
       yield* next()
       return
     }
@@ -815,6 +1096,47 @@ export function apply(ctx, config) {
       resetDerived(session)
       for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
       yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(REASON.STATE_UNTRUSTED), code: FAILURE_CODE[REASON.STATE_UNTRUSTED] } } }
+      return
+    }
+
+    // The declaration-only repair (2026-10-28 plan requirements 3/4/7). No tool was offered, so
+    // a call is a contract violation; the body is the whole deliverable; and any miss is the
+    // protocol pause, not a third generation. Reasoning never counts as the body.
+    if (declarationOnly) {
+      const reason = overChars ? REASON.LIMIT_CHARS
+        : overTime ? REASON.LIMIT_TIME
+          : declarationReason(blocks)
+      const body = bodyText(blocks)
+      const stopped = reason !== undefined && !DECLARATION_MISSES.has(reason)
+        ? reason
+        : reason ?? (callsATool(blocks) ? REASON.TOOLS_IN_DECLARATION
+          : body.length > limits.maxDeclarationChars ? REASON.DECLARATION_LONG
+            : undefined)
+      if (stopped !== undefined) {
+        declarations.delete(sessionId)
+        awaitingRepair.delete(sessionId)
+        report(sessionId, 'declaration', stopped, buffered, blocks, finish, record, startedAt, true)
+        for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
+        const pausing = DECLARATION_PAUSES.has(stopped)
+        yield {
+          type: 'finish',
+          reason: {
+            kind: 'error',
+            failure: {
+              message: pausing
+                ? declarationStopMessage(stopped, { providerKind, maxChars: limits.maxDeclarationChars })
+                : stopMessage(stopped, { providerKind }),
+              code: pausing ? REPAIR_EXHAUSTED_CODE : FAILURE_CODE[stopped],
+            },
+          },
+        }
+        return
+      }
+      // Accepted: publish it. The continuation is queued by the commit hook below, so the
+      // declaration is on the record BEFORE anything of the business step is generated.
+      phase.stage = 'publishing'
+      report(sessionId, 'declaration', undefined, buffered, blocks, finish, record, startedAt, false)
+      for (const chunk of buffered) yield chunk
       return
     }
 
@@ -871,14 +1193,22 @@ export function apply(ctx, config) {
     }
 
     // Rejection: the spent generation stays traceable (usage), nothing else escapes.
+    report(sessionId, 'first', reason, buffered, blocks, finish, record, startedAt, true)
     for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
     const repairable = DECLARATION_MISSES.has(reason) && record.repairs < limits.maxRepairs
     if (repairable) {
       // Spend the one repair now: the budget is consumed by the DECISION, so a provider
-      // failure during the repair attempt cannot hand out a second one (IG-B-06).
+      // failure during the declaration step cannot hand out a second one (IG-B-06).
       record.repairs += 1
       if (sessionId !== undefined) awaitingRepair.set(sessionId, { reason, providerKind })
-    } else if (DECLARATION_MISSES.has(reason)) {
+      // Terminal on purpose: the repair is not a retry of this attempt (see the hook above).
+      yield {
+        type: 'finish',
+        reason: { kind: 'error', failure: { message: repairStartedMessage(reason, { providerKind }), code: FAILURE_CODE[reason] } },
+      }
+      return
+    }
+    if (DECLARATION_MISSES.has(reason)) {
       // Budget exhausted: this is the stop the spec asks to be explicit about.
         yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(reason, { repaired: true }), code: REPAIR_EXHAUSTED_CODE } } }
       return
@@ -886,6 +1216,29 @@ export function apply(ctx, config) {
     yield {
       type: 'finish',
       reason: { kind: 'error', failure: { message: stopMessage(reason, { repaired: false }), code: FAILURE_CODE[reason] } },
+    }
+  }
+
+  /** Log one structured diagnostic per judged attempt: identities, counts, caps — no body. */
+  function report(sessionId, stage, reason, buffered, blocks, finish, record, startedAt, failed) {
+    try {
+      const usage = buffered.find(chunk => chunk?.type === 'usage')?.usage
+      const diagnostic = attemptDiagnostic({
+        sessionId,
+        stage,
+        reason,
+        providerKind: finish?.kind,
+        blocks,
+        usage,
+        repairs: record?.repairs ?? 0,
+        elapsedMs: Math.round(performance.now() - startedAt),
+        limits,
+      })
+      const line = '[intent-gate] ' + JSON.stringify(diagnostic)
+      if (failed) ctx.logger?.warn(line)
+      else ctx.logger?.info?.(line)
+    } catch (error) {
+      warn('could not record the intent-gate diagnostic: ' + String(error))
     }
   }
 

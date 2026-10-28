@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 // @ts-ignore -- plain ESM asset shipped inside the preset (builtin-only imports)
 // @ts-ignore -- plain ESM asset shipped inside the preset (builtin-only imports)
-import { ACKNOWLEDGEMENTS, ANSWER_SOURCE_KIND, CONTINUATIONS, DEFAULT_LIMITS, QUESTION_TOOL, REASON, REPAIR_EXHAUSTED_CODE, assembleAttempt, bodyText, callsATool, checkDeclaration, classifyInput, firstLineOf, normalizeInput, pendingSteer, repairNotice, stopMessage } from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
+import { ACKNOWLEDGEMENTS, ANSWER_SOURCE_KIND, CONTINUATIONS, CONTINUATION_NOTICE_PREFIX, DEFAULT_LIMITS, QUESTION_TOOL, REASON, REPAIR_EXHAUSTED_CODE, REPAIR_NOTICE_PREFIX, assembleAttempt, attemptDiagnostic, bodyText, callsATool, checkDeclaration, classifyInput, continuationNotice, declarationStopMessage, firstLineOf, normalizeInput, pendingSteer, repairNotice, repairStartedMessage, stopMessage } from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
 
 /**
  * The mechanical declaration check is the ONLY automated judgement the request-level
@@ -287,5 +287,93 @@ describe('steering before dispatch (IG-B-08)', () => {
     const stopped = stopMessage(REASON.STALE_ACTION) as string
     expect(stopped).toContain('[intent-gate]')
     expect(stopped).toMatch(/已执行的动作保留/u)
+  })
+})
+
+/**
+ * The declaration-only repair (2026-10-28 plan). What is pinned here is the copy and the
+ * diagnostic shape — the phase mechanics are proven against the real loop seams in
+ * tests/integration/intent-gate-request-scope.spec.ts.
+ */
+describe('declaration-only repair copy (2026-10-28 plan)', () => {
+  it('declares a body cap for the declaration, separate from provider generation', () => {
+    expect(DEFAULT_LIMITS.maxDeclarationChars).toBe(2000)
+    expect(repairNotice(REASON.MISSING, 'stop', 1, 1234) as string).toContain('1234 characters of body')
+  })
+
+  it('tells the model the repair is declaration-only and that no tool is offered', () => {
+    const notice = repairNotice(REASON.NO_TEXT, 'tool-calls') as string
+    expect(notice).toMatch(/DECLARATION-ONLY/u)
+    expect(notice).toMatch(/no tool is offered/u)
+    expect(notice).toMatch(/do not restate the declaration/iu)
+    expect(notice).toMatch(/Do not deliver the answer here/u)
+  })
+
+  it('does not present the first miss to the user as a spent repair', () => {
+    const copy = repairStartedMessage(REASON.MISSING, { providerKind: 'stop' }) as string
+    expect(copy).toContain('[intent-gate]')
+    expect(copy).toMatch(/正在自动重新生成声明/u)
+    expect(copy).toMatch(/唯一一次自动修复/u)
+    expect(copy).not.toMatch(/不再自动重试/u)
+    expect(copy).toContain('Intent:')
+  })
+
+  it('names the protocol pause instead of claiming the work happened', () => {
+    const copy = declarationStopMessage(REASON.TOOLS_IN_DECLARATION) as string
+    expect(copy).toMatch(/意图声明未能生成，工作尚未执行/u)
+    expect(copy).toMatch(/唯一一次自动修复已经用掉/u)
+    expect(copy).toMatch(/没有执行任何工具/u)
+    const long = declarationStopMessage(REASON.DECLARATION_LONG, { maxChars: 50 }) as string
+    expect(long).toContain('50 字符')
+  })
+
+  it('keeps the continuation a different message from the repair', () => {
+    const continuation = continuationNotice() as string
+    expect(continuation.startsWith(CONTINUATION_NOTICE_PREFIX)).toBe(true)
+    expect(continuation.startsWith(REPAIR_NOTICE_PREFIX)).toBe(false)
+    expect(REPAIR_NOTICE_PREFIX).not.toBe(CONTINUATION_NOTICE_PREFIX)
+    expect(repairNotice(REASON.MISSING, 'stop') as string).toMatch(new RegExp('^' + REPAIR_NOTICE_PREFIX.replace(/[[\]]/gu, '\\$&'), 'u'))
+    expect(continuation).toMatch(/Do not repeat or restate the Intent: line/u)
+    expect(continuation).toMatch(/not the user speaking/u)
+    expect(continuation).toMatch(/nothing new is authorized/u)
+  })
+
+  it('records identities and counts only: no rejected body, reasoning or tool arguments', () => {
+    const diagnostic = attemptDiagnostic({
+      sessionId: 'session-x',
+      stage: 'declaration',
+      reason: REASON.MISSING,
+      providerKind: 'stop',
+      blocks: [
+        { type: 'text', text: 'a rejected body that must not be logged' },
+        { type: 'reasoning', text: 'private chain of thought' },
+        { type: 'tool-call', name: 'run_code', arguments: '{"code":"secret"}' },
+      ],
+      usage: { inputTokens: 1, outputTokens: 2 },
+      repairs: 1,
+      elapsedMs: 12,
+      limits: DEFAULT_LIMITS,
+    }) as Record<string, any>
+    expect(diagnostic).toMatchObject({
+      stage: 'declaration',
+      reason: 'missing-marker',
+      providerKind: 'stop',
+      sessionId: 'session-x',
+      blocks: 3,
+      textBlocks: 1,
+      reasoningBlocks: 1,
+      toolCallBlocks: 1,
+      bodyEmpty: false,
+      repairs: 1,
+      usage: { inputTokens: 1, outputTokens: 2 },
+      elapsedMs: 12,
+    })
+    expect(diagnostic.limits.maxDeclarationChars).toBe(2000)
+    const serialized = JSON.stringify(diagnostic)
+    expect(serialized).not.toContain('rejected body')
+    expect(serialized).not.toContain('chain of thought')
+    expect(serialized).not.toContain('secret')
+    // a tool block is only ever a COUNT: the "no text, but it called a tool" claim needs it
+    expect(attemptDiagnostic({ blocks: [{ type: 'tool-call' }] }) as any).toMatchObject({ toolCallBlocks: 1, bodyEmpty: true })
   })
 })

@@ -190,6 +190,8 @@ try {
         queues.set(agent.id, [
             programAttempt('I will just write the file.', "await tools.write({ file_path: 'surface-a.txt', content: 'x\\n' }); return 'ok'"),
             textAttempt('Intent: write the file after the correction; I will write it once.'),
+            programAttempt('Writing it now, under the declaration.', "await tools.write({ file_path: 'surface-a.txt', content: 'ok\\n' }); return 'ok'"),
+            textAttempt('The file is written.'),
         ])
         agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Write the fixture.' }] }))
         await waitIdle(agent)
@@ -198,17 +200,23 @@ try {
         const texts = visibleText(slice)
         // The first attempt was rejected, so its words must never have been presented: the only
         // text the client ever saw belongs to the ACCEPTED (second) attempt.
-        assert(texts === 'Intent: write the file after the correction; I will write it once.', 'the client saw only the validated text, got ' + JSON.stringify(texts))
+        // Nothing of the withheld attempt reached the client; the declaration arrives first, and
+        // only then does the work of the same request appear.
+        assert(texts.startsWith('Intent: write the file after the correction; I will write it once.'), 'the client saw only validated text, declaration first, got ' + JSON.stringify(texts))
+        assert(texts.includes('Writing it now, under the declaration.'), 'the business step of the same request followed the declaration')
+        assert(texts.includes('I will just write the file.') === false, 'the withheld words never reached the client')
         const firstAttemptText = slice.filter(frame => frame.frame?.type === 'chunk' && frame.frame?.chunk?.type === 'text-delta').slice(0, 1)
         assert(firstAttemptText.every(frame => frame.at >= 0), 'frames are stamped')
-        assert(fs.existsSync(path.join(workspace, 'surface-a.txt')) === false, 'the withheld program never ran')
+        assert(fs.readFileSync(path.join(workspace, 'surface-a.txt'), 'utf8') === 'ok\n', 'the withheld program never ran; only the declared one did')
         const assistantMessages = assistantTexts(agent)
-        assert(assistantMessages.length === 1 && assistantMessages[0].startsWith('Intent: write the file after the correction'), 'only the validated reply became a client message: ' + JSON.stringify(assistantMessages))
+        assert(assistantMessages.length >= 1 && assistantMessages[0].startsWith('Intent: write the file after the correction'), 'the validated declaration is the first client message: ' + JSON.stringify(assistantMessages))
         const notice = journal(agent).filter(event => event.type === 'user/message' && event.data?.source?.kind === 'intent-gate-watchdog')
-        assert(notice.length === 1, 'the client journal carries exactly one correction notice, got ' + notice.length)
+        assert(notice.length === 2, 'the client journal carries the correction notice and the continuation notice, got ' + notice.length)
+        assert(String(notice[0].data?.content?.[0]?.text).startsWith('[intent-gate] Your previous reply'), 'the repair notice comes first')
+        assert(String(notice[1].data?.content?.[0]?.text).startsWith('[intent-gate] Your declaration'), 'the continuation notice comes after it')
         const attemptEnds = slice.filter(frame => frame.frame?.type === 'end' && frame.frame?.outcome?.eventType === 'assistant/attempt')
         assert(attemptEnds.length >= 1, 'the rejected attempt ended as an ATTEMPT on the client stream, never as a message')
-        return { clientVisibleText: texts.slice(0, 40), withheldDispatch: false, notices: notice.length, attemptEnds: attemptEnds.length }
+        return { clientVisibleText: texts.slice(0, 40), withheldDispatch: false, notices: notice.length, attemptEnds: attemptEnds.length, declarationFirst: true }
     })
 
     await test('IG07-S2-the-validated-reply-is-what-the-client-renders', async mark => {
@@ -238,9 +246,12 @@ try {
         assert(visibleText(slice) === '', 'no visible text for a request whose two attempts were both rejected: ' + JSON.stringify(visibleText(slice)))
         assert(assistantTexts(agent).length === 0, 'no assistant message in the client journal')
         const turnErrors = journal(agent).filter(event => event.type === 'turn/end' && event.data?.reason?.kind === 'error')
-        assert(turnErrors.length === 1, 'exactly one failed turn on the surface, got ' + turnErrors.length)
-        assert(turnErrors[0].data.reason.error.code === 'INTENT_DECLARATION_REPAIR_EXHAUSTED', 'the failure names the exhausted repair, got ' + String(turnErrors[0].data.reason.error.code))
-        return { clientVisibleText: '', assistantMessages: 0, failure: turnErrors[0].data.reason.error.code }
+        // Two generations were withheld and neither is the user's business answer: the withheld
+        // attempt and the declaration-only step each close their own turn.
+        assert(turnErrors.length === 2, 'both withheld turns are reported on the surface, got ' + turnErrors.length)
+        assert(turnErrors[0].data.reason.error.code === 'INTENT_DECLARATION_MISSING', 'the first turn names the miss, got ' + String(turnErrors[0].data.reason.error.code))
+        assert(turnErrors[1].data.reason.error.code === 'INTENT_DECLARATION_REPAIR_EXHAUSTED', 'the second names the spent repair, got ' + String(turnErrors[1].data.reason.error.code))
+        return { clientVisibleText: '', assistantMessages: 0, failures: turnErrors.map(event => event.data.reason.error.code) }
     })
 } catch (error) {
     findings.fatal = String(error?.stack ?? error)

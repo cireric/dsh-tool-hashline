@@ -28,7 +28,9 @@ import assert from 'node:assert/strict'
 import { createHash } from 'node:crypto'
 
 const [profileArgument, evidenceArgument, onlyArgument] = process.argv.slice(2)
-const ONLY = onlyArgument === undefined ? undefined : onlyArgument
+// A comma-separated list keeps one run inside its wall-clock budget; every case still runs
+// exactly once, in exactly one evidence directory.
+const ONLY = onlyArgument === undefined ? undefined : onlyArgument.split(',').map(part => part.trim()).filter(part => part !== '')
 if (!profileArgument || !evidenceArgument) throw new Error('usage: node scripts/test-intent-gate-host.mjs <--pack|isolated-profile-directory> <fresh-evidence-directory>')
 const root = path.resolve(evidenceArgument)
 if (ONLY === undefined && fs.existsSync(path.join(root, 'host-result.json'))) throw new Error('Use a fresh evidence directory; existing host-result.json is preserved.')
@@ -133,6 +135,9 @@ class Fixed extends LlmAdapter {
             session,
             purpose: options.purpose ?? null,
             hadSystem: options.system !== undefined,
+            // The declaration-only repair must be offered NO tool at all: this is what the
+            // provider was handed, logged at the adapter boundary, not a plugin claim.
+            tools: (options.tools ?? []).map(tool => tool.name),
             chunks: attempt.length,
             messageCount: options.messages?.length ?? 0,
             tail: tail === undefined ? undefined : {
@@ -209,7 +214,7 @@ const counters = () => ({
 })
 
 const test = async (id, fn) => {
-    if (ONLY !== undefined && !id.includes(ONLY)) return
+    if (ONLY !== undefined && !ONLY.some(part => id.includes(part))) return
     const before = counters()
     const mark = log.length
     try {
@@ -224,6 +229,7 @@ const test = async (id, fn) => {
 }
 
 try {
+    findings.only = ONLY ?? null
     findings.logs = []
     ctx = await boot.boot('e2', config, [...loaded.layers.flatMap(layer => layer.patches), ...loaded.patches, ...webHostDisables, ...overlays], c => {
         c.logger.exporter({ levels: { default: 2 }, export: ({ name, type, args }) => { if (type === 'warn' || type === 'error') findings.logs.push({ name, type, args: args.map(a => (a instanceof Error ? (a.stack ?? a.message) : String(a))) }) } })
@@ -386,6 +392,14 @@ try {
     const requestsOf = (entries, agent) => entries.filter(entry => entry.kind === 'request' && entry.session === agent.session.id && entry.purpose === null)
     const attemptsOf = (entries, agent) => entries.filter(entry => entry.kind === 'assistant-attempt' && entry.session === agent.session.id)
 
+    /** The repair notice and the continuation are two different messages from one producer. */
+    const REPAIR_PREFIX = '[intent-gate] Your previous reply for this request was withheld'
+    const CONTINUATION_PREFIX = '[intent-gate] Your declaration for this request was accepted'
+    const repairsOf = (entries, agent) => noticesOf(entries, agent).filter(entry => entry.text.startsWith(REPAIR_PREFIX))
+    const continuationsOf = (entries, agent) => noticesOf(entries, agent).filter(entry => entry.text.startsWith(CONTINUATION_PREFIX))
+    /** The declaration-only step is the request whose provider call was given zero tools. */
+    const declarationStepOf = (entries, agent) => requestsOf(entries, agent).find(request => Array.isArray(request.tools) && request.tools.length === 0)
+
     const DECLARATION = 'Intent: add a line to the acceptance fixture and show it back; I will read the file first, then write it.'
 
     await test('IG01-01-accepted-pure-answer-is-published-and-faithful', async () => {
@@ -464,13 +478,18 @@ try {
         const next = await create()
         const result = await runCase(next, [textAttempt('Sure — I deleted the branch and pushed the result.'), textAttempt('Still no declaration line.')], 'Clean up the branch.')
         const errors = result.errors
+        const requests = requestsOf(result.entries, next)
         assert.equal(result.published, '', 'nothing of the rejected reply was published')
         assert.equal(result.own.filter(entry => entry.kind === 'assistant-message').length, 0, 'no assistant message was appended')
-        assert.equal(errors.length, 1, 'the request stopped with one reported failure')
+        assert.equal(errors.length, 2, 'the withheld attempt and the failed declaration step each report their own failure')
         assert.match(errors[0].message, /\[intent-gate\]/u)
-        assert.equal(errors[0].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED', 'the single repair was spent and the miss repeated')
+        assert.equal(errors[0].code, 'INTENT_DECLARATION_MISSING', 'the first miss opens the repair instead of ending the request')
+        assert.equal(errors[1].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED', 'the single repair was spent and the declaration step missed too')
+        assert.equal(requests.length, 2, 'exactly one repair generation: never a third')
+        assert.deepEqual(requests[1].tools, [], 'the declaration step is offered no tool at all')
+        assert.equal(requests[1].tail.sourceKind, NOTICE_KIND, 'the declaration step ends with the gate notice')
         assert.equal(noticesOf(result.entries, next).length, 1, 'exactly one correction notice was recorded')
-        return { published: '', error: errors[0].message.slice(0, 120), code: errors[0].code }
+        return { published: '', error: errors.at(-1).message.slice(0, 120), code: errors.at(-1).code, declarationTools: requests[1].tools }
     })
 
     await test('IG01-06-empty-body-stops-before-publication', async () => {
@@ -478,10 +497,11 @@ try {
         const result = await runCase(next, [textAttempt('Intent:    '), textAttempt('Intent:  ')], 'Do something.')
         const errors = result.errors
         assert.equal(result.published, '')
-        assert.equal(errors.length, 1)
-        assert.equal(errors[0].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
+        assert.equal(errors.length, 2)
+        assert.equal(errors[0].code, 'INTENT_DECLARATION_EMPTY')
+        assert.equal(errors[1].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
         assert.equal(noticesOf(result.entries, next).length, 1)
-        return { code: errors[0].code }
+        return { codes: errors.map(error => error.code) }
     })
 
     await test('IG01-07-undeclared-program-zero-start-and-zero-side-effect', async () => {
@@ -494,10 +514,15 @@ try {
         assert.equal(result.own.filter(entry => entry.kind === 'tool-result').length, 0, 'no tool body ran')
         assert.equal(result.effects.length, 0, 'no write was attempted through the host fs')
         assert.equal(fs.existsSync(path.join(workspace, 'forbidden.txt')), false, 'no file appeared')
-        assert.equal(errors.length, 1)
-        assert.equal(errors[0].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
+        assert.equal(errors.length, 2)
+        assert.equal(errors[0].code, 'INTENT_DECLARATION_MISSING')
+        // the declaration step was offered no tool, so its call is a contract violation: the
+        // request pauses instead of executing, and the violation is what the user is told
+        assert.equal(errors[1].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
+        assert.match(errors[1].message, /意图声明未能生成/u)
+        assert.deepEqual(requestsOf(result.entries, next)[1].tools, [], 'the declaration step could not act even if it tried')
         const attempt = result.own.filter(entry => entry.kind === 'assistant-attempt')
-        return { zeroDispatch: true, zeroEffects: true, attemptStream: attempt[0]?.stream, attempts: attempt.length, error: errors[0].message.slice(0, 100) }
+        return { zeroDispatch: true, zeroEffects: true, attemptStream: attempt[0]?.stream, attempts: attempt.length, error: errors.at(-1).message.slice(0, 100) }
     })
 
     await test('IG01-08-final-text-wins-over-a-declaring-delta', async () => {
@@ -512,9 +537,9 @@ try {
         const result = await runCase(next, [attempt, attempt], 'Anything.')
         const errors = result.errors
         assert.equal(result.published, '')
-        assert.equal(errors.length, 1)
-        assert.equal(errors[0].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
-        return { code: errors[0].code, published: '' }
+        assert.equal(errors.length, 2)
+        assert.equal(errors.at(-1).code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
+        return { codes: errors.map(error => error.code), published: '' }
     })
 
     await test('IG01-09-every-new-user-message-owes-a-declaration', async () => {
@@ -523,7 +548,8 @@ try {
         assert.equal(first.errors.length, 0)
         const second = await runCase(next, [textAttempt('Second answer, no declaration.')], 'Second question.')
         assert.equal(second.published, '')
-        assert.equal(second.errors.length, 1)
+        assert.equal(second.errors[0].code, 'INTENT_DECLARATION_MISSING', 'the new request missed the declaration')
+        assert.equal(second.errors.length, 2, 'the declaration step then missed too, and the request paused')
         return { firstAccepted: true, secondRejected: true }
     })
 
@@ -575,7 +601,7 @@ try {
         const managed = await create('ptc-hashline')
         const gated = await runCase(managed, [textAttempt('No declaration line on the managed preset.')], 'Say something.')
         assert.equal(gated.published, '')
-        assert.equal(gated.errors.length, 1)
+        assert.equal(gated.errors[0].code, 'INTENT_DECLARATION_MISSING')
         return { standardPublished: result.published, managedRejected: true }
     })
 
@@ -593,7 +619,7 @@ try {
         // ... and the session still gates its own real request afterwards.
         const result = await runCase(next, [textAttempt('No declaration after an auxiliary call.')], 'Say something.')
         assert.equal(result.published, '')
-        assert.equal(result.errors.length, 1)
+        assert.equal(result.errors[0].code, 'INTENT_DECLARATION_MISSING')
         return { auxiliaryText: text.slice(0, 60), auxiliaryFinish: finish?.reason?.kind, managedStillGated: true }
     })
 
@@ -619,29 +645,38 @@ try {
     await test('IG02-01-one-repair-recovers-a-pure-answer', async () => {
         const next = await create()
         const declared = 'Intent: explain the fixture and stop there; I will answer in prose only.'
+        const answer = 'The fixture holds two lines and a content tag.'
         const result = await runCase(next, [
             textAttempt('I looked at it and it seems fine.', { replay: { response: 'rejected-answer' } }),
-            textAttempt(declared, { replay: { response: 'repaired-answer' } }),
+            textAttempt(declared, { replay: { response: 'declaration-replay' } }),
+            textAttempt(answer, { replay: { response: 'repaired-answer' } }),
         ], 'Explain the fixture.')
         const entries = result.entries
         const requests = requestsOf(entries, next)
-        const notices = noticesOf(entries, next)
+        const repairs = repairsOf(entries, next)
+        const continuations = continuationsOf(entries, next)
         const messages = scopeOf(entries, next).filter(entry => entry.kind === 'assistant-message')
-        assert.equal(requests.length, 2, 'the request was regenerated exactly once')
-        assert.equal(notices.length, 1, 'exactly one correction notice entered the session log')
-        assert.match(notices[0].text, /Intent:/u)
-        assert.match(notices[0].text, /grants no new authority/u)
-        assert.equal(requests[1].tail.sourceKind, NOTICE_KIND, 'the regenerated request ends with the correction notice')
-        assert.match(requests[1].tail.text, /\[intent-gate\]/u)
+        assert.equal(requests.length, 3, 'withheld attempt, declaration-only repair, business step of the same request')
+        assert.deepEqual(requests[1].tools, [], 'the repair was offered no tool at all')
+        assert.ok(requests[2].tools.includes('run_code'), 'the business step has its tools back')
+        assert.equal(repairs.length, 1, 'exactly one correction notice entered the session log')
+        assert.match(repairs[0].text, /Intent:/u)
+        assert.match(repairs[0].text, /DECLARATION-ONLY/u)
+        assert.match(repairs[0].text, /grants no new authority/u)
+        assert.equal(requests[1].tail.sourceKind, NOTICE_KIND, 'the declaration step ends with the correction notice')
         assert.ok(requests[1].messageCount > requests[0].messageCount, 'the rebuilt request carries the notice as an extra message')
-        assert.equal(messages.length, 1, 'only the accepted reply became durable')
+        assert.equal(continuations.length, 1, 'the accepted declaration is followed by a continuation, not by a repeated declaration')
+        assert.match(continuations[0].text, /Do not repeat or restate the Intent: line/u)
+        assert.equal(requests[2].tail.sourceKind, NOTICE_KIND)
+        assert.equal(messages.length, 2, 'only the declaration and the answer became durable')
         assert.equal(messages[0].text, declared)
-        assert.deepEqual(messages[0].replayState, { response: 'repaired-answer' }, 'the accepted answer carries its own replay metadata, not the rejected one')
-        assert.equal(result.published, declared, 'the withheld text was never published')
-        assert.equal(result.errors.length, 0, 'a repaired request does not surface as an error')
-        const attempts = attemptsOf(entries, next)
-        assert.equal(attempts.length, 1, 'the rejected attempt left no durable assistant message')
-        return { requests: requests.length, notices: notices.length, repairedReplay: messages[0].replayState, timing: result.timing }
+        assert.deepEqual(messages[0].replayState, { response: 'declaration-replay' })
+        assert.equal(messages[1].text, answer)
+        assert.deepEqual(messages[1].replayState, { response: 'repaired-answer' }, 'the answer carries its own replay metadata, not the rejected one')
+        assert.equal(result.published, declared + answer, 'the withheld text was never published, and the declaration precedes the work')
+        assert.equal(result.errors.length, 1, 'only the withheld attempt is reported; the repair is not a failure')
+        assert.equal(attemptsOf(entries, next).length, 1, 'the rejected attempt left no durable assistant message')
+        return { requests: requests.length, repairs: repairs.length, continuations: continuations.length, order: 'declaration-then-answer', repairedReplay: messages[1].replayState, timing: result.timing, continuationTiming: result.continuationTiming }
     })
 
     await test('IG02-02-one-repair-recovers-a-tool-program-without-running-the-old-one', async () => {
@@ -650,20 +685,26 @@ try {
         const acceptedProgram = "await tools.write({ file_path: 'allowed.txt', content: 'written once\\n' }); return 'done'"
         const result = await runCase(next, [
             programAttempt('Doing the write now.', rejectedProgram),
-            programAttempt(DECLARATION, acceptedProgram),
+            textAttempt(DECLARATION),
+            programAttempt('Writing the allowed file now.', acceptedProgram),
         ], 'Write the allowed file.')
         const entries = result.entries
+        const requests = requestsOf(entries, next)
         assert.equal(fs.existsSync(path.join(workspace, 'forbidden.txt')), false, 'the rejected program never ran')
         assert.equal(disk('allowed.txt'), 'written once\n', 'the repaired program ran exactly once')
         assert.equal(result.effects.length, 1, 'exactly one write reached the host fs')
         assert.equal(result.effects[0].path !== undefined, true)
+        assert.deepEqual(requests[1].tools, [], 'the declaration step cannot act: no tool is offered')
+        assert.ok(requests[2].tools.includes('run_code'))
         const results = scopeOf(entries, next).filter(entry => entry.kind === 'tool-result' && entry.name === 'run_code')
-        assert.equal(results.length, 1, 'one program executed')
+        assert.equal(results.length, 1, 'one program executed, in the business step only')
         const messages = scopeOf(entries, next).filter(entry => entry.kind === 'assistant-message')
-        assert.equal(messages[0].text, DECLARATION, 'the accepted reply is the declared one')
+        assert.equal(messages[0].text, DECLARATION, 'the accepted declaration is the first durable reply')
+        assert.equal(messages[1].text, 'Writing the allowed file now.')
         assert.ok(result.published.startsWith(DECLARATION), 'the withheld reply was never published')
-        assert.equal(result.errors.length, 0)
-        return { effects: result.effects.length, published: messages[0].text.slice(0, 40), timing: result.timing }
+        assert.equal(result.errors.length, 1)
+        assert.equal(repairsOf(entries, next).length, 1)
+        return { effects: result.effects.length, published: messages[0].text.slice(0, 40), declarationTools: requests[1].tools, timing: result.timing }
     })
 
     await test('IG02-03-a-second-miss-stops-with-the-repair-exhausted', async () => {
@@ -674,18 +715,21 @@ try {
         ], 'Answer me.')
         const entries = result.entries
         const errors = result.errors
-        assert.equal(requestsOf(entries, next).length, 2, 'at most one repair: never a third attempt')
-        assert.equal(noticesOf(entries, next).length, 1, 'the correction notice was recorded once')
+        const requests = requestsOf(entries, next)
+        assert.equal(requests.length, 2, 'at most one repair generation: never a third attempt')
+        assert.deepEqual(requests[1].tools, [], 'the repair could not act even if it wanted to')
+        assert.equal(repairsOf(entries, next).length, 1, 'the correction notice was recorded once')
+        assert.equal(continuationsOf(entries, next).length, 0, 'a failed declaration continues nothing')
         assert.equal(result.published, '', 'nothing was published')
         assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'tool-call').length, 0)
         assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'dispatch-start').length, 0)
         assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'assistant-message').length, 0)
-        assert.equal(errors.length, 1)
-        assert.equal(errors[0].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
-        assert.match(errors[0].message, /唯一一次自动修复/u)
+        assert.equal(errors.length, 2, 'the withheld attempt and the failed declaration step are both reported')
+        assert.equal(errors[1].code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
+        assert.match(errors[1].message, /意图声明未能生成，工作尚未执行/u)
         const attempts = attemptsOf(entries, next)
         assert.equal(attempts.length, 2, 'both rejected attempts left a durable attempt record')
-        return { attempts: attempts.length, attemptsUsage: attempts.map(entry => entry.usage ?? 'unknown'), code: errors[0].code }
+        return { attempts: attempts.length, attemptsUsage: attempts.map(entry => entry.usage ?? 'unknown'), code: errors[1].code, declarationTools: requests[1].tools }
     })
 
     await test('IG02-04-a-new-user-input-gets-its-own-repair', async () => {
@@ -694,12 +738,15 @@ try {
         const second = await runCase(next, [
             textAttempt('undeclared three'),
             textAttempt('Intent: answer the second ask; I will reply in prose.'),
+            textAttempt('Here is the answer to the second ask.'),
         ], 'Second ask.')
         const all = log.slice()
-        assert.equal(second.errors.length, 0, 'the new request was repaired and accepted')
-        assert.equal(noticesOf(all, next).length, 2, 'each user input spent its own single repair')
-        assert.equal(second.published, 'Intent: answer the second ask; I will reply in prose.')
-        return { notices: noticesOf(all, next).length, published: second.published.slice(0, 40) }
+        assert.equal(second.errors.length, 1, 'only the withheld attempt of the second request failed')
+        assert.equal(repairsOf(all, next).length, 2, 'each user input spent its own single repair')
+        assert.equal(continuationsOf(all, next).length, 1, 'the second request was continued after its declaration')
+        assert.ok(second.published.startsWith('Intent: answer the second ask'), 'the declaration came first')
+        assert.ok(second.published.endsWith('Here is the answer to the second ask.'))
+        return { repairs: repairsOf(all, next).length, continuations: continuationsOf(all, next).length, published: second.published.slice(0, 40) }
     })
 
     await test('IG02-05-cancellation-keeps-host-semantics-and-spends-no-repair', async () => {
@@ -716,10 +763,15 @@ try {
         assert.equal(cancelled.effects.length, 0)
         assert.equal(scopeOf(cancelled.entries, next).filter(entry => entry.kind === 'dispatch-start').length, 0)
         // the cancelled request did not touch the next one's budget
-        const after = await runCase(next, [textAttempt('undeclared after cancel'), textAttempt('Intent: answer after the cancel; I will reply.')], 'Try again.')
-        assert.equal(after.errors.length, 0)
-        assert.equal(noticesOf(log.slice(), next).length, 1, 'the next request still got its repair')
-        return { cancelledPublished: cancelled.published.slice(0, 40), notices: noticesOf(log.slice(), next).length }
+        const after = await runCase(next, [
+            textAttempt('undeclared after cancel'),
+            textAttempt('Intent: answer after the cancel; I will reply.'),
+            textAttempt('Answered after the cancel.'),
+        ], 'Try again.')
+        assert.equal(after.errors.length, 1, 'only the withheld attempt of the new request failed')
+        assert.equal(repairsOf(log.slice(), next).length, 1, 'the next request still got its repair')
+        assert.equal(continuationsOf(log.slice(), next).length, 1)
+        return { cancelledPublished: cancelled.published.slice(0, 40), repairs: repairsOf(log.slice(), next).length }
     })
 
     await test('IG02-06-real-provider-failure-keeps-its-meaning-and-no-repair', async () => {
@@ -729,10 +781,15 @@ try {
         assert.equal(errors.length, 1)
         assert.equal(errors[0].code, 'NETWORK', 'a transport failure is not relabelled as a declaration miss')
         assert.equal(noticesOf(failed.entries, next).length, 0)
-        const after = await runCase(next, [textAttempt('undeclared after the failure'), textAttempt('Intent: answer after the failure; I will reply.')], 'Retry the ask.')
-        assert.equal(after.errors.length, 0)
-        assert.equal(noticesOf(log.slice(), next).length, 1, 'the failure spent no repair')
-        return { failureCode: errors[0].code, notices: noticesOf(log.slice(), next).length }
+        const after = await runCase(next, [
+            textAttempt('undeclared after the failure'),
+            textAttempt('Intent: answer after the failure; I will reply.'),
+            textAttempt('Answered after the failure.'),
+        ], 'Retry the ask.')
+        assert.equal(after.errors.length, 1, 'only the withheld attempt of the new request failed')
+        assert.equal(repairsOf(log.slice(), next).length, 1, 'the failure spent no repair')
+        assert.equal(continuationsOf(log.slice(), next).length, 1)
+        return { failureCode: errors[0].code, repairs: repairsOf(log.slice(), next).length }
     })
 
     await test('IG02-07-truncation-is-not-a-declaration-miss', async () => {
@@ -797,22 +854,25 @@ try {
             },
         })
         const next = await create()
-        retryBudget.set(next.session.id, 2)
+        retryBudget.set(next.session.id, 1)
         const result = await runCase(next, [
             textAttempt('undeclared one'),
             textAttempt('undeclared two'),
             textAttempt('undeclared three'),
-            textAttempt('undeclared four'),
         ], 'Answer with retries around.')
         const entries = result.entries
-        const notices = noticesOf(entries, next)
-        assert.equal(notices.length, 1, 'the declaration repair was issued exactly once, no matter how the retry policy behaves')
+        // The generic policy claims the failure BEFORE the gate's declaration step exists, and
+        // what the gate guarantees is that a retried attempt never buys a second repair: the
+        // request's single declaration budget is spent by the first miss either way.
+        assert.equal(repairsOf(entries, next).length, 0, 'no declaration repair was issued: the generic retry owned the failure')
         assert.equal(result.published, '', 'no attempt was published')
         assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'dispatch-start').length, 0)
         const requests = requestsOf(entries, next).length
         assert.ok(requests <= 4, 'the retry policy cannot make the gate grant more repairs: ' + requests)
         assert.equal(retryBudget.get(next.session.id), 0, 'the generic policy spent only its own budget')
-        return { requests, notices: notices.length, genericRetriesLeft: retryBudget.get(next.session.id) }
+        assert.ok(result.errors.length >= 1)
+        assert.equal(result.errors.at(-1).code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED', 'after its own retry the request ends as a spent repair, never as a second repair')
+        return { requests, repairs: repairsOf(entries, next).length, genericRetriesLeft: retryBudget.get(next.session.id) }
     })
 
 
@@ -825,18 +885,142 @@ try {
             { type: 'block-end', index: 0, block: { type: 'text', text } },
             { type: 'finish', reason: { kind: 'stop' } },
         ]
-        const result = await runCase(next, [noUsage('undeclared and unmetered'), noUsage('Intent: answer without metering; I will reply.')], 'Answer.')
+        const result = await runCase(next, [
+            noUsage('undeclared and unmetered'),
+            noUsage('Intent: answer without metering; I will reply.'),
+            noUsage('Here is the unmetered answer.'),
+        ], 'Answer.')
         const entries = result.entries
         const attempts = attemptsOf(entries, next)
         const messages = scopeOf(entries, next).filter(entry => entry.kind === 'assistant-message')
         assert.equal(attempts.length, 1, 'the rejected attempt is a durable record')
         assert.equal(attempts[0].usage, undefined, 'an adapter that reported no usage leaves no cost, not a zero')
-        assert.equal(messages.length, 1)
-        assert.equal(messages[0].usage, undefined, 'the accepted reply does not invent a cost either')
-        assert.equal(result.published, 'Intent: answer without metering; I will reply.')
-        return { attemptUsage: attempts[0].usage ?? 'unknown', acceptedUsage: messages[0].usage ?? 'unknown' }
+        assert.equal(messages.length, 2, 'the declaration and the answer are separate records')
+        assert.equal(messages[0].usage, undefined, 'the declaration does not invent a cost either')
+        assert.equal(messages[1].usage, undefined, 'nor does the answer')
+        assert.equal(result.published, 'Intent: answer without metering; I will reply.Here is the unmetered answer.')
+        return { attemptUsage: attempts[0].usage ?? 'unknown', declarationUsage: messages[0].usage ?? 'unknown', acceptedUsage: messages[1].usage ?? 'unknown' }
     })
 
+
+    // ── 2026-10-28 declaration repair: the shape the plan's matrix asks for ─────────────
+    await test('IG08-01-the-declaration-is-published-before-the-work-of-the-same-request', async () => {
+        const next = await create()
+        const declared = 'Intent: append the acceptance line and show it back; I will read the file, then write it.'
+        const code = "const before = await tools.read({ file_path: 'order.txt' }); await tools.write({ file_path: 'order.txt', content: 'start\\ndone\\n' }); return { tag: before.tag }"
+        write('order.txt', 'start\n')
+        const result = await runCase(next, [
+            programAttempt('Appending the line now.', code),
+            textAttempt(declared),
+            programAttempt('The declaration is on the record; writing the line now.', code),
+        ], 'Append the acceptance line.')
+        const entries = result.entries
+        const requests = requestsOf(entries, next)
+        const messages = scopeOf(entries, next).filter(entry => entry.kind === 'assistant-message')
+        // the request identity is preserved: same agent, same session, three generations of ONE request
+        assert.equal(new Set(requests.map(request => request.agent)).size, 1, 'the same main agent generates all three')
+        assert.equal(new Set(requests.map(request => request.session)).size, 1, 'all three belong to the same session/request')
+        assert.deepEqual(requests[1].tools, [], 'generation 2 is the declaration-only repair')
+        assert.ok(requests[2].tools.includes('run_code'), 'generation 3 is the business step, with tools')
+        assert.match(String(requests[2].tail.text), /accepted/u, 'the business step is opened by the continuation notice')
+        assert.equal(messages[0].text, declared, 'the declaration is the first durable reply')
+        // ORDER at the publication surface: the declaration is published before any dispatch
+        const declarationIndex = entries.findIndex(entry => entry.kind === 'assistant-message' && entry.text === declared)
+        const firstDispatch = entries.findIndex(entry => entry.kind === 'dispatch-start')
+        assert.ok(declarationIndex >= 0, 'the declaration was published')
+        assert.ok(firstDispatch > declarationIndex, 'nothing was dispatched before the declaration was published')
+        assert.equal(disk('order.txt'), 'start\ndone\n', 'the business program executed exactly once')
+        assert.equal(result.effects.length, 1)
+        const repairs = repairsOf(entries, next)
+        const continuations = continuationsOf(entries, next)
+        assert.equal(repairs.length, 1)
+        assert.equal(continuations.length, 1)
+        return { generations: requests.length, declarationTools: requests[1].tools, businessTools: requests[2].tools, declarationBeforeDispatch: true, repairCost: attemptsOf(entries, next).map(entry => entry.usage ?? 'unknown') }
+    })
+
+    await test('IG08-02-a-call-in-the-declaration-step-is-a-protocol-pause-with-zero-execution', async () => {
+        const next = await create()
+        // The declaration text is perfect; the call is the violation, and no tool was offered.
+        const result = await runCase(next, [
+            programAttempt('Doing it now.', "await tools.write({ file_path: 'declared-but-acted.txt', content: 'x\\n' }); return 'ok'"),
+            programAttempt(DECLARATION, "await tools.write({ file_path: 'declared-but-acted.txt', content: 'x\\n' }); return 'ok'"),
+        ], 'Write the file.')
+        const entries = result.entries
+        const requests = requestsOf(entries, next)
+        assert.equal(requests.length, 2, 'no third generation')
+        assert.deepEqual(requests[1].tools, [], 'the declaration step was offered no tool')
+        assert.equal(result.published, '', 'the declaration step published nothing')
+        assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'tool-call').length, 0, 'no call was even recorded')
+        assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'dispatch-start').length, 0, 'no program started')
+        assert.equal(result.effects.length, 0)
+        assert.equal(fs.existsSync(path.join(workspace, 'declared-but-acted.txt')), false)
+        assert.equal(repairsOf(entries, next).length, 1, 'the single repair was spent')
+        assert.equal(continuationsOf(entries, next).length, 0, 'a failed declaration continues nothing')
+        assert.equal(result.errors.at(-1).code, 'INTENT_DECLARATION_REPAIR_EXHAUSTED')
+        assert.match(result.errors.at(-1).message, /不提供任何工具/u)
+        return { generations: requests.length, declarationTools: requests[1].tools, zeroDispatch: true, zeroEffects: true, pause: result.errors.at(-1).code }
+    })
+
+    await test('IG08-03-a-cancel-during-the-declaration-step-publishes-and-continues-nothing', async () => {
+        const next = await create()
+        const caseMark = log.length
+        const pending = runCase(next, [
+            textAttempt('undeclared before the repair'),
+            textAttempt('Intent: answer when allowed; I will reply in prose.', { hold: true }),
+            textAttempt('this attempt must never be published'),
+        ], 'Answer me.')
+        await waitForLog(entry => entry.kind === 'attempt-held', 30_000, caseMark)
+        next.cancel({ kind: 'user' })
+        // the fixed adapter parks on a handshake: release it so the aborted stream can end
+        if (releaseHold !== null) releaseHold()
+        const result = await pending
+        const entries = result.entries
+        assert.equal(continuationsOf(entries, next).length, 0, 'a cancelled declaration starts no continuation')
+        assert.equal(scopeOf(entries, next).filter(entry => entry.kind === 'dispatch-start').length, 0, 'no program started')
+        assert.equal(result.effects.length, 0)
+        assert.equal(result.published, '', 'the cancelled declaration was never published')
+        assert.equal(repairsOf(entries, next).length, 1, 'the repair stays spent: a cancel never refunds it')
+        // and the next real input still declares, with its own request budget
+        const after = await runCase(next, [
+            textAttempt('Intent: answer after the cancel; I will reply in prose.'),
+            textAttempt('Answered after the cancel.'),
+        ], 'Answer after the cancel.')
+        assert.equal(after.errors.length, 0)
+        assert.ok(after.published.startsWith('Intent: answer after the cancel'))
+        return { continuation: 0, dispatch: 0, published: '', repairs: 1 }
+    })
+
+    await test('IG08-04-the-diagnostic-names-the-class-and-never-copies-the-withheld-text', async () => {
+        const next = await create()
+        const marker = 'WITHHELD-BODY-MARKER-9f31'
+        const logMark = findings.logs.length
+        const result = await runCase(next, [
+            textAttempt('I inspected it and ' + marker + ' was fine.', { replay: { response: 'rejected-diag' } }),
+            textAttempt('Intent: answer the diagnostic ask; I will reply in prose.'),
+            textAttempt('Answered.'),
+        ], 'Diagnose me.')
+        assert.equal(result.errors.length, 1, 'the withheld attempt is reported')
+        const diagnostics = findings.logs.slice(logMark)
+            .filter(entry => String(entry.args[0] ?? '').includes('intent-gate-diagnostic'))
+            .map(entry => {
+                const text = String(entry.args[0])
+                return JSON.parse(text.slice(text.indexOf('{')))
+            })
+        assert.ok(diagnostics.length >= 1, 'the gate logged a structured diagnostic')
+        const diagnostic = diagnostics.find(entry => entry.reason === 'missing-marker')
+        assert.ok(diagnostic, 'the miss is classified by name')
+        assert.equal(diagnostic.stage, 'first')
+        assert.equal(diagnostic.providerKind, 'stop')
+        assert.equal(diagnostic.repairs, 0)
+        assert.equal(typeof diagnostic.bodyChars, 'number')
+        assert.equal(diagnostic.bodyEmpty, false)
+        assert.equal(diagnostic.toolCallBlocks, 0)
+        assert.equal(diagnostic.limits.maxDeclarationChars, 2000)
+        const serialized = JSON.stringify(diagnostics)
+        assert.equal(serialized.includes(marker), false, 'the withheld body is never copied into a diagnostic')
+        assert.equal(JSON.stringify(findings.logs.slice(logMark)).includes(marker), false, 'nor into any other log line')
+        return { diagnostics: diagnostics.length, reason: diagnostic.reason, stage: diagnostic.stage, repairs: diagnostic.repairs, bodyChars: diagnostic.bodyChars }
+    })
 
     // ── ticket 03: input exceptions and the user's own retry path ───────────────────────
     const userMessagesOf = (entries, agent) => entries.filter(entry => entry.kind === 'user-message' && entry.session === agent.session.id && entry.sourceKind === 'user')
@@ -850,10 +1034,14 @@ try {
         assert.equal(noticesOf(result.entries, next).length, 0, 'no repair was needed or spent')
         assert.equal(requestsOf(result.entries, next).length, 1, 'exactly one model call: the check adds no second model')
         // the exemption did not consume this request's repair either
-        const after = await runCase(next, [textAttempt('no declaration here'), textAttempt('Intent: answer the next ask; I will reply.')], 'Now answer properly.')
-        assert.equal(noticesOf(log.slice(), next).length, 1, 'the following request still had its own repair')
-        assert.equal(after.errors.length, 0)
-        return { requests: 1, noticesAfter: noticesOf(log.slice(), next).length }
+        const after = await runCase(next, [
+            textAttempt('no declaration here'),
+            textAttempt('Intent: answer the next ask; I will reply.'),
+            textAttempt('Here is the answer to the next ask.'),
+        ], 'Now answer properly.')
+        assert.equal(repairsOf(log.slice(), next).length, 1, 'the following request still had its own repair')
+        assert.equal(after.errors.length, 1, 'only the withheld attempt of that request failed')
+        return { requests: 1, repairsAfter: repairsOf(log.slice(), next).length }
     })
 
     await test('IG03-02-the-same-words-with-a-new-constraint-owe-a-declaration', async () => {
@@ -861,11 +1049,13 @@ try {
         const result = await runCase(next, [
             textAttempt('改好了，第二行已经是 B。'),
             textAttempt('Intent: change line 2 of a.txt to B; I will read it then edit it.'),
+            textAttempt('Done: line 2 is B.'),
         ], '收到，但把 a.txt 的第二行改成 B')
-        assert.equal(noticesOf(result.entries, next).length, 1, 'the input owed a declaration, so it was repaired once')
-        assert.equal(result.published, 'Intent: change line 2 of a.txt to B; I will read it then edit it.', 'only the declared reply was published')
-        assert.equal(result.errors.length, 0)
-        return { requests: requestsOf(result.entries, next).length, notices: 1 }
+        assert.equal(repairsOf(result.entries, next).length, 1, 'the input owed a declaration, so it was repaired once')
+        assert.equal(continuationsOf(result.entries, next).length, 1)
+        assert.equal(result.published, 'Intent: change line 2 of a.txt to B; I will read it then edit it.Done: line 2 is B.', 'only the declared reply was published, then the work')
+        assert.equal(result.errors.length, 1)
+        return { requests: requestsOf(result.entries, next).length, repairs: 1, continuations: 1 }
     })
 
     await test('IG03-03-bare-continuation-rides-the-existing-understanding', async () => {
@@ -885,10 +1075,12 @@ try {
         const result = await runCase(next, [
             textAttempt('先接着说完，然后删掉。'),
             textAttempt('Intent: finish the explanation and delete b.txt; I will do both in order.'),
+            textAttempt('Explanation finished and b.txt deleted.'),
         ], '继续，同时把 b.txt 删掉')
-        assert.equal(noticesOf(result.entries, next).length, 1, 'the added goal turned it into a new request')
-        assert.equal(result.published, 'Intent: finish the explanation and delete b.txt; I will do both in order.')
-        return { notices: 1, published: result.published.slice(0, 40) }
+        assert.equal(repairsOf(result.entries, next).length, 1, 'the added goal turned it into a new request')
+        assert.equal(continuationsOf(result.entries, next).length, 1)
+        assert.equal(result.published, 'Intent: finish the explanation and delete b.txt; I will do both in order.Explanation finished and b.txt deleted.')
+        return { repairs: 1, published: result.published.slice(0, 40) }
     })
 
     await test('IG03-05-a-continuation-without-understanding-owes', async () => {
@@ -896,10 +1088,12 @@ try {
         const result = await runCase(next, [
             textAttempt('好的，我继续。'),
             textAttempt('Intent: explain what the fixture does; I will answer in prose.'),
+            textAttempt('The fixture does exactly one thing.'),
         ], '继续')
-        assert.equal(noticesOf(result.entries, next).length, 1, 'a bare "继续" in a fresh session has nothing to carry')
-        assert.equal(result.published, 'Intent: explain what the fixture does; I will answer in prose.')
-        return { notices: 1 }
+        assert.equal(repairsOf(result.entries, next).length, 1, 'a bare "继续" in a fresh session has nothing to carry')
+        assert.equal(continuationsOf(result.entries, next).length, 1)
+        assert.ok(result.published.startsWith('Intent: explain what the fixture does'))
+        return { repairs: 1, continuations: 1 }
     })
 
     await test('IG03-06-an-exemption-never-excuses-an-action', async () => {
@@ -908,15 +1102,17 @@ try {
         const acceptedProgram = "await tools.write({ file_path: 'social-write.txt', content: 'x\\n' }); return 'ok'"
         const result = await runCase(next, [
             programAttempt('好的，我把文件写一下。', rejectedProgram),
-            programAttempt('Intent: write the fixture file; I will write it once.', acceptedProgram),
+            textAttempt('Intent: write the fixture file; I will write it once.'),
+            programAttempt('Writing the fixture file now.', acceptedProgram),
         ], '谢谢')
         assert.equal(fs.existsSync(path.join(workspace, 'forbidden-social.txt')), false, 'the undeclared program never ran')
         assert.equal(result.effects.length, 1, 'only the declared program wrote')
         const messages = scopeOf(result.entries, next).filter(entry => entry.kind === 'assistant-message')
         assert.equal(messages[0].text, 'Intent: write the fixture file; I will write it once.')
         assert.ok(result.published.startsWith('Intent: write the fixture file'), 'the undeclared reply was never published')
-        assert.equal(noticesOf(result.entries, next).length, 1)
-        return { effects: result.effects.length, notices: 1 }
+        assert.equal(repairsOf(result.entries, next).length, 1)
+        assert.equal(continuationsOf(result.entries, next).length, 1)
+        return { effects: result.effects.length, repairs: 1 }
     })
 
     await test('IG03-07-user-continuation-and-machine-continuation-are-traceable', async () => {
@@ -943,11 +1139,13 @@ try {
         const resumed = await runCase(next, [
             textAttempt('好的，我继续。'),
             textAttempt('Intent: resume the first ask; I will restate the goal and continue.'),
+            textAttempt('Resuming where the stopped request left off.'),
         ], '继续')
-        assert.equal(noticesOf(resumed.entries, next).length, 1, 'the continuation owed a declaration and used a fresh repair')
-        assert.equal(resumed.published, 'Intent: resume the first ask; I will restate the goal and continue.')
-        assert.equal(resumed.errors.length, 0)
-        return { notices: noticesOf(log.slice(), next).length, published: resumed.published.slice(0, 40) }
+        assert.equal(repairsOf(resumed.entries, next).length, 1, 'the continuation owed a declaration and used a fresh repair')
+        assert.equal(continuationsOf(resumed.entries, next).length, 1)
+        assert.equal(resumed.published, 'Intent: resume the first ask; I will restate the goal and continue.Resuming where the stopped request left off.')
+        assert.equal(resumed.errors.length, 1)
+        return { repairs: repairsOf(log.slice(), next).length, published: resumed.published.slice(0, 40) }
     })
 
     await test('IG03-09-sessions-do-not-borrow-each-others-understanding', async () => {
@@ -957,10 +1155,12 @@ try {
         const result = await runCase(second, [
             textAttempt('我接着别的会话说。'),
             textAttempt('Intent: start this session by explaining the fixture; I will answer in prose.'),
+            textAttempt('This session starts with the explanation.'),
         ], '继续')
-        assert.equal(noticesOf(result.entries, second).length, 1, 'another session has no understanding to carry, so "继续" owed a declaration')
-        assert.equal(result.published, 'Intent: start this session by explaining the fixture; I will answer in prose.')
-        return { notices: 1 }
+        assert.equal(repairsOf(result.entries, second).length, 1, 'another session has no understanding to carry, so "继续" owed a declaration')
+        assert.equal(continuationsOf(result.entries, second).length, 1)
+        assert.ok(result.published.startsWith('Intent: start this session by explaining the fixture'))
+        return { repairs: 1, continuations: 1 }
     })
 
 
@@ -1033,7 +1233,11 @@ try {
         const pendingResult = asked.own.filter(entry => entry.kind === 'tool-result' && entry.name === 'ask_user_question').at(-1)
         const callId = pendingResult?.value?.pending === true ? pendingResult.value.callId : undefined
         assert.equal(typeof callId, 'string', 'the host reported the question as pending with a call id')
-        attemptQueue.set(next.id, [textAttempt('好的，那就按 A 做。'), textAttempt('Intent: proceed with option A for the fixture; I will write it.')])
+        attemptQueue.set(next.id, [
+            textAttempt('好的，那就按 A 做。'),
+            textAttempt('Intent: proceed with option A for the fixture; I will write it.'),
+            textAttempt('Proceeding with option A.'),
+        ])
         const accepted = ctx.get('userQuestions').answer(next, callId, { answers: [{ id: 'pick', selected: ['A'] }] })
         assert.equal(accepted, true, 'the public answer entrance accepted the batch')
         await waitIdle(next)
@@ -1042,9 +1246,13 @@ try {
         const answerMessages = entries.filter(entry => entry.kind === 'user-message' && entry.session === next.session.id && entry.sourceKind === 'user-question-reply')
         assert.equal(answerMessages.length, 1, 'the answer arrived as the host question-reply message')
         const messages = scopeOf(entries, next).filter(entry => entry.kind === 'assistant-message')
-        assert.equal(messages.at(-1).text, 'Intent: proceed with option A for the fixture; I will write it.', 'the answer was answered with a declaration, not with a guess')
-        assert.equal(noticesOf(entries, next).length, 1, 'the marker-less reply to the answer was repaired once')
-        return { callId: typeof callId, answerMessages: 1, notices: 1 }
+        // the log carries this session's earlier question-asking reply too: the ANSWER's own
+        // generation is the declaration, and the work follows it inside the same request
+        assert.ok(messages.some(message => message.text === 'Intent: proceed with option A for the fixture; I will write it.'), 'the answer was answered with a declaration, not with a guess')
+        assert.equal(messages.at(-1).text, 'Proceeding with option A.')
+        assert.equal(repairsOf(entries, next).length, 1, 'the marker-less reply to the answer was repaired once')
+        assert.equal(continuationsOf(entries, next).length, 1)
+        return { callId: typeof callId, answerMessages: 1, repairs: 1 }
     })
 
     await test('IG04-04-a-bare-continue-is-not-an-answer-while-a-question-is-open', async () => {
@@ -1055,11 +1263,13 @@ try {
         const result = await runCase(next, [
             textAttempt('好的，我按推荐项继续。'),
             textAttempt('Intent: I still need your choice between A and B; I will wait for it.'),
+            textAttempt('Waiting for your choice.'),
         ], '继续')
-        assert.equal(noticesOf(result.entries, next).length, 1, 'the bare continuation owed a declaration instead of being exempt')
-        assert.equal(result.published, 'Intent: I still need your choice between A and B; I will wait for it.')
+        assert.equal(repairsOf(result.entries, next).length, 1, 'the bare continuation owed a declaration instead of being exempt')
+        assert.equal(continuationsOf(result.entries, next).length, 1)
+        assert.ok(result.published.startsWith('Intent: I still need your choice between A and B'))
         assert.equal(fs.existsSync(path.join(workspace, 'acted-early.txt')), false)
-        return { notices: 1, published: result.published.slice(0, 40) }
+        return { repairs: 1, published: result.published.slice(0, 40) }
     })
 
     await test('IG04-05-an-open-question-does-not-lock-other-sessions', async () => {
@@ -1088,13 +1298,14 @@ try {
         const pending = runCase(next, [
             textAttempt('Intent: explain the fixture; I will answer in prose.', { hold: true }),
             textAttempt('Intent: explain the fixture and note the rename request; I will cover both.'),
+            textAttempt('Covered both: the explanation, and the rename note.'),
         ], 'Explain the fixture.')
         await waitForLog(entry => entry.kind === 'attempt-held', 20_000, caseMark)
         steerNow(next, '顺便把它重命名')
         const result = await pending
         const messages = scopeOf(result.entries, next).filter(entry => entry.kind === 'assistant-message')
         assert.equal(messages[0].text, 'Intent: explain the fixture; I will answer in prose.', 'a stale prose answer is harmless and is published')
-        assert.equal(messages.at(-1).text, 'Intent: explain the fixture and note the rename request; I will cover both.', 'the correction was answered with a fresh declaration')
+        assert.equal(messages[1].text, 'Intent: explain the fixture and note the rename request; I will cover both.', 'the correction was answered with a fresh declaration')
         assert.equal(scopeOf(result.entries, next).filter(entry => entry.kind === 'dispatch-start').length, 0)
         assert.equal(result.effects.length, 0)
         const requests = requestsOf(result.entries, next)
@@ -1123,10 +1334,14 @@ try {
         assert.equal(messages[1].text, 'Intent: write the corrected file instead; I will write fresh.txt.', 'the correction was re-declared before acting')
         assert.equal(noticesOf(result.entries, next).length, 0, 'a withheld action spends no declaration repair')
         // and the request budget is intact afterwards
-        const after = await runCase(next, [textAttempt('undeclared after steering'), textAttempt('Intent: answer after the steer; I will reply.')], 'One more ask.')
-        assert.equal(noticesOf(log.slice(), next).length, 1, 'the steering did not consume the one repair')
-        assert.equal(after.errors.length, 0)
-        return { stale: false, fresh: true, noticesAfter: 1 }
+        const after = await runCase(next, [
+            textAttempt('undeclared after steering'),
+            textAttempt('Intent: answer after the steer; I will reply.'),
+            textAttempt('Answered after the steer.'),
+        ], 'One more ask.')
+        assert.equal(repairsOf(log.slice(), next).length, 1, 'the steering did not consume the one repair')
+        assert.equal(after.errors.length, 1)
+        return { stale: false, fresh: true, repairsAfter: 1 }
     })
 
     await test('IG05-03-executed-calls-stay-executed-and-the-later-call-is-blocked', async () => {
@@ -1221,10 +1436,11 @@ try {
         const after = await runCase(resumed.agent, [
             textAttempt('好的，那就按 A 做。'),
             textAttempt('Intent: proceed with option A for the fixture; I will write it.'),
+            textAttempt('Proceeding with option A after the reload.'),
         ], '继续')
-        assert.equal(noticesOf(after.entries, resumed.agent).length, 1, 'the reloaded session still held the open question, so the bare continuation owed a declaration')
-        assert.equal(after.published, 'Intent: proceed with option A for the fixture; I will write it.')
-        assert.equal(after.errors.length, 0)
+        assert.equal(repairsOf(after.entries, resumed.agent).length, 1, 'the reloaded session still held the open question, so the bare continuation owed a declaration')
+        assert.ok(after.published.startsWith('Intent: proceed with option A for the fixture'))
+        assert.equal(after.errors.length, 1)
         const writes = log.filter(entry => entry.kind === 'write-effect' && entry.path.includes('resume-answer.txt')).length
         assert.equal(writes, before, 'the resumed session replayed nothing')
         const logEvents = resumed.agent.session.snapshotEvents().map(event => event.type)
@@ -1245,11 +1461,12 @@ try {
         const after = await runCase(resumed.agent, [
             textAttempt('我接着做完。'),
             textAttempt('Intent: continue the stopped request; I will say what is left.'),
+            textAttempt('What is left is the second half of the work.'),
         ], '继续')
-        assert.equal(noticesOf(after.entries, resumed.agent).length, 1, 'the continuation owed a declaration after the reload too')
-        assert.equal(after.published, 'Intent: continue the stopped request; I will say what is left.')
-        assert.equal(after.errors.length, 0)
-        return { noticesBefore: 1, noticesAfter: 1 }
+        assert.equal(repairsOf(after.entries, resumed.agent).length, 1, 'the continuation owed a declaration after the reload too')
+        assert.ok(after.published.startsWith('Intent: continue the stopped request'))
+        assert.equal(after.errors.length, 1)
+        return { repairsBefore: 1, repairsAfter: repairsOf(after.entries, resumed.agent).length }
     })
 
     await test('IG06-03-two-sessions-reload-independently', async () => {
@@ -1264,8 +1481,9 @@ try {
         const blocked = await runCase(resumedAsking.agent, [
             textAttempt('我按推荐项继续。'),
             textAttempt('Intent: I still need your choice between A and B; I will wait.'),
+            textAttempt('Still waiting for the choice.'),
         ], '继续')
-        assert.equal(noticesOf(blocked.entries, resumedAsking.agent).length, 1, 'the waiting session kept its wait')
+        assert.equal(repairsOf(blocked.entries, resumedAsking.agent).length, 1, 'the waiting session kept its wait')
         // the unrelated session resumed with nothing pending and acted normally
         const free = await runCase(resumedPlain.agent, [
             programAttempt('Intent: write the independent file; I will write it once.', "await tools.write({ file_path: 'reload-free.txt', content: 'ok\\n' }); return 'ok'"),
@@ -1289,13 +1507,14 @@ try {
         attemptQueue.set(next.agent.id, [
             textAttempt('好的，我按推荐项继续。'),
             textAttempt('Intent: I still need your choice between A and B; I will not act.'),
+            textAttempt('Still waiting; nothing was acted on.'),
         ])
         await waitIdle(next.agent)
         await settleAll()
         const entries = caseLog(mark)
-        assert.equal(noticesOf(entries, next.agent).length, 1, 'the steered turn owed a declaration: the wait was still open')
+        assert.equal(repairsOf(entries, next.agent).length, 1, 'the steered turn owed a declaration: the wait was still open')
         const messages = scopeOf(entries, next.agent).filter(entry => entry.kind === 'assistant-message')
-        assert.equal(messages.at(-1).text, 'Intent: I still need your choice between A and B; I will not act.')
+        assert.equal(messages[0].text, 'Intent: I still need your choice between A and B; I will not act.')
         assert.equal(scopeOf(entries, next.agent).filter(entry => entry.kind === 'dispatch-start').length, 0, 'nothing was dispatched while the question was open')
         // A steering note is not an answer, but the user's OWN next prompt is user input: it
         // ends the wait for gating purposes (ticket 04), and the request then acts under a
@@ -1305,7 +1524,7 @@ try {
         ], 'B 吧，按 B 做')
         assert.equal(disk('cross-acted.txt'), 'x\n', 'the user\'s own prompt ended the wait and the declared program ran')
         assert.equal(acting.errors.length, 0)
-        return { notices: 1, dispatchedWhileWaiting: 0, lastText: messages.at(-1).text.slice(0, 40), actedAfterUserInput: true }
+        return { repairs: 1, dispatchedWhileWaiting: 0, lastText: messages[0].text.slice(0, 40), actedAfterUserInput: true }
     })
 
     await test('IG07-02-a-wait-survives-a-spent-budget-and-a-reload', async () => {
@@ -1318,11 +1537,12 @@ try {
         const after = await runCase(resumed.agent, [
             textAttempt('好的，按推荐项继续。'),
             textAttempt('Intent: I still need your choice; I will wait for it.'),
+            textAttempt('Still waiting for your choice between A and B.'),
         ], '继续')
-        assert.equal(noticesOf(after.entries, resumed.agent).length, 1, 'after reload the continuation owed a declaration (wait + stopped history both survived)')
-        assert.equal(after.published, 'Intent: I still need your choice; I will wait for it.')
-        assert.equal(after.errors.length, 0)
-        return { exhaustedBefore: true, noticesAfter: 1 }
+        assert.equal(repairsOf(after.entries, resumed.agent).length, 1, 'after reload the continuation owed a declaration (wait + stopped history both survived)')
+        assert.ok(after.published.startsWith('Intent: I still need your choice'))
+        assert.equal(after.errors.length, 1)
+        return { exhaustedBefore: true, repairsAfter: repairsOf(after.entries, resumed.agent).length }
     })
 
 }
@@ -1342,7 +1562,12 @@ finally {
         'Deterministic adapter and synthetic user-source fixtures; realModelRequests=0. No model-behaviour, semantic-quality or value evidence: the mechanical check is proven, understanding is not.',
         'Base+headless host plus official web host tool-disable overlays; no target preset row removed or replaced to make a case pass.',
         'Four observation points are asserted separately: published text (agent/assistant-stream), recorded calls (tool/call), started programs (tool/ptc-dispatch-start), disk effects (tools/result + instrumented fs.writeText).',
-        'Bounded repair IS in this slice (ticket 02): at most ONE automatic repair per user-opened request, issued through agent/request-error with a correction notice appended to the session log; the withheld reply is never published or dispatched.',
+        'Bounded repair IS in this slice (ticket 02, revised 2026-10-28): at most ONE automatic repair per user-opened request, and that repair is DECLARATION-ONLY — agent/request-error spends the budget and leaves the withheld attempt terminal, the declaration step is opened by a public agent.followup from the idle driver, its request is built with an EMPTY tool catalog (system-prompt/assemble, logged as requests[].tools === []), and its only accepted output is the Intent line within maxDeclarationChars. The withheld reply is never published or dispatched.',
+        'The business continuation IS in this slice (2026-10-28 plan requirement 5): once the declaration is committed and published, the gate injects a continuation notice for the next step of the SAME turn, so the request declares once and then works with the full tool catalog. IG08-01 asserts the declaration is published before any dispatch, and that all three generations belong to one agent and one session.',
+        'A failed or cancelled declaration step is a PROTOCOL PAUSE: the budget stays spent, nothing is published, nothing is dispatched, and no third generation is attempted (IG01-05/06/07, IG02-03, IG08-02, IG08-03). A generic retry policy that claims the failure before the gate cannot buy a second repair (IG02-09).',
+        'GAP — a crash between the declaration commit and the injected continuation is not exercised here: the repair would have to be resumed by a host restart inside the same turn. The delivered behaviour is conservative (the declaration is durable, nothing is replayed, no second publish and no second generation), but "the work continues after such a crash" is NOT claimed.',
+        'GAP — the crash/restart points of R09 (during the declaration generation, before the commit, after the commit, during the business generation) are covered only where the deterministic host can reach them: IG08-03 covers cancellation, IG06-01..03 cover reloads of a reloaded session. An in-process kill between commit and continuation is not reachable without a host restart, which this run does not perform.',
+        'GAP — R12 stays a partial claim: the publication ORDER is proven on the assistant-stream/api-proxy-adjacent surface used here (agent/assistant-stream frames plus the durable assistant/message), and the CLI/browser render of that order is still not exercised (see scripts/test-intent-gate-surface.mjs for the client-wire tier).',
         'Input exceptions are IN this slice (ticket 03): a bare acknowledgement always, and a bare continuation only when this session already holds an accepted understanding AND the previous request ended accepted. The comparison is exact-form against two short closed lists, never a substring, and an exemption never covers a reply that calls a tool.',
         'The gate holds NO private state across requests: everything it knows (accepted understanding, the spent repair, the open question, the last outcome) is derived from the session event log on every read, so resume, reload and compaction preserve it by construction (ticket 06, IG-B-14). Recovery of the real CLI/browser surface remains ticket 07.',
         'A resumed agent is a fresh scoped world: the preset must be composed during resume setup (the host calls it; select() refuses a session that already started). A resume path that skips that composition leaves the resumed agent ungated, and a surviving gate instance of another agent can still judge a stream whose session id matches — so the guarantee is only as good as the host resume path, which is what IG06-01..03 assert.',
