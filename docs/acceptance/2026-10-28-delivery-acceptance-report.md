@@ -1,6 +1,6 @@
 # PTC Hashline 运维 skills：真实宿主交付验收报告（票据 08）
 
-运行时间：2026-10-28T00:01:46.815Z
+运行时间：2026-10-28T03:28:59.156Z
 
 本报告由 [delivery-acceptance.mjs](../../scripts/delivery-acceptance.mjs) 在本机真实安装上执行一次得到；每条判定都附退出码或实测值。它 **不是** 一次真实上游升级：固定候选与一次性 profile 是规格 D16/UPG-13 规定的验收形态。
 
@@ -192,7 +192,7 @@
 
 | 用例 | 判定 | 实测 |
 |---|---|---|
-| a bound proposal is written; no candidate tree, no switch | PASS | propose exit 0; proposal 20261102-042000-872d2f5b35e0; consent pending; no candidate directory |
+| a bound proposal is written; no candidate tree, no switch | PASS | propose exit 0; proposal 20261102-042000-6ac6fd3edae1; consent pending; no candidate directory |
 | a quote the session never wrote records nothing | PASS | consent with an unwritten quote exit 2; consent still pending |
 
 ### UPG-04 — PASS

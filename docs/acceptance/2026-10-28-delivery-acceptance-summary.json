@@ -1,6 +1,6 @@
 {
-  "startedAt": "2026-10-28T00:01:46.815Z",
-  "finishedAt": "2026-10-28T00:03:37.673Z",
+  "startedAt": "2026-10-28T03:28:59.156Z",
+  "finishedAt": "2026-10-28T03:30:47.833Z",
   "install": {
     "bundleRoot": "<temp>\\dsh-home\\profiles\\acceptance\\node_modules\\dsh-tool-hashline",
     "profile": "<temp>\\dsh-home\\profiles\\acceptance"
@@ -299,7 +299,7 @@
       "id": "UPG-03",
       "part": "a bound proposal is written; no candidate tree, no switch",
       "ok": true,
-      "detail": "propose exit 0; proposal 20261102-042000-872d2f5b35e0; consent pending; no candidate directory"
+      "detail": "propose exit 0; proposal 20261102-042000-6ac6fd3edae1; consent pending; no candidate directory"
     },
     {
       "id": "UPG-07",
