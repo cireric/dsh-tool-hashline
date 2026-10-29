@@ -49,11 +49,9 @@ describe.skipIf(!HAS_PLUGIN)('de-brand plugin keeps the preset persona (D2)', ()
     plugin.apply(harness.ctx, DEPLOYED_CONFIG)
     const text = await harness.render()
     expect(text).toContain('## Phase 0 — Intent Gate')
-    // The shipped shape is the request-level declaration (spec 2026-10-27): a literal
-    // marker plus natural language. The six-bucket vocabulary is retired, so its absence
-    // is part of the contract, not just its replacement.
-    expect(text).toContain('Intent: <what the user will get, in outcome terms>')
-    expect(text).not.toContain('Buckets, exactly six')
+    // Keep the six-bucket conversation convention through deployment persona layering.
+    expect(text).toContain('Intent: <bucket> — <goal and relevant boundary>')
+    expect(text).toContain('Buckets, exactly six')
     expect(text.endsWith(SHIPPED_SUFFIX)).toBe(true)
   })
 

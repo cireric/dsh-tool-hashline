@@ -1,9 +1,11 @@
 # 运行修复验收记录：D1 目录适配 / D2 persona 保留
 
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
 日期：2026-10-23
 计划：本地 `.scratch/ptc-hashline/runtime-fix-plan.md`
 原始实测报告：本地 `.scratch/ptc-hashline/runtime-verification-report.md`（保留原 FAIL，不改写；不随 clone 交付）
-旧验收追溯：[2026-10-23-acceptance-traceability.md](./2026-10-23-acceptance-traceability.md)（其计数是修复前基线）
+旧验收追溯：[2026-10-23-acceptance-traceability.md](README.md#历史原件 "归档原件：docs/acceptance/2026-10-23-acceptance-traceability.md")（其计数是修复前基线）
 
 本记录只陈述本次实际执行过的命令与观察。未执行的项列为 GAP，不用配置检查、进程内测试或历史记录替代。
 

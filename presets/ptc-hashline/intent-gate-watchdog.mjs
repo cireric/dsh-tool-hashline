@@ -1,126 +1,9 @@
 /**
- * Request-level intent gate for the ptc-hashline preset (方案 B, tickets 01-02).
- *
- * WHAT CHANGED AND WHY THE FILE KEEPS ITS NAME. This module used to be a per-turn
- * "watchdog": it denied the FIRST behavior tool call whose carrier message lacked a
- * six-bucket Intent: line, i.e. it gated on inner tool names and refused mid-program.
- * That mechanism is replaced (spec 2026-10-27-intent-gate-b-requirements, IG-B-01/02/04/05):
- * the obligation is now attached to a REQUEST, not to a tool name, and it is enforced
- * BEFORE anything is published or dispatched. The file name and the preset row id stay
- * "intent-gate-watchdog" because they are addressed by the packed install, the profile
- * installers, the delivery acceptance and the operations baselines; renaming an asset
- * path is not part of these tickets and would churn baselines they do not touch.
- *
- * THE SEAM. "llm/stream" is an official waterfall (dsh-llm): a listener may call next()
- * and buffer the adapter's chunks, then either replay them verbatim or yield its own
- * chunks. The agent loop builds the durable assistant/message only AFTER the stream ends
- * (agent-loop step()) and only THEN executes the tool calls it carries, so one fully
- * buffered attempt gives exactly the guarantee the spec asks for: the formal reply body
- * is validated before it is published (no agent/assistant-stream frame, no session
- * append) and before any tool program starts (no dispatch, no side effect).
- *
- * WHY TRIGGERING IS REQUEST-SCOPED. A declaration is owed on the FIRST formal reply after
- * a NEW real user input (IG-B-01). The loop's own signal for that is "agent/pre-step":
- * its messages are the messages claimed from the inbox for this step, so a real user
- * message enters the inbox only when the user spoke, and a tool result or an injected
- * notice never does. We latch that per session and consume it at the next model request
- * of that session; a machine-opened step clears the latch, so tool continuations of the
- * same request owe nothing (IG-B-01: 同请求工具续步、进度和收尾不重复).
- *
- * SCOPE. Only depth-0 agents (the preset's managed main agent) are gated: a delegated
- * child re-mounts this preset row into its own scope, and IG-B-13 keeps the gate out of
- * subagents and helper calls. Auxiliary model calls pass through untouched, identified by
- * the two fields that are true of them and false of a loop-built conversation request:
- * the loop stamps 'purpose' on compaction/session-title calls, and a hand-built one-shot
- * passes 'system' text (a loop request always leaves it undefined).
- *
- * DECLARATION-ONLY REPAIR (2026-10-28 declaration-repair plan, revising IG-B-05/06/07). A
- * rejected attempt is not the end of the request: the gate spends ONE repair per user-opened
- * request, and that repair is a DECLARATION, not a re-run of the reply. The withheld attempt
- * is terminal (nothing published, nothing dispatched), and the repair runs as its own step
- * with NO TOOL SCHEMAS (system-prompt/assemble), because a retry inside the same step would
- * be handed the same assembled tools — which is exactly the request that produced no
- * declaration at all. The step is opened by the public agent.followup once the driver is idle,
- * so it reuses the ordinary turn machinery (lifecycle, cancellation, cost, record) instead of
- * a recursive model call. Its only accepted output is a non-empty declaration body within
- * maxDeclarationChars; a tool call, a missing marker, an empty body or an over-long body is
- * the PROTOCOL PAUSE and never a third generation. The accepted declaration is committed and
- * published FIRST, and the SAME request then continues in its next step with the full tool
- * catalog: the gate asks for that step at the turn's own stop boundary (agent.steer, the
- * loop's documented way to keep a turn going), so the request declares once and works
- * afterwards and the durable order is declaration-then-work. Both notices come
- * from this producer and are told apart by a fixed prefix, so the derived budget counts the
- * repair and not the continuation. Nothing mutates the frozen request, and both notices say
- * explicitly that they grant no new authority (IG-B-07). Normal tool continuations never touch
- * the budget, and a real provider failure is delegated (next()) instead of being repaired —
- * cancellation, network errors, timeouts and truncation therefore cost no repair
- * (IG-B-10), and a generic retry policy cannot turn one declaration miss into two.
- *
- * FAILURE ACCOUNTING (IG-B-11/12). The three outcomes stay distinct and traceable:
- * the provider's own completion, this gate's policy rejection, and a real failure. A
- * rejected attempt keeps its usage chunk so the durable assistant/attempt stream still
- * shows what the generation cost; when the adapter reported no usage the record has none
- * (unknown, never a fabricated zero). Rejected text and tool calls never escape and the
- * rejected replay metadata is never attached to the accepted answer, which keeps its own.
- *
- * INPUT EXCEPTIONS (ticket 03, IG-B-01/03/09). Two inputs do not owe the line, and the
- * exemption is deliberately narrow so it can never hide a goal change: a BARE
- * acknowledgement ("谢谢" / "thanks") and a BARE continuation ("继续" / "continue") — exact
- * forms after normalisation, never a substring or a word inside a sentence. A continuation
- * additionally needs this session to already hold an accepted understanding, and it is
- * suppressed when the previous request ended in a stop (an exhausted repair, a failure or a
- * truncation), because then the user's "继续" is a NEW request that declares again and gets
- * its own repair (IG-B-06's exception). An exemption also never covers a reply that calls a
- * tool: acting without declaring is exactly what this gate exists to prevent (IG-B-09). The
- * semantic short check — goal, deliverable, object, scope, completion criteria — stays with
- * the main agent in its existing generation (IG-B-03); nothing here infers meaning.
- *
- * CLARIFICATION WAITING (ticket 04, IG-B-03/16). The host owns the question surface:
- * ask_user_question (dsh-tool-ask-user) records a durable tool call and, in this preset's
- * blocking mode, does not return until the human answers, so the request is paused by the
- * host rather than by a flag this module invents. What the gate adds is the accounting the
- * host does not do: while a question is open, (a) ticket 03's conversational exemptions are
- * OFF — a bare "继续" while A/B is on the table is not an answer and not a social ping, it
- * owes a declaration like any other request; (b) a reply that would CALL A TOOL is rejected,
- * because acting before the user answered is exactly what "silence is not consent" forbids
- * (IG-B-16/IG-B-09); (c) an answer that arrives as the host's own user-question-reply message
- * is always treated as a real input that owes a declaration — never as an acknowledgement,
- * never as a continuation. All of it is per session, so one session asking a question cannot
- * lock another one, and a new independent request in the same session clears the wait.
- *
- * STEERING BEFORE DISPATCH (ticket 05, IG-B-08/09). The host delivers a user's mid-run input
- * as steering: it waits in agent.inbox.nextStep until the loop claims it at the next step.
- * A reply composed BEFORE that input arrived cannot be trusted to reflect it, so the gate
- * refuses to let its calls run: an accepted attempt that would dispatch while a steer is
- * pending is ended as INTENT_STALE_ACTION (nothing published, nothing dispatched, no repair
- * spent), and an ALREADY RUNNING program is stopped at its next inner dispatch through the
- * official tools/pre-execute waterfall. Calls that already executed stay executed — the gate
- * never claims or performs a rollback — and the loop then consumes the steering input at the
- * next step, where the request re-declares under the new requirement. The judgement of
- * WHETHER an input changes the goal is the persona's, not this module's: a harmless progress
- * ping is paused and re-judged exactly like a real correction, and the persona continues the
- * same plan after saying where it is.
- *
- * BOUNDED RESOURCES (IG-B-15 / IGB-AC-08). Buffering is bounded in characters and in
- * wall-clock time; both caps and the repair budget are declared in the preset row and
- * asserted by scripts/check-preset.mjs so they cannot drift silently. Exceeding either cap
- * does NOT release an unvalidated reply and does NOT spend a repair: it ends the attempt
- * as a policy failure that names the cap. Timing rule used by the acceptance harness: the
- * gate's extra wait is the gap between the provider's own chunk timestamps at the adapter
- * and the first published "agent/assistant-stream" frame; both are observed outside this
- * module.
- *
- * LANGUAGE SPLIT. Text that the USER reads (a stopped request) is Chinese, like the rest of
- * this deployment's user-facing gate copy; text that only the MODEL reads (the correction
- * notice) is English, like the persona it must instruct.
- *
- * Zero @deepseek-ai/* imports on purpose: a preset directory lives under the user home,
- * where Node cannot resolve the harness packages. Node builtins are allowed.
+ * Live policy: Intent and the six buckets are persona conventions, not stream validation.
+ * Only tool dispatch is guarded: unanswered questions, same-program actions after an
+ * answer, and unconsumed user steering. No buffering, failure injection or auto followup.
+ * Public declaration/accounting helpers below remain for historical artifact readers.
  */
-
-import { randomUUID } from 'node:crypto'
-import { performance } from 'node:perf_hooks'
-
 export const name = 'intent-gate-watchdog'
 
 /**
@@ -189,9 +72,10 @@ export function normalizeInput(text) {
 export function classifyInput(text, state) {
   const normalized = normalizeInput(text)
   if (normalized === '') return 'owes'
-  // While a question is open nothing is a bare acknowledgement: the words may be an option
-  // label, and silence already means nothing (IG-B-16). The answer itself owes a declaration.
-  if (state !== undefined && state.awaitingAnswer === true) return 'owes'
+  // While a question of the CURRENT request is open nothing is a bare acknowledgement: the
+  // words may be an option label, and silence already means nothing (IG-B-16). The answer
+  // itself owes a declaration.
+  if (awaitingAnswer(state)) return 'owes'
   if (ACKNOWLEDGEMENTS.includes(normalized)) return 'acknowledge'
   if (CONTINUATIONS.includes(normalized)) {
     // "承接已有理解" needs an understanding to carry, and a request that ENDED in a stop
@@ -199,6 +83,182 @@ export function classifyInput(text, state) {
     return state !== undefined && state.accepted > 0 && state.lastOutcome === 'accepted' ? 'continue' : 'owes'
   }
   return 'owes'
+}
+
+/**
+ * Whether the request the session is currently in holds an unanswered question, i.e. whether
+ * a reply of this request may not act. The wait is per QUESTION and per REQUEST, never a
+ * session-wide boolean: an independent request opened later must proceed while the older
+ * question stays on the record (IG-B-16/FIX-07), and a question asked by an older request
+ * must not be cleared by anything but that question's own settlement.
+ * @param state - this session's derived record.
+ */
+export function awaitingAnswer(state) {
+  if (state === undefined || state === null) return false
+  if (Array.isArray(state.openQuestions)) return state.openQuestions.some(question => question.request === state.request)
+  // A record rebuilt by an older build carries the single session-wide flag; read it so a
+  // resumed session is still blocked instead of silently unlocking.
+  return state.awaitingAnswer === true
+}
+
+/**
+ * Whether one input is one of the two bare conversational forms, independent of any waiting
+ * state. A bare form never opens a new request: if it arrives while this request's question
+ * is open it keeps that question and stays blocked (FIX-05).
+ * @param text - the raw text of one real user input.
+ */
+export function isBareConversational(text) {
+  const normalized = normalizeInput(text)
+  return ACKNOWLEDGEMENTS.includes(normalized) || CONTINUATIONS.includes(normalized)
+}
+
+/**
+ * The accounting phases ONE user request can pass through (2026-10-28 plan P4). They are the
+ * stages whose cost and outcome must stay separable: the attempt(s) the gate judged first, the
+ * single declaration-only repair, and the business step the accepted declaration unlocked.
+ */
+export const ACCOUNTING_PHASE = Object.freeze({
+  FIRST: 'first',
+  DECLARATION: 'declaration',
+  BUSINESS: 'business',
+})
+
+/** One stage's ledger: attempts, publications and the provider's own accounting. */
+const emptyStage = () => ({ attempts: 0, published: 0, inputTokens: 0, outputTokens: 0, usageUnknown: 0 })
+
+/**
+ * Rebuild the per-request accounting from the SAME formal session log the gate derives its
+ * state from — not a second private fact source (IG-B-14/18, P4). It answers, per request:
+ * which stages produced an attempt, what each stage cost (unknown stays counted as unknown,
+ * never as zero), how many repairs were actually spent, which questions were asked and whether
+ * their own answer settled them, and how each turn ended.
+ *
+ * What it deliberately does NOT do: judge the business result, merge stages together, or
+ * invent a total for a stage whose adapter reported nothing.
+ * @param events - durable session events, in log order.
+ */
+export function requestAccounting(events) {
+  const requests = []
+  let current
+  const open = () => {
+    current = { index: requests.length + 1, accepted: 0, repairs: 0, questions: [], outcomes: [], stages: { first: emptyStage(), declaration: emptyStage(), business: emptyStage() } }
+    requests.push(current)
+    return current
+  }
+  /** The request an event belongs to; created on demand so a log never starts with a blank row. */
+  const ensure = () => (current === undefined ? open() : current)
+  const settleQuestionIn = (identity) => {
+    const question = current.questions.find(item =>
+      (identity.callId !== undefined && item.callId === identity.callId)
+      || (identity.subCallId !== undefined && item.subCallId === identity.subCallId))
+    if (question !== undefined) question.settled = true
+  }
+  for (const event of Array.isArray(events) ? events : []) {
+    const data = event?.data
+    if (event?.type === 'user/message' && isHumanInput(data) && data?.source?.kind !== ANSWER_SOURCE_KIND && !isBareConversational(noticeText(data))) {
+      // A substantive human input is a request of its own, with its own budget.
+      open()
+      continue
+    }
+    ensure()
+    switch (event?.type) {
+      case 'user/message': {
+        if (!isHumanInput(data)) {
+          if (data?.source?.kind === name && Array.isArray(data?.content)) {
+            const text = noticeText(data)
+            if (text.startsWith(REPAIR_NOTICE_PREFIX)) {
+              current.repairs += 1
+              current.phase = ACCOUNTING_PHASE.DECLARATION
+            } else if (text.startsWith(CONTINUATION_NOTICE_PREFIX)) {
+              current.phase = ACCOUNTING_PHASE.BUSINESS
+            }
+          }
+          break
+        }
+        const source = data?.source
+        if (source?.kind === ANSWER_SOURCE_KIND && typeof source.callId === 'string') {
+          settleQuestionIn({ callId: source.callId })
+          break
+        }
+        break
+      }
+      case 'assistant/attempt':
+      case 'assistant/message': {
+        const stage = current.stages[current.phase ?? ACCOUNTING_PHASE.FIRST]
+        stage.attempts += 1
+        if (event.type === 'assistant/message') stage.published += 1
+        const usage = data?.usage
+        if (usage === null || typeof usage !== 'object' || typeof usage.inputTokens !== 'number' || typeof usage.outputTokens !== 'number') {
+          stage.usageUnknown += 1
+        } else {
+          stage.inputTokens += usage.inputTokens
+          stage.outputTokens += usage.outputTokens
+        }
+        if (event.type === 'assistant/message' && checkDeclaration(bodyText(data?.message?.content ?? [])).ok) current.accepted += 1
+        break
+      }
+      case 'tool/call': {
+        if (data?.name !== QUESTION_TOOL) break
+        if (typeof data.callId !== 'string') break
+        current.questions.push({ callId: data.callId, settled: false })
+        break
+      }
+      case 'tool/ptc-dispatch-start': {
+        if (data?.name !== QUESTION_TOOL || typeof data.subCallId !== 'string') break
+        current.questions.push({ subCallId: data.subCallId, settled: false })
+        break
+      }
+      case 'tool/result': {
+        const callId = data?.message?.toolCallId
+        if (typeof callId === 'string') settleQuestionIn({ callId })
+        break
+      }
+      case 'tool/ptc-dispatch': {
+        if (data?.name !== QUESTION_TOOL) break
+        if (!reportsPending(data?.content)) settleQuestionIn({ subCallId: data?.subCallId })
+        break
+      }
+      case 'turn/end': {
+        const kind = data?.reason?.kind
+        current.outcomes.push(typeof kind === 'string' ? kind : 'unknown')
+        break
+      }
+      default: break
+    }
+  }
+  const totals = { requests: requests.length, repairs: 0, attempts: 0, inputTokens: 0, outputTokens: 0, usageUnknown: 0, unsettledQuestions: 0, failedTurns: 0 }
+  for (const request of requests) {
+    totals.repairs += request.repairs
+    totals.unsettledQuestions += request.questions.filter(question => question.settled !== true).length
+    totals.failedTurns += request.outcomes.filter(kind => kind !== 'completed').length
+    for (const stage of Object.values(request.stages)) {
+      totals.attempts += stage.attempts
+      totals.inputTokens += stage.inputTokens
+      totals.outputTokens += stage.outputTokens
+      totals.usageUnknown += stage.usageUnknown
+    }
+  }
+  return { requests, totals }
+}
+
+/** A one-line, log-safe account of the ledger (no bodies, no arguments). */
+export function summarizeAccounting(accounting) {
+  const stage = (request, phase) => {
+    const value = request.stages[phase]
+    return phase + ':attempts=' + String(value.attempts) + ',published=' + String(value.published) + ',unknown=' + String(value.usageUnknown)
+  }
+  const lines = accounting.requests.map(request => [
+    'request=' + String(request.index),
+    'repairs=' + String(request.repairs),
+    'accepted=' + String(request.accepted),
+    'questions=' + String(request.questions.length) + '(unsettled=' + String(request.questions.filter(question => question.settled !== true).length) + ')',
+    stage(request, ACCOUNTING_PHASE.FIRST),
+    stage(request, ACCOUNTING_PHASE.DECLARATION),
+    stage(request, ACCOUNTING_PHASE.BUSINESS),
+    'turns=' + request.outcomes.join('|'),
+  ].join(' '))
+  lines.push('totals attempts=' + String(accounting.totals.attempts) + ' repairs=' + String(accounting.totals.repairs) + ' inputTokens=' + String(accounting.totals.inputTokens) + ' outputTokens=' + String(accounting.totals.outputTokens) + ' usageUnknown=' + String(accounting.totals.usageUnknown))
+  return lines.join('\n')
 }
 
 /** Machine-readable reasons for one attempt's verdict. */
@@ -420,16 +480,6 @@ export function repairNotice(reason, providerKind, repair = 1, maxChars = DEFAUL
  * harness's own messages. 'kind' is this producer's own name — session format v4 refuses
  * a shared catch-all kind.
  */
-function pluginMessage(text, summary) {
-  return deepFreeze({
-    id: randomUUID(),
-    role: 'user',
-    content: [{ type: 'text', text }],
-    source: { kind: name, form: 'notice', summary: boundSummary(summary) },
-  })
-}
-
-/** Keep the notice's one-line account inside the harness's 120-character register bound. */
 function boundSummary(summary) {
   const text = String(summary)
   return text.length <= 120 ? text : text.slice(0, 117) + '...'
@@ -536,10 +586,6 @@ function resolveDepth(agent) {
  * host's answer to a question this session asked (dsh-user-questions steers that as a
  * user-role message with its own source kind). Injected notices and tool results are neither.
  */
-function openedByUser(messages) {
-  return Array.isArray(messages) && messages.some(message => isHumanInput(message))
-}
-
 /** Whether one message is human input rather than an injected notice or a tool result. */
 function isHumanInput(message) {
   const kind = message?.source?.kind
@@ -547,17 +593,6 @@ function isHumanInput(message) {
 }
 
 /** The text of the real user messages in one step, joined — the input the classifier reads. */
-function userInputText(messages) {
-  if (!Array.isArray(messages)) return ''
-  let text = ''
-  for (const message of messages) {
-    if (!isHumanInput(message) || !Array.isArray(message.content)) continue
-    for (const block of message.content) if (block?.type === 'text' && typeof block.text === 'string') text += block.text
-    text += '\n'
-  }
-  return text.trim()
-}
-
 /**
  * Whether the agent holds a human input that the loop has not claimed yet (steering for the
  * nearest step). This is the host's own queue, read through its public inbox — the gate does
@@ -584,379 +619,54 @@ export function callsATool(blocks) {
 }
 
 /** Declared bounds, with the documented defaults for anything absent or unusable. */
-function resolveLimits(config) {
-  const raw = config !== null && typeof config === 'object' ? config : {}
-  const positive = (value, fallback) => (Number.isSafeInteger(value) && value > 0 ? value : fallback)
-  const repairs = Number.isSafeInteger(raw.maxRepairs) && raw.maxRepairs >= 0 ? raw.maxRepairs : DEFAULT_LIMITS.maxRepairs
-  return {
-    maxBufferedChars: positive(raw.maxBufferedChars, DEFAULT_LIMITS.maxBufferedChars),
-    maxBufferMs: positive(raw.maxBufferMs, DEFAULT_LIMITS.maxBufferMs),
-    maxDeclarationChars: positive(raw.maxDeclarationChars, DEFAULT_LIMITS.maxDeclarationChars),
-    // Never above the spec's single automatic repair, whatever a config claims.
-    maxRepairs: Math.min(repairs, DEFAULT_LIMITS.maxRepairs),
-  }
-}
-
-/** Conservative character accounting: every model-authored string a buffered attempt holds. */
-function chunkChars(chunk) {
-  switch (chunk?.type) {
-    case 'text-delta':
-    case 'reasoning-delta': return typeof chunk.text === 'string' ? chunk.text.length : 0
-    case 'tool-call-delta': return typeof chunk.argumentsDelta === 'string' ? chunk.argumentsDelta.length : 0
-    case 'block-end': return typeof chunk.block?.text === 'string' ? chunk.block.text.length : (typeof chunk.block?.arguments === 'string' ? chunk.block.arguments.length : 0)
-    default: return 0
-  }
-}
-
-/**
- * Install the gate.
- * @param ctx - plugin context; listeners are scoped to it and disposed with it.
- * @param config - { maxBufferedChars, maxBufferMs, maxRepairs }; absent or unusable values
- *   fall back to DEFAULT_LIMITS. The gate has no observe/enforce switch: it is the
- *   delivered behaviour, and check:preset plus the host acceptance assert it is in force.
- */
-export function apply(ctx, config) {
-  const limits = resolveLimits(config)
+/** Install only execution guards; never inspect or rewrite the model's reply. */
+export function apply(ctx) {
   const warn = message => ctx.logger?.warn('[' + name + '] ' + message)
-  /** sessionId -> { turn, repairs, intake } for the user-opened request currently being answered. */
-  const owed = new Map()
-  /** sessionId -> { agent, session }: the managed agent seen at the last step boundary. */
-  const bound = new Map()
-  /** sessionId -> { reason, providerKind } for a rejection whose repair has been spent. */
-  const awaitingRepair = new Map()
-  /**
-   * sessionId -> { stage, scheduled, reason, providerKind } for the declaration-only phase of
-   * the request whose repair was spent. This is the one piece of state that is NOT derived from
-   * the log, because it describes the shape of the NEXT generation rather than a fact about the
-   * past: 'declaration' means the repair step offers no tools, 'publishing' means the accepted
-   * declaration is being committed and the continuation is due right after it. A turn boundary
-   * clears it, so a restart resumes with the full tool catalog instead of guessing.
-   */
-  const declarations = new Map()
-  /**
-   * The gate's per-session state is DERIVED FROM THE FORMAL SESSION LOG, never from a private
-   * side-channel (ticket 06, IG-B-14). Resume, reload and compaction replay the same events,
-   * so the wait, the spent repair and the latest understanding survive them by construction
-   * instead of being re-seeded from memory. The log is the only source: the assistant messages
-   * the gate accepted (their first line is re-checked with the same mechanical rule), this
-   * plugin's own correction notices (which is how a spent repair stays spent), the question
-   * calls and their settles, and every turn's end reason.
-   */
-  const reportsPending = content => {
-    if (!Array.isArray(content)) return false
-    return content.some(block => block?.type === 'text' && typeof block.text === 'string' && /"pending"\s*:\s*true/u.test(block.text))
-  }
-
-  const emptyState = () => ({
-    accepted: 0,
-    lastOutcome: 'none',
-    awaitingAnswer: false,
-    questionCallId: undefined,
-    repairsThisRequest: 0,
-    trusted: true,
-  })
-
-  /** Fold one committed session event into the derived state. */
-  const foldEvent = (state, event) => {
-    const data = event?.data
-    switch (event?.type) {
-      case 'user/message': {
-        if (isHumanInput(data)) {
-          // A new request: its repair budget is its own. The wait is intentionally NOT cleared
-          // here — the input that arrives while a question is open still owes a declaration
-          // (ticket 04), and the pre-step clears the wait right after classifying it.
-          state.repairsThisRequest = 0
-          return
-        }
-        if (data?.source?.kind === name) {
-          if (!Array.isArray(data?.content)) {
-            state.trusted = false
-            return
-          }
-          // Only the REPAIR notice spends the budget. The continuation notice is this plugin
-          // speaking in the same request; counting it would spend a second repair for a phase
-          // that is already paid for (2026-10-28 plan §3).
-          if (noticeText(data).startsWith(REPAIR_NOTICE_PREFIX)) state.repairsThisRequest += 1
-        }
-        return
-      }
-      case 'assistant/message': {
-        const message = data?.message
-        if (!Array.isArray(message?.content)) {
-          state.trusted = false
-          return
-        }
-        if (checkDeclaration(bodyText(message.content)).ok) state.accepted += 1
-        return
-      }
-      case 'tool/call': {
-        if (data?.name !== QUESTION_TOOL) return
-        if (typeof data.callId !== 'string') state.trusted = false
-        state.awaitingAnswer = true
-        state.questionCallId = data.callId
-        return
-      }
-      case 'tool/ptc-dispatch-start': {
-        if (data?.name !== QUESTION_TOOL) return
-        state.awaitingAnswer = true
-        state.questionCallId = data.subCallId
-        return
-      }
-      case 'tool/result': {
-        if (data?.name !== QUESTION_TOOL) return
-        state.awaitingAnswer = false
-        state.questionCallId = undefined
-        return
-      }
-      case 'tool/ptc-dispatch': {
-        if (data?.name !== QUESTION_TOOL) return
-        const pending = reportsPending(data.content)
-        state.awaitingAnswer = pending
-        if (!pending) state.questionCallId = undefined
-        return
-      }
-      case 'turn/end': {
-        const kind = data?.reason?.kind
-        if (typeof kind !== 'string') {
-          state.trusted = false
-          return
-        }
-        if (kind === 'completed') state.lastOutcome = 'accepted'
-        else if (kind === 'error') state.lastOutcome = state.repairsThisRequest > 0 ? 'exhausted' : 'failed'
-        else state.lastOutcome = 'failed'
-        return
-      }
-      default: return
-    }
-  }
-
-  /** Derived state cache: everything up to seq is already folded into state. */
-  const derived = new WeakMap()
-
-  /**
-   * Read (and incrementally extend) this session's derived state from its own log. A session
-   * whose record cannot be read is UNTRUSTED: nothing may be guessed about a request whose
-   * record is unavailable, corrupt or unreadable (IG-B-14).
-   */
+  // Derive only question state from durable events so reloads cannot unlock pending work.
   const stateOf = session => {
-    if (session === undefined || typeof session.snapshotEvents !== 'function') {
-      const unreadable = emptyState()
-      unreadable.trusted = false
-      return unreadable
+    const state = { request: 0, openQuestions: [], answeredInProgram: [], trusted: true }
+    const settle = identity => {
+      const index = state.openQuestions.findIndex(question =>
+        (identity.callId !== undefined && question.callId === identity.callId)
+        || (identity.subCallId !== undefined && question.subCallId === identity.subCallId))
+      if (index < 0) return false
+      state.openQuestions.splice(index, 1)
+      return true
     }
-    const cached = derived.get(session)
-    const state = cached === undefined ? emptyState() : cached.state
-    const from = cached === undefined ? 0 : cached.seq + 1
-    let lastSeq = cached === undefined ? -1 : cached.seq
     try {
-      for (const event of session.snapshotEvents(from)) {
-        foldEvent(state, event)
-        if (typeof event?.seq === 'number') lastSeq = event.seq
+      if (typeof session?.snapshotEvents !== 'function') throw new Error('session log unavailable')
+      for (const event of session.snapshotEvents()) {
+        const data = event?.data
+        if (event.type === 'user/message' && isHumanInput(data)) {
+          if (data.source.kind === ANSWER_SOURCE_KIND) {
+            if (typeof data.source.callId === 'string') settle({ callId: data.source.callId })
+          } else if (!isBareConversational(noticeText(data))) state.request += 1
+        } else if (event.type === 'tool/call' && data?.name === QUESTION_TOOL) {
+          if (typeof data.callId !== 'string') throw new Error('question callId unavailable')
+          state.openQuestions.push({ callId: data.callId, request: state.request })
+        } else if (event.type === 'tool/ptc-dispatch-start' && data?.name === QUESTION_TOOL) {
+          if (typeof data.subCallId !== 'string') throw new Error('question subCallId unavailable')
+          state.openQuestions.push({ subCallId: data.subCallId, request: state.request })
+        } else if (event.type === 'tool/result') {
+          settle({ callId: data?.message?.toolCallId })
+        } else if (event.type === 'tool/ptc-dispatch' && data?.name === QUESTION_TOOL) {
+          const pending = data.content?.some(block => block?.type === 'text' && /"pending"\s*:\s*true/u.test(block.text))
+          if (pending) continue
+          const settled = settle({ subCallId: data.subCallId })
+          const root = data.rootCallId ?? data.parentCallId
+          if (settled && typeof root === 'string' && !state.answeredInProgram.includes(root)) {
+            state.answeredInProgram.push(root)
+            if (state.answeredInProgram.length > 64) state.answeredInProgram.shift()
+          }
+        }
       }
     } catch (error) {
-      warn('could not read the session log: ' + String(error))
+      warn('could not read question state: ' + String(error))
       state.trusted = false
     }
-    derived.set(session, { seq: lastSeq, state })
     return state
   }
 
-  /**
-   * Sessions whose untrusted record already forced one stop. The report happens once per
-   * session per process: the user is told, that request stops, and the next request starts from
-   * the conservative defaults instead of being blocked forever by a record it cannot repair.
-   */
-  const reportedUntrusted = new WeakSet()
-
-  /**
-   * Drop what was derived from an untrusted record and continue from the conservative
-   * defaults: the corrupt region is not re-read, so the user's next input is handled by the
-   * normal entry points instead of being blocked by a record that cannot be repaired.
-   */
-  const resetDerived = session => {
-    try {
-      const events = session.snapshotEvents()
-      const last = events.length === 0 ? -1 : events[events.length - 1]?.seq
-      derived.set(session, { seq: typeof last === 'number' ? last : -1, state: emptyState() })
-    } catch (error) {
-      warn('could not reset the derived state: ' + String(error))
-      derived.delete(session)
-    }
-  }
-
-  ctx.on('agent/pre-step', async (payload, next) => {
-    let decision
-    try {
-      decision = await next()
-    } catch (error) {
-      warn('downstream agent/pre-step failed: ' + String(error))
-      throw error
-    }
-    try {
-      if (decision?.kind !== 'enter') return decision
-      const sessionId = payload?.agent?.session?.id
-      if (sessionId === undefined) return decision
-      const depth = resolveDepth(payload.agent)
-      if (depth === undefined) {
-        warn('agent.options.subagentDepth is malformed; skipping instead of guessing the depth')
-        return decision
-      }
-      if (depth !== 0) return decision
-      bound.set(sessionId, { agent: payload.agent, session: payload.agent.session })
-      if (openedByUser(payload.messages)) {
-        // A new real user input opens a new request: its budget is its own, and any
-        // half-finished repair state belongs to the request that ended.
-        const state = stateOf(payload.agent.session)
-        // The user spoke (an answer to the question, or a new request): the wait is over.
-        // The ANSWER itself still owes a declaration — classifyInput returns 'owes' for any
-        // input while the question was open, including the host's user-question-reply kind.
-        owed.set(sessionId, {
-          turn: payload.turn,
-          agent: payload.agent,
-          repairs: 0,
-          intake: classifyInput(userInputText(payload.messages), state),
-          answeredQuestion: state.awaitingAnswer === true,
-        })
-        // The user spoke (an answer, or a new independent request): the wait is over for the
-        // steps that follow THIS input. The input itself was classified above while the wait
-        // was still open, which is what makes an answer owe a declaration.
-        state.awaitingAnswer = false
-        state.questionCallId = undefined
-        awaitingRepair.delete(sessionId)
-        // A fresh real input is a fresh request: a declaration phase left over from a request
-        // that never got its repair step must not shape THIS one (no tool-less first reply).
-        declarations.delete(sessionId)
-      } else {
-        // A machine-opened step (tool result, notice, steering re-attach) is the same
-        // request continuing: the first reply already happened, so nothing is owed.
-        owed.delete(sessionId)
-      }
-      return decision
-    } catch (error) {
-      warn('could not record the intent-declaration obligation: ' + String(error))
-      return decision
-    }
-  })
-
-  /**
-   * The declaration-only request must OFFER NO TOOLS (2026-10-28 plan requirement 3). The tool
-   * schemas are assembled once per step ("system-prompt/assemble"), before the request is built,
-   * so removing them here is the only seam that changes what the provider is actually given; a
-   * request waterfall could not (LlmCallConfig carries no tools, dsh-llm call-config.ts).
-   * Listener participates only for the managed main agent's declaration step.
-   */
-  ctx.on('system-prompt/assemble', async (assembly, context, next) => {
-    let decided
-    try {
-      decided = await next()
-    } catch (error) {
-      warn('downstream system-prompt/assemble failed: ' + String(error))
-      throw error
-    }
-    try {
-      const agent = context?.agent
-      const sessionId = agent?.session?.id
-      if (sessionId === undefined) return decided
-      if (declarations.get(sessionId)?.stage !== 'declaration') return decided
-      if (resolveDepth(agent) !== 0) return decided
-      return { ...decided, tools: [] }
-    } catch (error) {
-      warn('could not remove the tools of the declaration step: ' + String(error))
-      return decided
-    }
-  })
-
-  /**
-   * Open the declaration-only step. The repair is NOT a retry of the withheld attempt: a retry
-   * re-runs the same step with the same assembled tools, which is exactly the request that
-   * produced no declaration. The failure therefore stays terminal, and this public follow-up —
-   * the same call a user turn uses — opens one new turn whose request is built without tools.
-   */
-  ctx.on('agent/status', payload => {
-    try {
-      if (payload?.status !== 'idle') return
-      const agent = payload?.agent
-      const sessionId = agent?.session?.id
-      if (sessionId === undefined || resolveDepth(agent) !== 0) return
-      const phase = declarations.get(sessionId)
-      if (phase === undefined || phase.stage !== 'declaration' || phase.scheduled === true) return
-      phase.scheduled = true
-      agent.followup(pluginMessage(
-        repairNotice(phase.reason, phase.providerKind, 1, limits.maxDeclarationChars),
-        'intent gate: declaration repair 1/1 (' + String(phase.reason) + ')',
-      ))
-    } catch (error) {
-      warn('could not open the declaration-only repair step: ' + String(error))
-    }
-  })
-
-  /**
-   * The accepted declaration has been COMMITTED and published (the observable fact this hook
-   * keys on: the durable assistant/message). The continuation of the same request is due now,
-   * but it cannot be queued from here — a durable inbox splice is itself a session append, and
-   * an append may not re-enter while another append is publishing (measured: "session append
-   * cannot reenter while another append is being published"). So this hook only records that
-   * the continuation is due; the turn's own stop boundary below delivers it.
-   */
-  ctx.on('session/event', (session, event) => {
-    try {
-      const sessionId = session?.id
-      if (sessionId === undefined) return
-      const phase = declarations.get(sessionId)
-      if (phase === undefined) return
-      // The turn that carries the WITHHELD attempt ends while its declaration phase is still
-      // waiting to be opened (the loop reports the failure, then closes the turn). Clearing it
-      // here would discard the repair before the follow-up can open it, so an unscheduled
-      // declaration phase survives exactly one turn boundary; a human input or the repair
-      // turn's own boundary ends it (see the pre-step above and below).
-      if (event?.type === 'turn/end') {
-        if (phase.stage === 'declaration' && phase.scheduled !== true) return
-        declarations.delete(sessionId)
-        return
-      }
-      if (phase.stage !== 'publishing' || event?.type !== 'assistant/message') return
-      phase.stage = 'continuation-due'
-    } catch (error) {
-      warn('could not record the accepted declaration: ' + String(error))
-    }
-  })
-
-  /**
-   * The continuation of the SAME request: the turn is at its stop boundary, the accepted
-   * declaration is already published, and this listener asks for one more step with the full
-   * tool catalog (the loop's documented way to keep a turn going: "a listener that objects
-   * steers and the machine re-reads its inbox"). The request therefore declares once and then
-   * works, and the durable order stays declaration-first (2026-10-28 plan requirement 5).
-   * A human input that arrived in the meantime wins: nothing is queued behind it, and the
-   * request re-declares under that input instead of continuing on the old declaration.
-   */
-  ctx.on('agent/turn-stopping', payload => {
-    try {
-      const agent = payload?.agent
-      const sessionId = agent?.session?.id
-      if (sessionId === undefined) return
-      const phase = declarations.get(sessionId)
-      if (phase?.stage !== 'continuation-due') return
-      declarations.delete(sessionId)
-      if (resolveDepth(agent) !== 0) return
-      if (pendingSteer(agent)) {
-        warn('the declaration was published, but a human input is waiting: the request re-declares instead of continuing')
-        return
-      }
-      agent.steer(pluginMessage(continuationNotice(), 'intent gate: declaration accepted, continue the same request'))
-    } catch (error) {
-      warn('could not continue the request after the accepted declaration: ' + String(error))
-    }
-  })
-
-  ctx.on('llm/stream', (options, next) => gateStream(options, next))
-
-  /**
-   * An already-running program reaches the gate at each inner dispatch. When the user has
-   * steered since it started, the next call is refused: what already ran stays run, what has
-   * not run does not start, and the model re-judges under the new input (IG-B-08). Scoped to
-   * the managed main agent like everything else (IG-B-13).
-   */
   ctx.on('tools/pre-execute', async (exec, next) => {
     let decision
     try {
@@ -969,6 +679,24 @@ export function apply(ctx, config) {
       if (decision?.kind !== 'allow') return decision
       const agent = exec?.agent
       if (agent === undefined || resolveDepth(agent) !== 0) return decision
+      const state = stateOf(agent?.session)
+      if (!state.trusted) return { kind: 'deny', reason: '[intent-gate] 无法读取会话记录，不能确认问题是否已回答；请恢复会话记录后再执行工具。' }
+      if (exec?.name !== QUESTION_TOOL && awaitingAnswer(state)) {
+        return { kind: 'deny', reason: '[intent-gate] 当前请求的问题尚未回答；请等待用户澄清后再执行依赖答案的工作。' }
+      }
+      // IG-B-19: the program that asked the question may not go on to the work that depends on
+      // the answer. The marker is the question's own settled sub-dispatch, keyed by the root
+      // call that owns this execution tree, so only that program is stopped — a later program
+      // generated after the model read the answer is a different root call and runs normally.
+      if (exec?.name !== QUESTION_TOOL) {
+        const rootCallId = exec?.rootCallId
+        if (typeof rootCallId === 'string' && Array.isArray(state.answeredInProgram) && state.answeredInProgram.includes(rootCallId)) {
+          return {
+            kind: 'deny',
+            reason: '[intent-gate] 这次调用属于「提问的那个程序」的后续动作：问题已经拿到答案，但依赖答案的工作必须由处理答案之后的新生成发起，不能在同一程序里直接继续。已经执行的部分保留。',
+          }
+        }
+      }
       if (!pendingSteer(agent)) return decision
       return {
         kind: 'deny',
@@ -980,277 +708,4 @@ export function apply(ctx, config) {
     }
   })
 
-  /**
-   * The repair hook. A rejection we raised spends the request's single repair and opens the
-   * declaration-only phase; every other failure, including our own exhausted stop and any
-   * real provider failure, is delegated untouched (IG-B-10).
-   *
-   * It deliberately does NOT answer { kind: 'retry' }. A retry re-enters the SAME step, and a
-   * step assembles its tool schemas once, before the first attempt — so the retried request
-   * would still be offered every tool, which is the request that just produced no declaration
-   * at all. The withheld attempt therefore stays terminal, and the declaration-only turn is
-   * opened from 'agent/status' once the driver is idle (see the follow-up below).
-   */
-  ctx.on('agent/request-error', async (payload, next) => {
-    let awaiting
-    try {
-      const sessionId = payload?.agent?.session?.id
-      awaiting = sessionId === undefined ? undefined : awaitingRepair.get(sessionId)
-      const code = payload?.failure?.code
-      // One failure, one repair: this must be the exact rejection that spent the budget.
-      // Anything else — an exhausted stop, a real provider failure, another plugin's retry
-      // of the same attempt — is delegated unchanged, so a generic retry policy can never
-      // turn one declaration miss into two repairs (IG-B-06/IG-B-10).
-      if (awaiting === undefined || code !== FAILURE_CODE[awaiting.reason] || payload?.signal?.aborted === true) {
-        awaiting = undefined
-        return await next()
-      }
-      awaitingRepair.delete(sessionId)
-      declarations.set(sessionId, {
-        stage: 'declaration',
-        scheduled: false,
-        reason: awaiting.reason,
-        providerKind: awaiting.providerKind,
-      })
-      // Delegated on purpose: the default action is terminal, so this attempt's text and calls
-      // disappear with the turn, and the repair arrives as its own request.
-      return await next()
-    } catch (error) {
-      warn('could not open the intent-declaration repair: ' + String(error))
-      if (awaiting !== undefined) {
-        awaitingRepair.delete(payload?.agent?.session?.id)
-        declarations.delete(payload?.agent?.session?.id)
-      }
-      return await next()
-    }
-  })
-
-  /**
-   * Buffer one attempt, judge it, then replay it, repair it, or end it as a policy failure.
-   * @param options - the request envelope observed at the waterfall.
-   * @param next - resolves the adapter stream (may itself be another listener's).
-   */
-  async function* gateStream(options, next) {
-    const sessionId = options?.sessionId
-    // A conversation request owns a declaration; an auxiliary model call does not
-    // (IG-B-13). Two fields identify the auxiliary case without importing host packages:
-    // the loop stamps 'purpose' on compaction/session-title calls, and a hand-built
-    // one-shot passes 'system' text, which the loop never does.
-    if (options?.purpose !== undefined || options?.system !== undefined) {
-      yield* next()
-      return
-    }
-    const binding = sessionId === undefined ? undefined : bound.get(sessionId)
-    const record = sessionId === undefined ? undefined : owed.get(sessionId)
-    const phase = sessionId === undefined ? undefined : declarations.get(sessionId)
-    // The declaration-only repair step is machine-opened: no latch is owed for it, and it is
-    // judged by its own rules below rather than by the request's obligation.
-    const declarationOnly = phase?.stage === 'declaration'
-    const state = stateOf(binding?.session)
-    const awaiting = state.awaitingAnswer === true
-    // No declaration is owed outside a user-opened request — but an OPEN QUESTION still
-    // forbids acting in the same request's later steps, so those attempts are inspected too
-    // (ticket 04). Everything else passes straight through.
-    if (record === undefined && !awaiting && !declarationOnly) {
-      yield* next()
-      return
-    }
-
-    const buffered = []
-    let chars = 0
-    let overChars = false
-    let overTime = false
-    const startedAt = performance.now()
-    try {
-      for await (const chunk of next()) {
-        buffered.push(chunk)
-        chars += chunkChars(chunk)
-        if (chars > limits.maxBufferedChars) overChars = true
-        if (performance.now() - startedAt > limits.maxBufferMs) overTime = true
-        if (chunk?.type === 'finish') break
-      }
-    } catch (error) {
-      // A real transport/provider failure keeps its own meaning; only the cost already
-      // reported upstream is passed on so the failed attempt does not look free.
-      for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
-      throw error
-    }
-
-    const { blocks, finish } = assembleAttempt(buffered)
-    const providerKind = finish?.kind
-    const judgeable = providerKind === 'stop' || providerKind === 'tool-calls'
-    // Order matters: a provider terminal outcome that is not a plain success (aborted,
-    // error, max-tokens) is replayed untouched and is never relabelled as a declaration
-    // problem or as one of our caps (IG-B-10). It also means this request did not complete,
-    // so a later bare "继续" is a new request rather than a continuation (IG-B-06).
-    if (!judgeable) {
-      for (const chunk of buffered) yield chunk
-        return
-    }
-    // Ticket 06 (IG-B-14): a record that cannot be rebuilt is never silently passed through.
-    // The request is stopped once, with the reason, and the session then continues from the
-    // conservative defaults so the user can restate what they want.
-    const session = binding?.session
-    if (record !== undefined && !state.trusted && session !== undefined && !reportedUntrusted.has(session)) {
-      reportedUntrusted.add(session)
-      resetDerived(session)
-      for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
-      yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(REASON.STATE_UNTRUSTED), code: FAILURE_CODE[REASON.STATE_UNTRUSTED] } } }
-      return
-    }
-
-    // The declaration-only repair (2026-10-28 plan requirements 3/4/7). No tool was offered, so
-    // a call is a contract violation; the body is the whole deliverable; and any miss is the
-    // protocol pause, not a third generation. Reasoning never counts as the body.
-    if (declarationOnly) {
-      const reason = overChars ? REASON.LIMIT_CHARS
-        : overTime ? REASON.LIMIT_TIME
-          : declarationReason(blocks)
-      const body = bodyText(blocks)
-      const stopped = reason !== undefined && !DECLARATION_MISSES.has(reason)
-        ? reason
-        : reason ?? (callsATool(blocks) ? REASON.TOOLS_IN_DECLARATION
-          : body.length > limits.maxDeclarationChars ? REASON.DECLARATION_LONG
-            : undefined)
-      if (stopped !== undefined) {
-        declarations.delete(sessionId)
-        awaitingRepair.delete(sessionId)
-        report(sessionId, 'declaration', stopped, buffered, blocks, finish, record, startedAt, true)
-        for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
-        const pausing = DECLARATION_PAUSES.has(stopped)
-        yield {
-          type: 'finish',
-          reason: {
-            kind: 'error',
-            failure: {
-              message: pausing
-                ? declarationStopMessage(stopped, { providerKind, maxChars: limits.maxDeclarationChars })
-                : stopMessage(stopped, { providerKind }),
-              code: pausing ? REPAIR_EXHAUSTED_CODE : FAILURE_CODE[stopped],
-            },
-          },
-        }
-        return
-      }
-      // Accepted: publish it. The continuation is queued by the commit hook below, so the
-      // declaration is on the record BEFORE anything of the business step is generated.
-      phase.stage = 'publishing'
-      report(sessionId, 'declaration', undefined, buffered, blocks, finish, record, startedAt, false)
-      for (const chunk of buffered) yield chunk
-      return
-    }
-
-    // Ticket 05: a human input arrived while this reply was being generated, so anything it
-    // would DO was composed without it. Pausing the call is the point; the loop then consumes
-    // that input at the next step and the request re-declares under it.
-    if (record !== undefined && callsATool(blocks) && pendingSteer(binding?.agent)) {
-      // Withhold the calls, keep the words: the loop then finishes this reply without
-      // dispatching anything, the parked steering is claimed at the next turn, and the
-      // request re-declares there under the new requirement. Ending the turn as an ERROR
-      // here would leave the steering parked with nothing to claim it, which is the one
-      // outcome that loses the correction entirely.
-        for (const chunk of buffered) {
-        if (chunk?.type === 'tool-call-delta') continue
-        if (chunk?.type === 'block-start' && chunk.blockType === 'tool-call') continue
-        if (chunk?.type === 'block-end' && chunk.block?.type === 'tool-call') continue
-        if (chunk?.type === 'finish') continue
-        yield chunk
-      }
-      yield { type: 'finish', reason: { kind: 'stop' } }
-      return
-    }
-
-    // Ticket 04: a question this session already asked is still open, so this reply may not
-    // act on it — "silence is not consent" (IG-B-16). Asking again, or answering in prose, is
-    // fine; calling a tool is not, and this is not a wording problem to repair: the request
-    // stays paused until the user answers.
-    if (awaiting && callsATool(blocks)) {
-      for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
-        yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(REASON.AWAITING_ANSWER), code: FAILURE_CODE[REASON.AWAITING_ANSWER] } } }
-      return
-    }
-    if (record === undefined) {
-      // An un-latched attempt while a question is open: nothing else to judge.
-      for (const chunk of buffered) yield chunk
-      return
-    }
-    const reason = overChars ? REASON.LIMIT_CHARS
-      : overTime ? REASON.LIMIT_TIME
-        : declarationReason(blocks)
-    if (reason === undefined) {
-      for (const chunk of buffered) yield chunk
-        return
-    }
-
-    // Ticket 03: the two conversational incomes owe no line. The exemption is bounded on
-    // purpose — it never covers a mechanism stop (a cap is not a conversational reply) and
-    // never covers a reply that would call a tool, so no action can ride an exemption
-    // (IG-B-09). A reply with no text at all is still a miss: there is nothing to accept.
-    const exempt = record.intake !== 'owes' && DECLARATION_MISSES.has(reason) && !callsATool(blocks) && bodyText(blocks).trim() !== ''
-    if (exempt) {
-      for (const chunk of buffered) yield chunk
-        return
-    }
-
-    // Rejection: the spent generation stays traceable (usage), nothing else escapes.
-    report(sessionId, 'first', reason, buffered, blocks, finish, record, startedAt, true)
-    for (const chunk of buffered) if (chunk?.type === 'usage') yield chunk
-    const repairable = DECLARATION_MISSES.has(reason) && record.repairs < limits.maxRepairs
-    if (repairable) {
-      // Spend the one repair now: the budget is consumed by the DECISION, so a provider
-      // failure during the declaration step cannot hand out a second one (IG-B-06).
-      record.repairs += 1
-      if (sessionId !== undefined) awaitingRepair.set(sessionId, { reason, providerKind })
-      // Terminal on purpose: the repair is not a retry of this attempt (see the hook above).
-      yield {
-        type: 'finish',
-        reason: { kind: 'error', failure: { message: repairStartedMessage(reason, { providerKind }), code: FAILURE_CODE[reason] } },
-      }
-      return
-    }
-    if (DECLARATION_MISSES.has(reason)) {
-      // Budget exhausted: this is the stop the spec asks to be explicit about.
-        yield { type: 'finish', reason: { kind: 'error', failure: { message: stopMessage(reason, { repaired: true }), code: REPAIR_EXHAUSTED_CODE } } }
-      return
-    }
-    yield {
-      type: 'finish',
-      reason: { kind: 'error', failure: { message: stopMessage(reason, { repaired: false }), code: FAILURE_CODE[reason] } },
-    }
-  }
-
-  /** Log one structured diagnostic per judged attempt: identities, counts, caps — no body. */
-  function report(sessionId, stage, reason, buffered, blocks, finish, record, startedAt, failed) {
-    try {
-      const usage = buffered.find(chunk => chunk?.type === 'usage')?.usage
-      const diagnostic = attemptDiagnostic({
-        sessionId,
-        stage,
-        reason,
-        providerKind: finish?.kind,
-        blocks,
-        usage,
-        repairs: record?.repairs ?? 0,
-        elapsedMs: Math.round(performance.now() - startedAt),
-        limits,
-      })
-      const line = '[intent-gate] ' + JSON.stringify(diagnostic)
-      if (failed) ctx.logger?.warn(line)
-      else ctx.logger?.info?.(line)
-    } catch (error) {
-      warn('could not record the intent-gate diagnostic: ' + String(error))
-    }
-  }
-
-  /** The declaration verdict for one assembled attempt, or undefined when it passes. */
-  function declarationReason(blocks) {
-    let verdict
-    try {
-      verdict = checkDeclaration(bodyText(blocks))
-    } catch (error) {
-      warn('could not evaluate the intent declaration: ' + String(error))
-      return REASON.GATE_ERROR
-    }
-    return verdict.ok ? undefined : verdict.reason
-  }
 }

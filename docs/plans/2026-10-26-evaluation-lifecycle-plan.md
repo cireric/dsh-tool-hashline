@@ -1,6 +1,9 @@
 # 评测生命周期验证：真实 fork 与取消
 
-承接 [fe18815 阶段验收](../acceptance/2026-10-26-evaluation-next-stage.md)，仅推进无网络的实际宿主验证，不授权真实模型请求、profile 切换、依赖升级或自动提交。
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-lifecycle.md")。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
+承接 [fe18815 阶段验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-next-stage.md")，仅推进无网络的实际宿主验证，不授权真实模型请求、profile 切换、依赖升级或自动提交。
 
 1. 在新的隔离安装使用现有固定 Provider 与官方 AgentLoop/PTC。先完成一个父回合，再以真实 subagent_fork 继承该前缀；逐臂核对继承长度、父目录关联、独立文件状态、流量与去重后的会话请求。
 2. 子会话先完成一处文件编辑，再在下一次适配器流中等待取消。通过测试驱动触发真实 AbortController；检查父子终止、部分磁盘状态、后续计划样本保留为 CANCELLED、缺 usage 不补零及离线 checker。
@@ -9,4 +12,4 @@
 
 新增 I/O 限于测试输出中的生命周期观察与汇总；会话/文件证据沿用现有执行器，不新增运行中宿主监听或改写历史证据。
 
-本轮已完成有界验证，结果见[生命周期验收](../acceptance/2026-10-26-evaluation-lifecycle.md)：实际 fork 三臂 18/18 去重对账；子流取消三臂断言通过但评测结果保留 GAP/unknown；原 12 例宿主冒烟、55 项定向及完整交付门禁通过。更多取消时点、外部进程及真实 Provider 仍未关闭。
+本轮已完成有界验证，结果见[生命周期验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-lifecycle.md")：实际 fork 三臂 18/18 去重对账；子流取消三臂断言通过但评测结果保留 GAP/unknown；原 12 例宿主冒烟、55 项定向及完整交付门禁通过。更多取消时点、外部进程及真实 Provider 仍未关闭。

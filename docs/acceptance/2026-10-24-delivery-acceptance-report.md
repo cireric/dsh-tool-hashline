@@ -1,5 +1,7 @@
 # PTC Hashline 运维 skills：真实宿主交付验收报告（票据 08）
 
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
 运行时间：2026-10-24T07:39:37.508Z
 
 本报告由 [delivery-acceptance.mjs](../../scripts/delivery-acceptance.mjs) 在本机真实安装上执行一次得到；每条判定都附退出码或实测值。它 **不是** 一次真实上游升级：固定候选与一次性 profile 是规格 D16/UPG-13 规定的验收形态。
@@ -294,4 +296,3 @@
 - 候选验证与目标切换的安装 runner 是注入的：`result.json` / `switch.json` 里记 `runner.source: injected`。它们证明的是流水线在批准输入上的行为，不是真实依赖安装成功。
 - 目标切换只作用于一次性 profile 安装树；日常 profile、其它 profile 与官方 DSH 安装均未改动。
 - 本文件由脚本生成，手工修改会在下一次运行中被覆盖；要改措辞请改 `scripts/delivery-acceptance-report.mjs`。
-

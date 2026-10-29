@@ -1,5 +1,8 @@
 # 块定位能力说明与诊断修复计划
 
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/2026-10-25-hashline-block-locator-fix.md)。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
 2026-10-25。依据[调查](../background/2026-10-25-hashline-block-locator-assessment.md)，用户已授权直接修复票据 02、03。
 
 实施状态：源码与隔离交付验收完成；13 项定向、33 项完整宿主及九项交付门禁通过，详见[验收报告](../acceptance/2026-10-25-hashline-block-locator-fix.md)。日常 profile 未切换。

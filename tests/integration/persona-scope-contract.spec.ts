@@ -25,7 +25,7 @@ describe('preset persona scope contract (D2)', () => {
     })
     const text = await harness.render()
     expect(text).toContain('## Phase 0 — Intent Gate')
-    expect(text).toContain('Intent: <what the user will get, in outcome terms>')
+    expect(text).toContain('Intent: <bucket> — <goal and relevant boundary>')
   })
 
   it('shadows the preset persona when a nearer scope registers the same section name', async () => {
@@ -49,8 +49,8 @@ describe('preset persona scope contract (D2)', () => {
     onTestFinished(() => harness.dispose())
     const text = renderPrompt(await harness.assemble())
     expect(text).toContain('## Phase 0 — Intent Gate')
-    expect(text).toContain('Intent: <what the user will get, in outcome terms>')
-    expect(text).not.toContain('Buckets, exactly six')
+    expect(text).toContain('Intent: <bucket> — <goal and relevant boundary>')
+    expect(text).toContain('Buckets, exactly six')
     expect(text).toContain(PERSONA_SUFFIX)
     expect(text.startsWith('You are a coding agent powered by the deepseek-v4.1-flash model.')).toBe(true)
   })

@@ -1,7 +1,7 @@
 import { describe, expect, it } from 'vitest'
 // @ts-ignore -- plain ESM asset shipped inside the preset (builtin-only imports)
 // @ts-ignore -- plain ESM asset shipped inside the preset (builtin-only imports)
-import { ACKNOWLEDGEMENTS, ANSWER_SOURCE_KIND, CONTINUATIONS, CONTINUATION_NOTICE_PREFIX, DEFAULT_LIMITS, QUESTION_TOOL, REASON, REPAIR_EXHAUSTED_CODE, REPAIR_NOTICE_PREFIX, assembleAttempt, attemptDiagnostic, bodyText, callsATool, checkDeclaration, classifyInput, continuationNotice, declarationStopMessage, firstLineOf, normalizeInput, pendingSteer, repairNotice, repairStartedMessage, stopMessage } from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
+import { ACCOUNTING_PHASE, ACKNOWLEDGEMENTS, ANSWER_SOURCE_KIND, CONTINUATIONS, CONTINUATION_NOTICE_PREFIX, DEFAULT_LIMITS, QUESTION_TOOL, REASON, REPAIR_EXHAUSTED_CODE, REPAIR_NOTICE_PREFIX, assembleAttempt, attemptDiagnostic, awaitingAnswer, bodyText, callsATool, checkDeclaration, classifyInput, continuationNotice, declarationStopMessage, firstLineOf, isBareConversational, normalizeInput, pendingSteer, repairNotice, repairStartedMessage, requestAccounting, stopMessage, summarizeAccounting } from '../../presets/ptc-hashline/intent-gate-watchdog.mjs'
 
 /**
  * The mechanical declaration check is the ONLY automated judgement the request-level
@@ -375,5 +375,124 @@ describe('declaration-only repair copy (2026-10-28 plan)', () => {
     expect(serialized).not.toContain('secret')
     // a tool block is only ever a COUNT: the "no text, but it called a tool" claim needs it
     expect(attemptDiagnostic({ blocks: [{ type: 'tool-call' }] }) as any).toMatchObject({ toolCallBlocks: 1, bodyEmpty: true })
+  })
+})
+
+describe('question identity and the per-request wait (2026-10-28 P2)', () => {
+  it('treats a wait as belonging to the request that asked, not to the session', () => {
+    const state = { request: 2, openQuestions: [{ callId: 'q1', request: 1 }] }
+    // the older request's question does not block the request the session is in now
+    expect(awaitingAnswer(state)).toBe(false)
+    state.openQuestions.push({ callId: 'q2', request: 2 })
+    expect(awaitingAnswer(state)).toBe(true)
+  })
+
+  it('reads a record rebuilt by an older build as still waiting, never as free', () => {
+    expect(awaitingAnswer({ awaitingAnswer: true })).toBe(true)
+    expect(awaitingAnswer({ awaitingAnswer: false })).toBe(false)
+    expect(awaitingAnswer(undefined)).toBe(false)
+  })
+
+  it('recognises the two bare conversational forms without reading any state', () => {
+    expect(isBareConversational('继续')).toBe(true)
+    expect(isBareConversational('  收到。 ')).toBe(true)
+    expect(isBareConversational('Continue')).toBe(true)
+    expect(isBareConversational('继续，另外把灰度改成 20%')).toBe(false)
+    expect(isBareConversational('先别上支付')).toBe(false)
+  })
+
+  it('never exempts a bare form while the current request holds an open question', () => {
+    const state = { request: 1, openQuestions: [{ callId: 'q1', request: 1 }] }
+    expect(classifyInput('继续', state)).toBe('owes')
+    expect(classifyInput('收到', state)).toBe('owes')
+    // ... and the same words are exempt once that question is settled
+    expect(classifyInput('收到', { request: 1, openQuestions: [] })).toBe('acknowledge')
+  })
+})
+
+describe('per-request accounting from the formal log (P4, IG-B-18)', () => {
+  const user = (text: string) => ({ type: 'user/message', data: { role: 'user', source: { kind: 'user' }, content: [{ type: 'text', text }] } })
+  const notice = (text: string) => ({ type: 'user/message', data: { role: 'user', source: { kind: 'intent-gate-watchdog', form: 'notice', summary: 'x' }, content: [{ type: 'text', text }] } })
+  const attempt = (usage?: { inputTokens: number; outputTokens: number }) => ({ type: 'assistant/attempt', data: { turn: 1, step: 1, stream: [], ...usage === undefined ? {} : { usage } } })
+  const message = (text: string, usage?: { inputTokens: number; outputTokens: number }) => ({ type: 'assistant/message', data: { turn: 1, step: 1, message: { role: 'assistant', content: [{ type: 'text', text }] }, stream: [], ...usage === undefined ? {} : { usage } } })
+  const turnEnd = (kind: string) => ({ type: 'turn/end', data: { turn: 1, reason: { kind } } })
+
+  it('keeps the three stages apart and never turns a missing cost into zero', () => {
+    const ledger = requestAccounting([
+      user('do the thing'),
+      attempt({ inputTokens: 5, outputTokens: 7 }),
+      turnEnd('error'),
+      notice(REPAIR_NOTICE_PREFIX + ': the first line of the reply did not start with the literal marker Intent:.'),
+      message('Intent: do the thing; I will write the file.', undefined),
+      notice(CONTINUATION_NOTICE_PREFIX + ' and published. Continue the same request.'),
+      message('done', { inputTokens: 9, outputTokens: 11 }),
+      turnEnd('completed'),
+    ])
+    expect(ledger.requests).toHaveLength(1)
+    const request = ledger.requests[0]
+    expect(request.repairs).toBe(1)
+    expect(request.accepted).toBe(1)
+    expect(request.stages[ACCOUNTING_PHASE.FIRST]).toMatchObject({ attempts: 1, published: 0, inputTokens: 5, outputTokens: 7, usageUnknown: 0 })
+    expect(request.stages[ACCOUNTING_PHASE.DECLARATION]).toMatchObject({ attempts: 1, published: 1, usageUnknown: 1, inputTokens: 0 })
+    expect(request.stages[ACCOUNTING_PHASE.BUSINESS]).toMatchObject({ attempts: 1, published: 1, inputTokens: 9, outputTokens: 11 })
+    expect(request.outcomes).toEqual(['error', 'completed'])
+    expect(ledger.totals).toMatchObject({ requests: 1, repairs: 1, attempts: 3, inputTokens: 14, outputTokens: 18, usageUnknown: 1, failedTurns: 1 })
+  })
+
+  it('gives each substantive request its own budget, and a bare continuation stays in its request', () => {
+    const ledger = requestAccounting([
+      user('first task'),
+      notice(REPAIR_NOTICE_PREFIX + ': withheld'),
+      turnEnd('error'),
+      user('继续'),
+      user('second, different task'),
+      notice(REPAIR_NOTICE_PREFIX + ': withheld again'),
+      turnEnd('error'),
+    ])
+    expect(ledger.requests).toHaveLength(2)
+    expect(ledger.requests.map((request: any) => request.repairs)).toEqual([1, 1])
+    expect(ledger.totals.repairs).toBe(2)
+  })
+
+  it('records which questions were settled by their own answer and which were not', () => {
+    const ledger = requestAccounting([
+      user('ask me'),
+      { type: 'tool/call', data: { turn: 1, step: 1, callId: 'q1', name: 'ask_user_question', arguments: '{}' } },
+      { type: 'tool/result', data: { turn: 1, step: 1, message: { role: 'tool', toolCallId: 'q1', source: { kind: 'tool', callId: 'q1' }, content: [] } } },
+      { type: 'tool/ptc-dispatch-start', data: { rootCallId: 'r', parentCallId: 'r', subCallId: 'r:ptc:1', name: 'ask_user_question', arguments: {} } },
+      turnEnd('completed'),
+    ])
+    const request = ledger.requests[0]
+    expect(request.questions).toHaveLength(2)
+    expect(request.questions.filter((question: any) => question.settled === true)).toHaveLength(1)
+    expect(ledger.totals.unsettledQuestions).toBe(1)
+  })
+
+  it('summarises without leaking any reply body', () => {
+    const summary = summarizeAccounting(requestAccounting([
+      user('do the thing'),
+      attempt({ inputTokens: 1, outputTokens: 2 }),
+      turnEnd('error'),
+      notice(REPAIR_NOTICE_PREFIX + ': withheld'),
+      message('Intent: do the thing; I will write the file.'),
+      turnEnd('completed'),
+    ]))
+    expect(summary).toContain('request=1')
+    expect(summary).toContain('declaration:attempts=1')
+    expect(summary).not.toContain('write the file')
+    expect(summary).not.toContain('Intent:')
+  })
+
+  it('is rebuilt from the same events after a reload, so nothing is reset', () => {
+    const events = [
+      user('do the thing'),
+      attempt({ inputTokens: 3, outputTokens: 4 }),
+      turnEnd('error'),
+      notice(REPAIR_NOTICE_PREFIX + ': withheld'),
+    ]
+    const before = requestAccounting(events)
+    const after = requestAccounting(JSON.parse(JSON.stringify(events)))
+    expect(after.totals).toEqual(before.totals)
+    expect(after.requests).toEqual(before.requests)
   })
 })

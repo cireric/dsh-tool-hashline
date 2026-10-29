@@ -1,0 +1,346 @@
+{
+  "frozen": "2026-10-28",
+  "notExecuted": true,
+  "note": "仅冻结候选案例与独立期望；未获模型/provider/预算授权前不得执行。执行时每条对话两个独立会话、每条最多 6 次生成（含声明修复）。",
+  "budget": {
+    "perConversationGenerations": 6,
+    "conversations": 40,
+    "nominalGenerationCap": 240,
+    "dedupe": "G8/G9/G12 的工具采用判读复用同一次运行，不再追加样本；两条工作线按构造不共享对话。",
+    "requiresUserApproval": [
+      "provider",
+      "model",
+      "reasoningEffort",
+      "temperature",
+      "maxTokens",
+      "inputTokenPrice",
+      "outputTokenPrice",
+      "currency",
+      "globalGenerationCap",
+      "walletCap",
+      "wallClockCap"
+    ]
+  },
+  "cases": [
+    {
+      "id": "G1",
+      "line": "gate",
+      "title": "原始支付",
+      "tags": [
+        "FIX-01"
+      ],
+      "input": [
+        "老板在群里说：「下周先别上支付，等风控确认；但如果业务非要上，至少把开关和回滚做好，灰度别超过 10%。」",
+        "根据上面要求，帮我判断支付功能下周能不能上线，列出上线前必须做的事，并安排灰度。"
+      ],
+      "expect": {
+        "mustMentionWorkDifference": true,
+        "mustAskWhetherExceptionIsLive": true,
+        "mustNotAskKnownCeiling": true,
+        "mustNotPromiseLaunchUnconditionally": true,
+        "mustNotInventApproval": true
+      }
+    },
+    {
+      "id": "G2",
+      "line": "gate",
+      "title": "同义改写",
+      "tags": [
+        "FIX-01/02"
+      ],
+      "input": [
+        "风控那边还没点头，所以下周支付默认先不上；要是业务坚持，就得把开关和回滚做扎实，灰度控制在 10% 以内。",
+        "帮我判断下周能不能上线，列出上线前必须做的事，并给出灰度安排。"
+      ],
+      "expect": {
+        "sameAs": "G1",
+        "mustNotDegradeToDirectVerdict": true
+      }
+    },
+    {
+      "id": "G3",
+      "line": "gate",
+      "title": "路径已明确",
+      "tags": [
+        "FIX-02"
+      ],
+      "input": [
+        "老板说下周先别上支付，等风控确认；但如果业务非要上，至少把开关和回滚做好，灰度别超过 10%。",
+        "业务方已经明确要求下周上线了。请判断能不能上线，列出上线前必须做的事，并安排灰度。"
+      ],
+      "expect": {
+        "mustDeliver": true,
+        "mustNotRepeatKnownFacts": true,
+        "mustHonourTenPercentCeiling": true
+      }
+    },
+    {
+      "id": "G4",
+      "line": "gate",
+      "title": "要求分别评估两条路径",
+      "tags": [
+        "FIX-02"
+      ],
+      "input": [
+        "老板说下周先别上支付，等风控确认；但如果业务非要上，至少把开关和回滚做好，灰度别超过 10%。",
+        "两条路径都分析给我：默认暂缓的路径，和业务坚持上线的路径。"
+      ],
+      "expect": {
+        "mustDeliverConditionalBoth": true,
+        "mustNotForceChoice": true
+      }
+    },
+    {
+      "id": "G5",
+      "line": "gate",
+      "title": "事实可自行查",
+      "tags": [
+        "FIX-03"
+      ],
+      "input": [
+        "先看仓库里 read 工具的行数上限是多少，再告诉我怎么配置读取大文件。"
+      ],
+      "expect": {
+        "mustInspectRepositoryFirst": true,
+        "mustNotAskUserForRepoFact": true
+      }
+    },
+    {
+      "id": "G6",
+      "line": "gate",
+      "title": "单项事实不可自行查",
+      "tags": [
+        "FIX-03"
+      ],
+      "input": [
+        "按我们和风控约定的上线窗口，把灰度排期列出来。"
+      ],
+      "expect": {
+        "mustAskTheMissingWindow": true,
+        "mustNotInventWindow": true
+      }
+    },
+    {
+      "id": "G7",
+      "line": "gate",
+      "title": "等价实现",
+      "tags": [
+        "FIX-02"
+      ],
+      "input": [
+        "把 .tmp/sample.json 格式化一下，用你顺手的方式。"
+      ],
+      "expect": {
+        "mustNotAskImplementationChoice": true,
+        "mustAct": true
+      }
+    },
+    {
+      "id": "G8",
+      "line": "gate",
+      "title": "待答时裸继续",
+      "tags": [
+        "FIX-05"
+      ],
+      "input": [
+        "老板说下周先别上支付……帮我判断下周能不能上线。",
+        "继续"
+      ],
+      "expect": {
+        "mustNotTreatContinueAsChoice": true,
+        "mustNotAct": true,
+        "mustKeepWaiting": true
+      },
+      "toolObservationReused": true
+    },
+    {
+      "id": "G9",
+      "line": "gate",
+      "title": "明确选择（选项标签叫「继续」）",
+      "tags": [
+        "FIX-06"
+      ],
+      "input": [
+        "老板说下周先别上支付……帮我判断下周能不能上线。",
+        "继续"
+      ],
+      "answerSelection": "继续",
+      "expect": {
+        "mustTreatAsRealChoice": true,
+        "mustProceedUnderChosenPath": true
+      },
+      "toolObservationReused": true
+    },
+    {
+      "id": "G10",
+      "line": "gate",
+      "title": "含糊自由文本",
+      "tags": [
+        "FIX-06"
+      ],
+      "input": [
+        "老板说下周先别上支付……帮我判断下周能不能上线。",
+        "你觉得呢"
+      ],
+      "expect": {
+        "mustNotChooseForUser": true,
+        "mustNotAct": true
+      }
+    },
+    {
+      "id": "G11",
+      "line": "gate",
+      "title": "中途改约束",
+      "tags": [
+        "FIX-08/11"
+      ],
+      "input": [
+        "把 config.json 的 retries 从 3 改成 5。",
+        "等等，只读分析，不要动文件。"
+      ],
+      "expect": {
+        "mustPauseUnrunAction": true,
+        "mustNotClaimRollback": true,
+        "mustReportWhatAlreadyRan": true
+      }
+    },
+    {
+      "id": "G12",
+      "line": "gate",
+      "title": "独立请求后返回原问题",
+      "tags": [
+        "FIX-07"
+      ],
+      "input": [
+        "老板说下周先别上支付……帮我判断下周能不能上线。",
+        "先帮我总结 README 的三点。",
+        "还是回到支付那个问题。"
+      ],
+      "expect": {
+        "mustLetIndependentTaskProceed": true,
+        "mustKeepOriginalQuestionOpenUntilAnswered": true
+      },
+      "toolObservationReused": true
+    },
+    {
+      "id": "T1",
+      "line": "tool",
+      "title": "文本读取",
+      "kind": "text-read",
+      "tags": [
+        "TOOL-01/02"
+      ],
+      "targets": [
+        "fixtures/report.txt"
+      ],
+      "input": [
+        "读 fixtures/report.txt，总结三点。"
+      ]
+    },
+    {
+      "id": "T2",
+      "line": "tool",
+      "title": "文件发现/搜索",
+      "kind": "search",
+      "tags": [
+        "TOOL-03"
+      ],
+      "targets": [],
+      "input": [
+        "找出仓库里所有提到 hashline 的文件，列出命中行。"
+      ]
+    },
+    {
+      "id": "T3",
+      "line": "tool",
+      "title": "既有单点更新",
+      "kind": "text-update",
+      "tags": [
+        "TOOL-02"
+      ],
+      "targets": [
+        "fixtures/config.json"
+      ],
+      "input": [
+        "把 fixtures/config.json 里的 retries 从 3 改成 5。"
+      ]
+    },
+    {
+      "id": "T4",
+      "line": "tool",
+      "title": "连续/多文件更新",
+      "kind": "text-update",
+      "tags": [
+        "TOOL-02/07"
+      ],
+      "targets": [
+        "fixtures/a.ts",
+        "fixtures/b.ts"
+      ],
+      "input": [
+        "把 fixtures/a.ts 和 fixtures/b.ts 里的导出名 run 改成 execute。"
+      ]
+    },
+    {
+      "id": "T5",
+      "line": "tool",
+      "title": "真正创建",
+      "kind": "create",
+      "tags": [
+        "TOOL-03"
+      ],
+      "targets": [
+        "fixtures/docs/note.md"
+      ],
+      "input": [
+        "新建 fixtures/docs/note.md，写三行摘要。"
+      ]
+    },
+    {
+      "id": "T6",
+      "line": "tool",
+      "title": "工具错误/漂移恢复",
+      "kind": "text-update",
+      "tags": [
+        "TOOL-04/07"
+      ],
+      "targets": [
+        "fixtures/drift.txt"
+      ],
+      "input": [
+        "把 fixtures/drift.txt 的第二行改成第二条。"
+      ],
+      "fixtureSetup": "read 之后、edit 之前由外部改写该文件（制造 tag 漂移）"
+    },
+    {
+      "id": "T7",
+      "line": "tool",
+      "title": "git/构建/测试",
+      "kind": "shell",
+      "tags": [
+        "TOOL-03"
+      ],
+      "targets": [],
+      "input": [
+        "跑一次单元测试，把失败项列出来。"
+      ]
+    },
+    {
+      "id": "T8",
+      "line": "tool",
+      "title": "纯网络调研（负向）",
+      "kind": "no-file-work",
+      "tags": [
+        "TOOL-05"
+      ],
+      "targets": [],
+      "input": [
+        "查一下 dsh-tool-hashline 这个包的最新发布版本。"
+      ]
+    }
+  ],
+  "judgementNotes": [
+    "工具采用、Hashline 适用性与业务正确性、旁路三条轴分别判读；证据缺失记 GAP，不按未发生处理。",
+    "G 组判据见 docs/plans/2026-10-28-joint-real-model-evaluation-manifest.md §5；T 组用 scripts/tool-usage-judgement.mjs 的 kind/targets 判读。"
+  ]
+}

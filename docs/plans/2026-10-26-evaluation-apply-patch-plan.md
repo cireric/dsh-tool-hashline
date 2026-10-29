@@ -1,6 +1,9 @@
 # 评测 apply_patch 目标证据补齐
 
-承接 80989b7 与[剩余缺口](../acceptance/2026-10-26-evaluation-lifecycle.md)。本轮仅补齐已有受管 edit 的解析计划取证，不复制解析器、不改 policy/preset/依赖、不启动真实模型或自动提交。
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-apply-patch.md")。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
+承接 80989b7 与[剩余缺口](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-lifecycle.md")。本轮仅补齐已有受管 edit 的解析计划取证，不复制解析器、不改 policy/preset/依赖、不启动真实模型或自动提交。
 
 责任层：上游 edit 的 describeRequest 已调用 expandApplyPatchToEntries；策略 preflight 将该计划写入现有 decision.targets。评测 host 当前只保留路由/结果/原因，丢弃该计划；targets.mjs 只调用 Hashline Patch.parse，故 apply_patch 目标不可得。
 
@@ -11,4 +14,4 @@
 
 新增取证不增加工具层文件 I/O；仅在原回执 sidecar 增加脱敏计划元数据。正式报告继续仅含相对目标和既有模式/结果，不输出原始计划路径。其它专用工具、同文件多目标、并发归属、刺激与自动 S2 仍属后续工作。
 
-有界实现已完成，见[验收](../acceptance/2026-10-26-evaluation-apply-patch.md)：73 项定向通过，最终合法替代/拒绝恢复等 18 例宿主组通过且对账 45/45；移除集合核对的变异被两项测试拒绝。创建与空文件换行两轮各 1 FAIL 独立保留，不作为已修复能力。
+有界实现已完成，见[验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-apply-patch.md")：73 项定向通过，最终合法替代/拒绝恢复等 18 例宿主组通过且对账 45/45；移除集合核对的变异被两项测试拒绝。创建与空文件换行两轮各 1 FAIL 独立保留，不作为已修复能力。

@@ -32,7 +32,16 @@
  *
  * Usage:
  *   node scripts/extract-runtime-evidence.mjs --source <path> --session <id>
- *        [--seq-min N] [--seq-max M] [--out <file>] [--now <iso>]
+ *        [--seq-min N] [--seq-max M] [--out <file>] [--now <iso>] [--tasks <manifest.json>]
+ *
+ * With --tasks (a task manifest, see scripts/tool-usage-judgement.mjs) the report also carries
+ * the per-task tool-path judgement built from the same records. It is additive and reduced to
+ * ids and counts: no arguments, no bodies, no program source. An incomplete session never
+ * yields a clean tool-path verdict.
+ *
+ * Every report also carries `accounting`: the per-request cost ledger (first / declaration /
+ * business stages, repairs spent, questions and their settlement, turn outcomes) derived from
+ * the same range by the gate module's own `requestAccounting`, with unknown cost kept unknown.
  * @module dsh-tool-hashline/scripts/extract-runtime-evidence
  */
 import { createHash } from 'node:crypto'
@@ -54,6 +63,20 @@ export { decodeArtifact, parseRecords, scanZstdFrames }
  * satisfy it, so reading a historical log stays faithful.
  */
 import { checkDeclaration } from '../presets/ptc-hashline/intent-gate-watchdog.mjs'
+/**
+ * The tool-path judgement (tool-routing plan T2) reads the SAME decoded records, so one run of
+ * this extractor can report both claims a session has to support: "was the reply declared
+ * before it ran" and "did the task's target actually use the applicable SDK path". It is
+ * additive: without `--tasks` the report carries `toolPath: null` exactly as before.
+ */
+import { judgeTaskUsage, summarizeJudgement, tasksOf } from './tool-usage-judgement.mjs'
+/**
+ * The per-request cost ledger comes from the gate module itself (one implementation, one set of
+ * rules: the repair/continuation notice prefixes and the question identity), so a report's
+ * "what did this request cost" answer cannot drift from the gate that produced the log.
+ */
+import { requestAccounting } from '../presets/ptc-hashline/intent-gate-watchdog.mjs'
+import { RECOVERY_FAILURE_CODES, explainRecovering } from '../presets/ptc-hashline/client/presentation.mjs'
 /**
  * The STRUCTURAL reading scope below (which call counts as behavior-changing, hence which
  * message is its carrier) is retained to read logs produced by the retired per-turn tool-name
@@ -379,6 +402,89 @@ export function extractSession(options) {
     }
   })
 
+  // What each finished turn SHOULD have looked like in the web client (P3 route 1). This is the
+  // browser-free form of that evidence: the client rule is a pure function of the log, so a report
+  // can say "this turn was a declaration failure and the facts right after it upgraded the row to
+  // 'being completed'" — or, just as important, "it was refused, and here is why". It reads only
+  // formal events; it does not know or claim anything about what a browser actually painted.
+  const presentation = (() => {
+    const turns = []
+    for (let index = 0; index < inScope.length; index += 1) {
+      const record = inScope[index]
+      if (record.type !== 'turn/end') continue
+      const classified = classifyFailureCode(record.data?.reason)
+      if (classified === undefined) continue
+      const following = inScope.slice(index + 1).map(entry => ({ type: entry.type, seq: entry.seq, time: entry.time, data: entry.data }))
+      const decided = explainRecovering({ turn: record.data?.turn, reason: record.data?.reason, following })
+      turns.push({
+        turn: typeof record.data?.turn === 'number' ? record.data.turn : null,
+        seq: record.seq,
+        code: classified,
+        presentedAs: decided.row === null ? 'failure' : 'recovering',
+        reason: decided.reason,
+        ...(decided.row === null ? {} : { announcedAtSeq: decided.row.seq }),
+      })
+    }
+    const recovering = turns.filter(entry => entry.presentedAs === 'recovering').length
+    return {
+      rule: { recoveryCodes: [...RECOVERY_FAILURE_CODES] },
+      totals: { turns: turns.length, recovering, failure: turns.length - recovering },
+      turns,
+      note: 'presentedAs is what the presentation rule derives from THIS log; it is not a claim that a browser painted it. recovering means the row would read as "being completed"; failure means the stock failure row stands.',
+    }
+  })()
+
+  // The tool-path judgement, when the caller names the tasks. It is reduced to COUNTS and ids
+  // here on purpose: the judgement itself keeps the paired calls (and hence their arguments),
+  // and this report must not carry arguments, bodies or program source.
+  const toolPath = typeof options.tasks === 'object' && Array.isArray(options.tasks) && options.tasks.length > 0
+    ? (() => {
+      const judgements = options.tasks.map(task => judgeTaskUsage({ task, events: inScope }))
+      const reduced = judgements.map(judgement => ({
+        taskId: judgement.taskId,
+        kind: judgement.kind,
+        verdict: judgmentVerdictFor(judgement, status !== 'complete'),
+        readTargets: judgement.path.readTarget.length,
+        editTargets: judgement.path.editTarget.length,
+        writeTargets: judgement.path.writeTarget.length,
+        shellTargets: judgement.path.shellTarget.length,
+        provenBypass: judgement.provenBypass.map(entry => ({ reason: entry.reason, target: clip(String(entry.target), 120) })),
+        candidates: judgement.candidates.map(entry => ({ signal: entry.signal, mentionsTarget: entry.mentionsTarget === true })),
+        gaps: judgement.gaps.map(gap => gap.kind),
+        unknowns: judgement.unknowns.map(unknown => unknown.kind),
+      }))
+      return {
+        // A session whose own evidence is incomplete cannot support a clean tool-path claim,
+        // for the same reason it cannot support a clean declaration claim.
+        incomplete: status !== 'complete',
+        tasks: reduced,
+        summary: judgements.map(judgement => summarizeJudgement({ ...judgement, verdict: judgmentVerdictFor(judgement, status !== 'complete') })),
+      }
+    })()
+    : null
+
+  // The cost ledger is DERIVED from this same range and always present: it is counts and token
+  // totals per stage, with "unknown" kept as unknown. No bodies, no arguments.
+  const ledger = requestAccounting(inScope)
+  const accounting = {
+    totals: ledger.totals,
+    requests: ledger.requests.map(request => ({
+      index: request.index,
+      repairs: request.repairs,
+      accepted: request.accepted,
+      questions: request.questions.length,
+      unsettledQuestions: request.questions.filter(question => question.settled !== true).length,
+      stages: Object.fromEntries(Object.entries(request.stages).map(([phase, stage]) => [phase, {
+        attempts: stage.attempts,
+        published: stage.published,
+        inputTokens: stage.inputTokens,
+        outputTokens: stage.outputTokens,
+        usageUnknown: stage.usageUnknown,
+      }])),
+      outcomes: request.outcomes,
+    })),
+  }
+
   return {
     tool: 'extract-runtime-evidence',
     version: 2,
@@ -420,7 +526,33 @@ export function extractSession(options) {
       userMessages: inScope.filter(record => record.type === 'user/message' && record.data?.source?.kind === 'user').map(record => ({ seq: record.seq, firstLine: clip(firstLineOf(textOfBlocks(record.data?.content)), 240) })),
       note: 'Absence of a gate line or a refusal is a statement about the covered range only; it says nothing about events outside it. One tool call is counted once: start and settle events are paired by subCallId.',
     },
+    toolPath,
+    accounting,
+    presentation,
   }
+}
+
+/**
+ * The policy-owned failure code of one turn/end reason.
+ *
+ * EVERY code this gate owns is listed, not only the two that upgrade: "repair exhausted" and the
+ * other policy stops must stay visible as the failure they are, and a report that quietly omitted
+ * them would make the product look calmer than it is.
+ */
+function classifyFailureCode(reason) {
+  if (reason === null || typeof reason !== 'object' || reason.kind !== 'error') return undefined
+  const code = reason.error?.code ?? reason.failure?.code
+  return typeof code === 'string' && code.startsWith('INTENT_') ? code : undefined
+}
+
+/**
+ * A clean tool-path verdict is only claimable on evidence that is itself complete: a session
+ * with a torn frame, a seq gap or an unparsable record cannot testify that no bypass happened.
+ */
+function judgmentVerdictFor(judgement, incomplete) {
+  return incomplete && (judgement.verdict === 'applied-tool-path' || judgement.verdict === 'normal-exception')
+    ? 'unknown'
+    : judgement.verdict
 }
 
 function parseArgs(argv) {
@@ -436,6 +568,7 @@ function parseArgs(argv) {
     else if (flag === '--seq-max') options.seqMax = Number(value)
     else if (flag === '--out') options.out = value
     else if (flag === '--now') options.now = value
+    else if (flag === '--tasks') options.tasksPath = value
     else throw new UsageError('unknown flag: ' + flag)
     index += 1
   }
@@ -476,6 +609,7 @@ export async function main(argv) {
       format: decoded.format,
       frames: decoded.frames,
       tornStart: decoded.tornStart,
+      ...options.tasksPath === undefined ? {} : { tasks: tasksOf(JSON.parse(await readFile(options.tasksPath, 'utf8'))) },
     })
   } catch (error) {
     process.stderr.write('refused: ' + (error instanceof Error ? error.message : String(error)) + '\n')

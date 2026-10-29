@@ -1,5 +1,7 @@
 # 上游同步检查：代码审查修复与复验
 
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
 日期：2026-10-27。范围：[同步需求规格](../specs/2026-10-27-upstream-sync-requirements.md)交付后的两轴代码审查所列 5 项问题。原六张票据及原报告保留当轮结果，本文记录后续修复，不回写历史产物。
 
 ## 审查意见处置
@@ -32,7 +34,7 @@ PTC 与 stock-read comparator 版本升至 2。旧决定的身份不再匹配时
 
 ## 完整交付门禁
 
-隔离副本执行 `pnpm test:delivery --out ../delivery`：exit 0。[逐条报告](upstream-sync-review-fixes/2026-10-27-delivery-acceptance-report.md)和[机器摘要](upstream-sync-review-fixes/2026-10-27-delivery-acceptance-summary.json)单独归档，未覆盖先前同日交付报告。提交前仅去除生成报告与 sync-history 源码末尾的多余空行，报告结果和源码逻辑未改；原始字节仍保留在本地证据目录，源码另经 node --check 通过。
+隔离副本执行 `pnpm test:delivery --out ../delivery`：exit 0。[逐条报告](README.md#历史原件 "归档原件：docs/acceptance/upstream-sync-review-fixes/2026-10-27-delivery-acceptance-report.md")和[机器摘要](README.md#历史原件 "归档原件：docs/acceptance/upstream-sync-review-fixes/2026-10-27-delivery-acceptance-summary.json")单独归档，未覆盖先前同日交付报告。提交前仅去除生成报告与 sync-history 源码末尾的多余空行，报告结果和源码逻辑未改；原始字节仍保留在本地证据目录，源码另经 node --check 通过。
 
 | 门禁 | 退出码 |
 |---|---|

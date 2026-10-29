@@ -4,6 +4,16 @@
 
 **2026-10-26 本轮评测收尾、停止扩样。** 用户接受[完整 S0 第二轮](../../docs/acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)的 FAIL，后续离线审计完成；按[阶段决策](../../docs/acceptance/2026-10-26-evaluation-stage-decision.md)转为按需维护，S1/S2 延期未执行。下列工具与配置保留供今后有明确问题及新费用授权时复用，不构成自动续跑安排。
 
+## 联合真实模型验收（2026-10-28 计划，未执行）
+
+与意图门联合验收共用同一批冻结案例，工具都在本目录：
+
+- [`joint-plan.mjs`](joint-plan.mjs) — 校验冻结案例与预算算术、**未填齐 11 项授权即拒绝**（只列 40 条会话与证据槽）、跑后把每会话的提取器报告折成「声明 / 成本 / 工具路径」对账表。CLI：`--cases <frozen.json> [--approval <json>|--runs <json>] [--out <file>]`；退出码 0 可运行或已对账、2 未授权、1 输入无效。
+- [`joint-rehearsal.mjs`](joint-rehearsal.mjs) — 用**固定夹具**干跑整条流水线（artifact → 提取器报告 → `runs.json` → 对账），不调用任何模型；`consistent: true` 时退出 0。它只证明管道与命令形状。
+- 模板：[`joint-approval.example.json`](joint-approval.example.json)（11 项全空）、[`joint-runs.example.json`](joint-runs.example.json)（对账输入形状）。
+
+案例与判据在 [`docs/plans/2026-10-28-joint-real-model-evaluation-manifest.md`](../../docs/plans/2026-10-28-joint-real-model-evaluation-manifest.md)，逐条采集步骤见[`采集与对账操作单`](../../docs/plans/2026-10-28-joint-evaluation-collection.md)。
+
 ## 手动连接与有界实验
 
 自定义兼容端点使用 [experiment.gateway.example.json](experiment.gateway.example.json)，复用已安装 `@deepseek-ai/dsh-llm-pi-ai`。BASE_URL 概念对应 `provider.config.providers.<路由>.baseURL`，不是大写 JSON 键或环境变量自动插值。Provider 是路由键和 `model.provider`，模型 ID 同时填写 `model.model` 和该路由的 `models[].id`；不一致会在 prepare 时拒绝。插件包名与 Provider 路由名是不同字段。
@@ -35,7 +45,7 @@ node scripts/evaluation/compare-requests.mjs .scratch/my-finalization/s0-results
 
 ### 推理模型配置注意
 
-`models[].reasoningEfforts:false` 声明不提供推理档位，不是给服务端发送“关闭思考”。需控制档位时显式声明模型支持的映射并选择 `model.parameters.reasoningEffort`；不能给始终推理的模型盲配 off。GLM-5.3-Flash 的[本轮诊断](../../docs/acceptance/2026-10-26-evaluation-s0-diagnosis.md)验证了以下模型项及参数组合的请求可被所配 ModelScope 接受并返回 usage：
+`models[].reasoningEfforts:false` 声明不提供推理档位，不是给服务端发送“关闭思考”。需控制档位时显式声明模型支持的映射并选择 `model.parameters.reasoningEffort`；不能给始终推理的模型盲配 off。GLM-5.3-Flash 的[本轮诊断](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-s0-diagnosis.md")验证了以下模型项及参数组合的请求可被所配 ModelScope 接受并返回 usage：
 
 ```json
 {
@@ -48,7 +58,7 @@ node scripts/evaluation/compare-requests.mjs .scratch/my-finalization/s0-results
 
 ## 无凭据验证
 
-新模板及 finalization-config 默认冻结 `editPayloadVersion:2`：不再把任意非 `[` 的 input 归为 apply_patch。只有明确 Begin Patch 首行才归为该请求形状；坏 header/歧义为 unknown，actualMode 仍依赖真实完成回执。历史配置未声明或声明 1 时保留原解释，旧报告不可通过补字段“修正”。要在未来实验使用新版，须在新配置中声明并重新冻结；[离线审计](../../docs/acceptance/2026-10-26-evaluation-payload-prompt-audit.md)不回写真实 S0 结果。
+新模板及 finalization-config 默认冻结 `editPayloadVersion:2`：不再把任意非 `[` 的 input 归为 apply_patch。只有明确 Begin Patch 首行才归为该请求形状；坏 header/歧义为 unknown，actualMode 仍依赖真实完成回执。历史配置未声明或声明 1 时保留原解释，旧报告不可通过补字段“修正”。要在未来实验使用新版，须在新配置中声明并重新冻结；[离线审计](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-payload-prompt-audit.md")不回写真实 S0 结果。
 
 ```powershell
 pnpm exec vitest run --config vitest.unit.config.ts tests/unit/evaluation-protocol.spec.ts tests/unit/evaluation-evidence.spec.ts tests/unit/evaluation-config.spec.ts tests/unit/evaluation-next-stage.spec.ts tests/unit/evaluation-apply-patch.spec.ts tests/unit/evaluation-verdict.spec.ts tests/unit/evaluation-cohort.spec.ts tests/unit/evaluation-task-suite.spec.ts tests/unit/evaluation-suite-programs.spec.ts tests/unit/delivery-engine-pins.spec.ts tests/unit/evaluation-design-review.spec.ts tests/unit/evaluation-request-evidence.spec.ts tests/unit/evaluation-finalization-config.spec.ts tests/unit/evaluation-provider-composition.spec.ts
@@ -59,7 +69,7 @@ node scripts/evaluation/smoke.mjs <disposable-profile> .scratch/<runId>/smoke
 
 smoke 只向 `dsh-profile-acceptance` 安装本仓库的固定适配器夹具；不请求网络。它真实装配三臂宿主，执行单点、多文件、真实委派、读后外部漂移、合法 user-override 双文件更新和 apply_patch 拒绝后恢复六类任务，共 18 个案例，检查 usage、回执、候选/最终快照和报告重算。只有 fallback 臂的后两类固定程序使用 apply_patch，其它臂按各自能力执行相同文件目标；这不证明模型选择。`fixture:*` 提示仅供脚本夹具路由，不是正式模型任务。夹具已存在但版本不同会拒绝，需用新的隔离交付安装，不热改旧安装。
 
-无移动的受管 apply_patch 可由实际解析计划映射目标。计划必须来自该 Session 的同一调用/根调用，匹配模式、版本和文件头集合；原始 parsedPlan 只留本地回执，报告不含该字段。含移动、缺计划/早期拒绝或旧证据仍 unknown。解析成功不保证落盘或正确：本轮 Add File 的 FS_NOT_OBSERVED、空文件更新的末尾换行不符均被保留为 FAIL；合法 user-override 的结果不能宣称修复了这两个限制，详见[本轮验收](../../docs/acceptance/2026-10-26-evaluation-apply-patch.md)。
+无移动的受管 apply_patch 可由实际解析计划映射目标。计划必须来自该 Session 的同一调用/根调用，匹配模式、版本和文件头集合；原始 parsedPlan 只留本地回执，报告不含该字段。含移动、缺计划/早期拒绝或旧证据仍 unknown。解析成功不保证落盘或正确：本轮 Add File 的 FS_NOT_OBSERVED、空文件更新的末尾换行不符均被保留为 FAIL；合法 user-override 的结果不能宣称修复了这两个限制，详见[本轮验收](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-apply-patch.md")。
 
 生命周期验证另用同一固定适配器与现有执行器：
 
@@ -97,7 +107,7 @@ node scripts/evaluation/task-suite.mjs .scratch/my-suite/experiment.json
 
 首次范围预先纳入 10 项，排除 satisfied、create、generator，并保留理由。最终文件与成本仍覆盖全部 13 项；strict Hashline 对例外任务可能失败，不能删除失败样本或把预期结果改成其实际结果。长行和快照场景按当前固定 preset 的 2000 字符列上限、4 MiB 快照门槛设计，实际冻结配置改变后应重新审阅任务。
 
-最终字节检查不能证明 consecutive 的中间核验或 generator 的真实调用；这些要求须另审原始轨迹。专用工具变更的目标模式仍可能 unknown/GAP；生成器产物正确不补造 edit 证据。当前并未运行完整任务集的真实模型执行，验证范围见[任务集验收](../../docs/acceptance/2026-10-26-evaluation-task-suite.md)。
+最终字节检查不能证明 consecutive 的中间核验或 generator 的真实调用；这些要求须另审原始轨迹。专用工具变更的目标模式仍可能 unknown/GAP；生成器产物正确不补造 edit 证据。当前并未运行完整任务集的真实模型执行，验证范围见[任务集验收](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-task-suite.md")。
 
 完整候选集的无费用宿主验证使用独立固定 Provider：
 
@@ -109,7 +119,7 @@ node scripts/evaluation/suite-smoke.mjs <fresh-disposable-profile> .scratch/<run
 
 `suite-summary.json` 单列测试断言和实际评测结果。脚本 exit 0 表示预先声明的失败/未知也按预期保留，**不表示 39 样本全部 PASS**。本轮实际为 31 PASS / 6 GAP / 2 FAIL，最终字节 36 正确 / 3 错误，judge=2；长行和生成器的 shell 调用仍导致目标归属 unknown。原始轨迹不包含 shell 的完整 canonical 数值退出码，固定程序现场检查该值并在非零时抛错，不能将其扩大为通用 shell 退出码审计。
 
-新一次性交付安装器已从既有锚点固定两个 upstream overrides，并检查安装后的实际版本、补丁和同物理 Hashline；先前安装可把 tool-edit 的传递范围解析成较新副本而被评测预检阻断。不要移除 identity 检查或手改 node_modules 消除报错，详见[宿主任务集验收](../../docs/acceptance/2026-10-26-evaluation-suite-host.md)。真实模型正式实验仍需另行授权和设计审查。
+新一次性交付安装器已从既有锚点固定两个 upstream overrides，并检查安装后的实际版本、补丁和同物理 Hashline；先前安装可把 tool-edit 的传递范围解析成较新副本而被评测预检阻断。不要移除 identity 检查或手改 node_modules 消除报错，详见[宿主任务集验收](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-suite-host.md")。真实模型正式实验仍需另行授权和设计审查。
 
 ### 用配置文件选择模型（推荐）
 
@@ -136,9 +146,9 @@ node scripts/evaluation/run.mjs .scratch/my-probe/frozen.json <disposable-profil
 node scripts/evaluation/review-design.mjs .scratch/my-probe/frozen.json <disposable-profile> .scratch/my-probe/design-review.json
 ```
 
-审查核对当前安装身份、原始 preset 及派生臂哈希，列出实际插件变化、白名单配置、任务家族和首次/全任务分母。只导出摘要及有限 read/edit 设置，不导出整行 persona 或任意配置内容。该离线审查入口自身仍保留提示/SDK、代表性、独立模型延迟或相对收益的 GAP；新 requestEvidence/compare-requests 在实际执行后另行核对组装请求，见[本轮验收](../../docs/acceptance/2026-10-26-evaluation-request-evidence.md)，不回写历史审查。退出 0 只表示成功生成审查，身份/配置漂移、防覆盖或参数错误退出 2；它不增加执行审批、不自动修改配置或提供 S2 结论。
+审查核对当前安装身份、原始 preset 及派生臂哈希，列出实际插件变化、白名单配置、任务家族和首次/全任务分母。只导出摘要及有限 read/edit 设置，不导出整行 persona 或任意配置内容。该离线审查入口自身仍保留提示/SDK、代表性、独立模型延迟或相对收益的 GAP；新 requestEvidence/compare-requests 在实际执行后另行核对组装请求，见[本轮验收](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-request-evidence.md")，不回写历史审查。退出 0 只表示成功生成审查，身份/配置漂移、防覆盖或参数错误退出 2；它不增加执行审批、不自动修改配置或提供 S2 结论。
 
-候选 consecutive 任务尤其需要预先审查：首个编辑程序可能是任务要求的合规中间状态，不能把其相对最终 expected 的 false 直接当作模型犯错。三臂的插件/工具面不同，也不能把差异仅归因于默认策略。详见[设计审查验收](../../docs/acceptance/2026-10-26-evaluation-design-review.md)。新增脚本会进入 driverInputs，必须重新 prepare，不能沿用旧冻结身份。
+候选 consecutive 任务尤其需要预先审查：首个编辑程序可能是任务要求的合规中间状态，不能把其相对最终 expected 的 false 直接当作模型犯错。三臂的插件/工具面不同，也不能把差异仅归因于默认策略。详见[设计审查验收](../../docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-design-review.md")。新增脚本会进入 driverInputs，必须重新 prepare，不能沿用旧冻结身份。
 
 prepare 不写配置原文件，不覆盖已有 frozen 输出，也不修改 profile。更换模型或参数后生成另一份 frozen 文件；不要修改已经运行过的冻结协议。下面的手动 identity → protocol → freeze 路线仍可用。
 

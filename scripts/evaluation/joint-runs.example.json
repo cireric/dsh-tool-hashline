@@ -1,0 +1,119 @@
+{
+  "_note": "EXAMPLE ONLY: the shape of runs.json for `joint-plan --runs`. Each entry is one conversation: the case id, its independent session (a|b), and the EXTRACTOR report for that session. These reports are hand-written examples, not measurement results.",
+  "runs": [
+    {
+      "caseId": "G1",
+      "session": "a",
+      "report": {
+        "evidence": {
+          "status": "complete",
+          "issues": []
+        },
+        "accounting": {
+          "totals": {
+            "requests": 1,
+            "repairs": 1,
+            "attempts": 3,
+            "inputTokens": 14,
+            "outputTokens": 18,
+            "usageUnknown": 1,
+            "unsettledQuestions": 0,
+            "failedTurns": 1
+          },
+          "requests": [
+            {
+              "index": 1,
+              "repairs": 1,
+              "accepted": 1,
+              "questions": 1,
+              "unsettledQuestions": 0,
+              "stages": {},
+              "outcomes": [
+                "error",
+                "completed"
+              ]
+            }
+          ]
+        },
+        "toolPath": {
+          "incomplete": false,
+          "tasks": [
+            {
+              "taskId": "T3",
+              "kind": "text-update",
+              "verdict": "applied-tool-path",
+              "readTargets": 1,
+              "editTargets": 1,
+              "writeTargets": 0,
+              "shellTargets": 0,
+              "provenBypass": [],
+              "candidates": [],
+              "gaps": [],
+              "unknowns": []
+            }
+          ],
+          "summary": [
+            "T3 text-update applied-tool-path read=1 edit=1 write=0 shell=0 provenBypass=0 candidates=0 gaps=0 unknowns=0"
+          ]
+        }
+      }
+    },
+    {
+      "caseId": "T3",
+      "session": "a",
+      "report": {
+        "evidence": {
+          "status": "complete",
+          "issues": []
+        },
+        "accounting": {
+          "totals": {
+            "requests": 1,
+            "repairs": 1,
+            "attempts": 3,
+            "inputTokens": 14,
+            "outputTokens": 18,
+            "usageUnknown": 1,
+            "unsettledQuestions": 0,
+            "failedTurns": 1
+          },
+          "requests": [
+            {
+              "index": 1,
+              "repairs": 1,
+              "accepted": 1,
+              "questions": 1,
+              "unsettledQuestions": 0,
+              "stages": {},
+              "outcomes": [
+                "error",
+                "completed"
+              ]
+            }
+          ]
+        },
+        "toolPath": {
+          "incomplete": false,
+          "tasks": [
+            {
+              "taskId": "T3",
+              "kind": "text-update",
+              "verdict": "applied-tool-path",
+              "readTargets": 1,
+              "editTargets": 1,
+              "writeTargets": 0,
+              "shellTargets": 0,
+              "provenBypass": [],
+              "candidates": [],
+              "gaps": [],
+              "unknowns": []
+            }
+          ],
+          "summary": [
+            "T3 text-update applied-tool-path read=1 edit=1 write=0 shell=0 provenBypass=0 candidates=0 gaps=0 unknowns=0"
+          ]
+        }
+      }
+    }
+  ]
+}

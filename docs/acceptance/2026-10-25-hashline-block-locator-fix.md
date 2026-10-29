@@ -1,6 +1,8 @@
 # 块定位能力说明与诊断修复验收
 
-2026-10-25：票据 02、03 在源码及隔离交付安装中修复通过。**定向回归 13 PASS / 0 FAIL；新打包完整宿主 33 PASS / 0 FAIL；九项完整交付门禁均 exit 0。** 交付验收 ID 为 21 PASS / 0 FAIL / 9 BLOCKED，未执行项不计通过。[机器摘要](2026-10-25-hashline-block-locator-fix-summary.json)记录受测输入哈希、安装路径、逐场景状态和各门禁退出码。
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
+2026-10-25：票据 02、03 在源码及隔离交付安装中修复通过。**定向回归 13 PASS / 0 FAIL；新打包完整宿主 33 PASS / 0 FAIL；九项完整交付门禁均 exit 0。** 交付验收 ID 为 21 PASS / 0 FAIL / 9 BLOCKED，未执行项不计通过。[机器摘要](README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-hashline-block-locator-fix-summary.json")记录受测输入哈希、安装路径、逐场景状态和各门禁退出码。
 
 依据：[问题调查](../background/2026-10-25-hashline-block-locator-assessment.md)与[修复计划](../plans/2026-10-25-hashline-block-locator-guidance-fix.md)。本轮 Windows x64、Node v24.19.0、pnpm 11.28.5；官方宿主 DSH 0.2.1-rc.2，hashline/tool-edit 锚点仍为 0.2.1-alpha.4。
 

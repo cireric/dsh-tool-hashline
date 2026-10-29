@@ -1,8 +1,11 @@
 # 剩余四个工作包的有界恢复
 
+> 文档状态（2026-10-28）：本轮已收尾，S1/S2 延期未执行；按[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)停止扩样。仅在有具体问题、新冻结条件与费用授权时重开；当前缺口只在[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)汇总，正文保留历史设计与结果。
+
+
 > 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
 
-2026-10-26，用户在[收口](../acceptance/2026-10-26-project-closeout.md)后明确要求继续完成四项核心工作，并要求通过文件自行配置 BASE_URL、Provider 和模型 ID。恢复范围仅为下表，原三类扩展缺口继续保留；日常推荐 PTC、Hashline 可选与暂停默认推广的决定不变。完成标准是可审计的结果和有边界的结论，不要求证明 Hashline 胜出。
+2026-10-26，用户在[收口](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-project-closeout.md")后明确要求继续完成四项核心工作，并要求通过文件自行配置 BASE_URL、Provider 和模型 ID。恢复范围仅为下表，原三类扩展缺口继续保留；日常推荐 PTC、Hashline 可选与暂停默认推广的决定不变。完成标准是可审计的结果和有边界的结论，不要求证明 Hashline 胜出。
 
 | 工作包 | 有限产出和验收 | 执行边界 |
 |---|---|---|
@@ -17,13 +20,13 @@
 
 ## 本轮实施结果（2026-10-26）
 
-[验收与机器摘要](../acceptance/2026-10-26-evaluation-request-evidence.md)记录前两包已实现及无费用验证：组装请求捕获/官方 Session 重放/SDK 比较、可编辑网关配置、固定 S0/S1 设计及指标分母。241 项定向测试通过，九项交付门禁 exit 0；完整固定 Provider 任务结果仍保留 FAIL/GAP。第三、四包的真实 Provider S0 与 S1/S2 尚未执行，需手动填写连接、容量、预算和阈值后显式执行；本轮真实模型请求 0。
+[验收与机器摘要](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-request-evidence.md")记录前两包已实现及无费用验证：组装请求捕获/官方 Session 重放/SDK 比较、可编辑网关配置、固定 S0/S1 设计及指标分母。241 项定向测试通过，九项交付门禁 exit 0；完整固定 Provider 任务结果仍保留 FAIL/GAP。第三、四包的真实 Provider S0 与 S1/S2 尚未执行，需手动填写连接、容量、预算和阈值后显式执行；本轮真实模型请求 0。
 
 ### 真实 S0 首轮跟进
 
-用户填写连接并明确批准有限 S0 后，已执行[首轮真实验证](../acceptance/2026-10-26-evaluation-real-s0-modelscope.md)：首请求收到 reasoning，120 秒超时取消；1 CANCELLED / 8 BLOCKED，usage unknown，未自动重试或执行 S1。请求捕获和重放 1/1，但完整 S0 尚未完成。前述无费用验证计数和真实请求 0 仅描述前轮，不覆盖此轮。
+用户填写连接并明确批准有限 S0 后，已执行[首轮真实验证](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-real-s0-modelscope.md")：首请求收到 reasoning，120 秒超时取消；1 CANCELLED / 8 BLOCKED，usage unknown，未自动重试或执行 S1。请求捕获和重放 1/1，但完整 S0 尚未完成。前述无费用验证计数和真实请求 0 仅描述前轮，不覆盖此轮。
 
-后续[超时诊断](../acceptance/2026-10-26-evaluation-s0-diagnosis.md)：补齐显式 low 与输出字段配置，本项目 cap 枚举误拒已修；用户批准的一次真实诊断约 46.2 秒返回工具调用和完整 usage（14,827 Token），没有执行工具或续跑整组。完整 S0 仍 GAP，正式组未执行；后续需复核预算。
+后续[超时诊断](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-s0-diagnosis.md")：补齐显式 low 与输出字段配置，本项目 cap 枚举误拒已修；用户批准的一次真实诊断约 46.2 秒返回工具调用和完整 usage（14,827 Token），没有执行工具或续跑整组。完整 S0 仍 GAP，正式组未执行；后续需复核预算。
 
 ### 完整 S0 第二轮结果
 
@@ -31,7 +34,7 @@
 
 ### S0 后续无费用审计
 
-[模式/提示审计](../acceptance/2026-10-26-evaluation-payload-prompt-audit.md)已交付：新增冻结 editPayloadVersion=2，坏 header 不再误标 apply_patch，旧报告继续按原版本复核；真实 SDK/可见结果核对未发现明确格式冲突，三次无工具响应均正常 stop。297 项单元、类型及固定 Provider 18 项宿主验证通过，新增真实模型请求 0。原 S0 FAIL 保留，未启动 S1；不为追求通过自动改提示或付费重跑。
+[模式/提示审计](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-payload-prompt-audit.md")已交付：新增冻结 editPayloadVersion=2，坏 header 不再误标 apply_patch，旧报告继续按原版本复核；真实 SDK/可见结果核对未发现明确格式冲突，三次无工具响应均正常 stop。297 项单元、类型及固定 Provider 18 项宿主验证通过，新增真实模型请求 0。原 S0 FAIL 保留，未启动 S1；不为追求通过自动改提示或付费重跑。
 
 ## 本轮处置
 

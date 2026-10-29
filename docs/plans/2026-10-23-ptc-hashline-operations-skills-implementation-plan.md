@@ -1,5 +1,8 @@
 # PTC Hashline 运维 Skills 开发实施计划
 
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/2026-10-24-delivery-acceptance-report.md)。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
 日期：2026-10-23  
 版本：r6；状态说明更新于 2026-10-25：两份 skill 及工作流已实现，本文保留设计与实施依据；实际覆盖与缺口见[交付验收](../acceptance/2026-10-24-delivery-acceptance-report.md)。目标切换仍需用户当次明确同意。
 范围：两个仓库内维护、仅对 `ptc-hashline` 生效的 skill；问题取证与三方升级检查/评估/经用户同意后执行。

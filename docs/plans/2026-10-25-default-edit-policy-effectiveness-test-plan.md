@@ -1,13 +1,16 @@
 # 默认编辑策略：实际生效验收方案
 
+> 文档状态（2026-10-28）：本轮已收尾，S1/S2 延期未执行；按[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)停止扩样。仅在有具体问题、新冻结条件与费用授权时重开；当前缺口只在[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)汇总，正文保留历史设计与结果。
+
+
 > 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
 
 - 日期：2026-10-25。
 - 调查基线：`cc9dca2`；开始调查时工作树干净。执行前重新记录 HEAD、dirty 与输入摘要。
 - 状态：测试方案已编写；本轮仅静态调查，未执行测试、安装、模型调用或目标切换。
-- 后续执行：用户授权组织测试后完成 [Windows local-01](../acceptance/2026-10-25-default-edit-policy-effectiveness-local-01.md)，结果为 FAIL；上行保留方案编写时的历史状态，实际进展以该报告为准。
-- 后续修复：用户授权修复 F-01/F-02 后完成 [fix-01](../acceptance/2026-10-25-default-edit-policy-fix-01.md)；Windows 工程及安装探针通过，macOS/Linux CI 待执行，完整 E2/E3/E4 不因修复而自动通过。
-- 后续 E2：[完整宿主验收](../acceptance/2026-10-25-default-edit-policy-full-host.md)已扩展到完整 preset、实际进程 PTC 和真实委派，21 PASS / 1 FAIL；父用户来源误拒 F-03 与剩余子项分别留证，E2 未整体通过。
+- 后续执行：用户授权组织测试后完成 [Windows local-01](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-effectiveness-local-01.md")，结果为 FAIL；上行保留方案编写时的历史状态，实际进展以该报告为准。
+- 后续修复：用户授权修复 F-01/F-02 后完成 [fix-01](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-fix-01.md")；Windows 工程及安装探针通过，macOS/Linux CI 待执行，完整 E2/E3/E4 不因修复而自动通过。
+- 后续 E2：[完整宿主验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-full-host.md")已扩展到完整 preset、实际进程 PTC 和真实委派，21 PASS / 1 FAIL；父用户来源误拒 F-03 与剩余子项分别留证，E2 未整体通过。
 - 后续修复及 E2 增量：[F-03 修复与复验](../acceptance/2026-10-25-default-edit-policy-fix-02.md)已通过 27 项定向测试、扩展完整宿主 32 项与九项交付门禁。真实宿主新增混合目标拒绝、跨 Session 隔离、cwd 变化拒绝旧依据、PTC catch、BOM 空文件与 MV 冲突；E2 尚有 remount/重试取消及其它组合缺口。
 - 依据：[SRS 1.1](../specs/2026-10-24-hashline-default-editing.md)、[实施计划](2026-10-24-hashline-default-editing-implementation-plan.md)、[基础规格](../specs/2026-10-22-ptc-hashline-requirements-spec.md)、ADR-0003/0004/0005。
 - 本方案补足“本次开发是否在实际运行链路生效”的验收；收益对照仍只维护在[推广评测方案](2026-10-25-default-edit-policy-promotion-evaluation-plan.md)，不另建第二套收益协议。
@@ -30,7 +33,7 @@
 | `d7e2a0f`→`056b690` | 入口约束、read 事实、三原因、操作分类、混合预检、逐写复核及回执已实现 | 在当前 HEAD 上重跑，不只接受提交说明 |
 | `ed9b80a` | read 字节截断事实改为省略起点 | 零完整行、字节截断及窗口范围的回归 |
 | `33cd44e` | replace 内部 retry 拒绝也记录回执 | 必须覆盖 retry=1、refused、stale 与竞争者内容保留 |
-| [工程报告](../acceptance/2026-10-24-default-edit-policy-engineering.md) | 主 seam/PTC 工程证据；记录 macOS 环境失败及真实委派 GAP | 当前为 Windows，不能直接沿用旧失败豁免或旧测试计数 |
+| [工程报告](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-24-default-edit-policy-engineering.md") | 主 seam/PTC 工程证据；记录 macOS 环境失败及真实委派 GAP | 当前为 Windows，不能直接沿用旧失败豁免或旧测试计数 |
 | [test-profile.mjs](../../scripts/test-profile.mjs) | 解析、旧补丁标记、launcher dump、手工装配 read/edit 的基础操作 | 驱动挂的是 FsPolicy；未传 `contentPolicyModule`，不能证明新策略加载 |
 | [delivery 驱动](../../scripts/delivery-acceptance-run.mjs)、[装配辅助](../../scripts/delivery-acceptance.mjs) | 打包、launcher、skill 层及运维流程 | 未实际执行默认策略受管 edit；需增补完整 preset 的行为验收 |
 | [推广方案](2026-10-25-default-edit-policy-promotion-evaluation-plan.md)、[evaluation driver](../../scripts/evaluation/driver.mjs) | freeze/check 协议与计数检查 | driver 不调用模型；真实模型、后端及凭据可用性须重新探测 |

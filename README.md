@@ -1,10 +1,10 @@
 # dsh-tool-hashline
 
-为 stock DSH 提供 **PTC Hashline Mode**（`ptc-hashline`）：模型通过 `run_code` 编排工具，自建 `read` 返回内容 tag，上游 `edit` 使用该 tag 编辑文件，并保留每回合 Intent 门。
+为 stock DSH 提供 **PTC Hashline Mode**（`ptc-hashline`）：模型通过 `run_code` 编排工具，自建 `read` 返回内容 tag，上游 `edit` 使用该 tag 编辑文件，保留六桶 Intent 对话规范。Intent 格式不触发 Failed 或自动续轮；关键歧义正常提问并等待用户，独立工具权限与执行检查继续生效。
 
 验证基线为 DSH `0.2.1-rc.2`、hashline/tool-edit `0.2.1-alpha.4` 加本地补丁。项目仍为 private bundle；已验证能力与范围见[当前验收状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。
 
-**项目状态（2026-10-26）：本轮评测收尾，转为按需维护。** 按用户确认的[阶段决策](docs/acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 的 FAIL 并保留 GAP，停止扩样；S1/S2 延期未执行。日常推荐 PTC、Hashline 手动可选，默认推广暂停，日常 profile 未改。评测基础设施保留可复用；[恢复计划](docs/plans/2026-10-26-evaluation-finalization-plan.md)与历史证据保留。
+**当前安排与剩余缺口统一见[当前状态](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)。** 使用本页的安装与验证命令，按[文档导航](docs/README.md)查相关契约。
 
 ## 项目组成
 
@@ -57,11 +57,23 @@ pnpm sync:check
 
 完整默认策略宿主验收另有 `pnpm test:host-policy --pack .scratch/<本轮唯一目录>`：先在独立验证副本运行 `pnpm check` 构建，再由此命令打包安装、通过真实 registry 挂完整 preset，并用固定适配器驱动真实 Agent、子代理和官方进程 PTC。它不调用真实模型，不证明模型纪律或收益；默认保留临时安装和逐条证据。也可传入 `test:delivery --keep` 留下的一次性 `dsh-profile-acceptance` 路径与新留证目录。不要在运行宿主链接的源码树里构建。
 
-请求级意图门另有两层验收：`pnpm test:host-gate --pack <新留证目录>` 跑 50 个整宿主用例（声明、声明专用修复与同请求续步、输入例外、澄清等待、中途纠正、日志推导恢复与交叉），`pnpm test:surface-gate --pack <新留证目录>` 在客户端呈现边界（`agent/assistant-stream` 帧即控制器原样转发给浏览器的载荷）证明校验前零可见正文。宿主用例的说明：`pnpm test:host-gate` 用同一隔离打包安装与真实 launcher，固定适配器提供模型输出，逐条断言「发布、调用记录、程序开始、磁盘副作用」四个观察点，覆盖声明检查的接受/拒绝、块与分块拼接、最终文本优先、子代理与非目标 preset 不拦、辅助调用免声明与暂存上限。唯一一次自动修复自 2026-10-28 起是**声明专用**生成（该步请求的工具目录为空），声明发布后由同一请求续步，见[工程验收](docs/acceptance/2026-10-28-declaration-repair-engineering.md)与 [ADR-0006](docs/adr/0006-declaration-only-repair-and-business-continuation.md)。它同样不调用真实模型，只证明流程约束，不证明模型是否理解。
+意图门与工具路径的固定适配器验收使用 `pnpm test:host-gate --pack <新留证目录>` 与 `pnpm test:surface-gate --pack <另一新留证目录>`；后者只到客户端消息边界，不证明浏览器画面。两者均不调用真实模型。当前采用六桶 Intent 对话规范，不再因声明格式扣留回复、Failed 或自动续轮；旧用例与冻结案例须先按[联合工作入口](docs/plans/2026-10-28-intent-gate-repair-implementation-plan.md)对齐现行契约，不能直接复用旧“先校验后展示”判据。
 
 `check` 包含构建和类型检查；`test:profile` 需要可用的 DSH CLI（可设置 `DSH_CLI`）。`test:delivery` 是真实宿主交付验收：它会 `pnpm pack` 四个交付包、装进一次性 DSH_HOME、用真实 launcher 装配 profile、跑门禁并把逐条证据写进 `docs/acceptance/<日期>-delivery-acceptance-report.md`（耗时数分钟；`--no-gates` 只跑装配与工作流）。外部夹具与各套件范围见 [integration](tests/integration/README.md)、[compat](tests/compat/README.md)；本地原始日志不随 clone 交付。
 
-**上游同步检查（手动、只读）**：`pnpm sync:check` 读取本机指定 DSH 源码目录，记录来源身份与本项目基线，比较 PTC 预设的工具组成、配置、提示与相关契约，对照上游普通文本 stock read 的参数、返回值、截断、大文件与错误处理，并评估 hashline / tool-edit 的**已发布候选**与本地补丁影响，写出 `<evidenceDirectory>/sync/<checkId>/{report.md,sync.json}`；`--checkout <绝对路径>` 指定本次来源，`--set-checkout <绝对路径>` 保存本机来源，`--sources <文件|JSON>` 固定本轮发布来源响应（外部来源边界，复现与测试用），`--decisions <文件>` 指定审阅决定记录（默认 `<证据目录>/sync/decisions.json`）。来源优先级为 `--checkout` > `DSH_CHECKOUT` > 本机配置（`config --set-dsh-checkout`），三者都没有时报告缺少配置、既不扫描磁盘也不回退；命名了但不可用的目录会记 GAP 并继续跑不需要源码树的引擎比较。差异逐对象记录（含稳定标识、两端内容身份、影响、处置、依据与复查条件）；上限等数值按值比较，写法差异不算差异；已发布版本**全量枚举**后按语义版本分稳定 / 预发布两渠道，不取 `latest` 充当答案，无标签的已发布版本也算候选；候选包文本不在只读查询范围内，补丁与组合影响只到「待验证」，不安装、不改锁定、不切换目标；查询失败或超时记 BLOCKED 而不是「没有更新」，也不复用上一轮结果。**重复运行**会读上一轮记录与决定记录做跨轮比较，区分首次检查 / 无新增变化 / 已知差异 / 新增变化 / 旧决定需复查：决定绑定它审阅过的两端内容身份，任一端变化或该端本轮没取得内容即回到复查，通配写法与重复 id 会被拒绝，历史缺失、读不出与格式不支持分别报告而不是伪装成「没有变化」；模板见 [decisions.template.json](presets/ptc-hashline/operations/decisions.template.json)。配置模板见 [config.template.json](presets/ptc-hashline/operations/config.template.json)；覆盖范围、退出码与已知缺口见[票据 01](docs/acceptance/2026-10-27-upstream-sync-check-01.md)、[票据 02](docs/acceptance/2026-10-27-upstream-sync-check-02.md)、[票据 03](docs/acceptance/2026-10-27-upstream-sync-check-03.md)、[票据 04](docs/acceptance/2026-10-27-upstream-sync-check-04.md)与[票据 05](docs/acceptance/2026-10-27-upstream-sync-check-05.md)；最终真实来源验收与交接见[票据 06](docs/acceptance/2026-10-27-upstream-sync-check-06.md)。
+**联合修复新增的只读核对工具**（都不装、不跑门禁、不调模型，只读 JSON/日志并给判定；详细口径见[联合工程验收](docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-28-joint-repair-engineering.md")）：
+
+| 命令 | 读什么 | 干什么 | 退出码 |
+|---|---|---|---|
+| `node scripts/tool-usage-judgement.mjs --source <会话文件> --tasks <manifest> [--out …]` | 会话 artifact（zstd/JSONL v4） | 按「任务目标＋目标文件」判读工具路径：adoption / path / proven bypass / candidate / unknown | 0 完整，2 会话证据有洞 |
+| `node scripts/extract-runtime-evidence.mjs --source … --session … [--tasks …]` | 会话 artifact | 导出历史声明事件、成本账本（`accounting`）与工具路径（`toolPath`）；当前限制见状态索引 | 0 完整，2 不完整，3 拒绝 |
+| `node scripts/host-gate-evidence.mjs --kind host\|surface --evidence <json> [--require …]` | `host-result.json` / `surface-result.json` | 门禁证据预检：必填字段、**资产摘要＝当前树**、固定适配器无真实模型、case 覆盖与逐 case 载荷；surface 未验浏览器则固定记 GAP | 0 通过，2 不通过 |
+| `node scripts/candidate-evidence.mjs --host … --surface … --delivery <summary.json>` | 上述两份 + `installation.json` + delivery 摘要 | 合成「一条候选 → 一个判定」：identity/host/surface/delivery 四轴，最差轴胜出，GAP/BLOCKED 不升格为 PASS | 0 PASS，2 GAP/BLOCKED，3 FAIL |
+| `node scripts/suite-triage.mjs --from <triage.log> --out <dir>` | 逐 spec 的运行日志 | 把「跑绿 / runner 缺 vitest 特性 / 沙箱拒绝 / 子进程无输出」分开，避免把环境限制读成产品失败 | 0 |
+
+评测与冻结案例侧另有两个：`node scripts/evaluation/joint-plan.mjs --cases … [--approval …|--runs …]`（未授权即拒绝、跑后逐会话对账）与 `node scripts/evaluation/joint-rehearsal.mjs --root …`（固定夹具干跑整条采集→报告→对账流水线）。
+
+**上游同步检查（手动、只读）**：`pnpm sync:check` 读取本机指定 DSH 源码目录，记录来源身份与本项目基线，比较 PTC 预设的工具组成、配置、提示与相关契约，对照上游普通文本 stock read 的参数、返回值、截断、大文件与错误处理，并评估 hashline / tool-edit 的**已发布候选**与本地补丁影响，写出 `<evidenceDirectory>/sync/<checkId>/{report.md,sync.json}`；`--checkout <绝对路径>` 指定本次来源，`--set-checkout <绝对路径>` 保存本机来源，`--sources <文件|JSON>` 固定本轮发布来源响应（外部来源边界，复现与测试用），`--decisions <文件>` 指定审阅决定记录（默认 `<证据目录>/sync/decisions.json`）。来源优先级为 `--checkout` > `DSH_CHECKOUT` > 本机配置（`config --set-dsh-checkout`），三者都没有时报告缺少配置、既不扫描磁盘也不回退；命名了但不可用的目录会记 GAP 并继续跑不需要源码树的引擎比较。差异逐对象记录（含稳定标识、两端内容身份、影响、处置、依据与复查条件）；上限等数值按值比较，写法差异不算差异；已发布版本**全量枚举**后按语义版本分稳定 / 预发布两渠道，不取 `latest` 充当答案，无标签的已发布版本也算候选；候选包文本不在只读查询范围内，补丁与组合影响只到「待验证」，不安装、不改锁定、不切换目标；查询失败或超时记 BLOCKED 而不是「没有更新」，也不复用上一轮结果。**重复运行**会读上一轮记录与决定记录做跨轮比较，区分首次检查 / 无新增变化 / 已知差异 / 新增变化 / 旧决定需复查：决定绑定它审阅过的两端内容身份，任一端变化或该端本轮没取得内容即回到复查，通配写法与重复 id 会被拒绝，历史缺失、读不出与格式不支持分别报告而不是伪装成「没有变化」；模板见 [decisions.template.json](presets/ptc-hashline/operations/decisions.template.json)。配置模板见 [config.template.json](presets/ptc-hashline/operations/config.template.json)；覆盖范围、退出码与已知缺口见[票据 01](docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-upstream-sync-check-01.md")、[票据 02](docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-upstream-sync-check-02.md")、[票据 03](docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-upstream-sync-check-03.md")、[票据 04](docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-upstream-sync-check-04.md")与[票据 05](docs/acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-upstream-sync-check-05.md")；最终真实来源验收与交接见[票据 06](docs/acceptance/2026-10-27-upstream-sync-check-06.md)。
 
 ## 文档入口
 
@@ -69,8 +81,8 @@ pnpm sync:check
 
 运行目标包含 Windows、macOS 和 Linux；[CI 矩阵](.github/workflows/policy-contract.yml)使用各系统原生路径与 `file:` URL 回归。已执行平台和未覆盖范围以验收索引为准。read 的 `defaultEditPolicyGuidance` 默认关闭，仅本 preset 开启。
 
-- [文档导航](docs/README.md)：按主题关联规格、ADR、计划与各轮验收。
-- [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)：当前结论、历史失败与修复关系、剩余缺口。
+- [文档导航](docs/README.md)：六个主题入口，不重复进度。
+- [当前验收与证据索引](docs/acceptance/2026-10-23-current-status-and-evidence-index.md)：各主题最新结论、剩余事项与下一步；历史另查[历史索引](docs/acceptance/README.md)。
 - [基础规格](docs/specs/2026-10-22-ptc-hashline-requirements-spec.md)、[术语](GLOSSARY.md)、[架构决策](docs/adr/)：功能契约与设计依据。
 
 参与开发前阅读 [AGENTS.md](AGENTS.md)。

@@ -38,7 +38,7 @@
 
 1. **按工具决定是否需要解释理解。** [watchdog](../../presets/ptc-hashline/intent-gate-watchdog.mjs)的 BEHAVIOR_TOOLS 含 pwsh/bash，但没有 read/grep/run_code。相同任务用不同工具会获得不同待遇；纯回答里的误解也可能不受提醒。对“让理解可见”的目标，这个代理指标不完整。
 2. **格式合规不能代表语义合规。** GATE_LINE_RE 只检查首行 Intent: 和英文桶；“Intent: fix”就能通过，即使没有说明要解决什么问题。六桶适合统计，但不足以描述目标、交付物和约束；混合请求也不必强压成单一权限判断。
-3. **发现得太晚。** tools/pre-execute 在内层工具到达时拒绝。程序可能已经执行了其他调用；程序失败也不代表先前副作用回滚。存量[本地问题记录](../../.scratch/hashline-default-editing/2026-10-24-hashline-usage-problems-and-improvements.md)的 P3-2/P3-4/G11 记录了成本和 catch 边界；该文件被忽略，不随 clone 交付。
+3. **发现得太晚。** tools/pre-execute 在内层工具到达时拒绝。程序可能已经执行了其他调用；程序失败也不代表先前副作用回滚。存量[本地问题记录](../evidence/README.md#本地原始证据 "本地归档原件：.scratch/hashline-default-editing/2026-10-24-hashline-usage-problems-and-improvements.md")的 P3-2/P3-4/G11 记录了成本和 catch 边界；该文件被忽略，不随 clone 交付。
 4. **有可见性，不等于形成确认闭环。** 声明与调用同次生成时，用户可能来不及纠正，工具就开始运行。因此普通任务可主动继续，关键歧义或高影响决策则需真正等待澄清，不能把“用户没有打断”当同意。
 5. **持续性证据不足。** 源码头部记载旧会话 26 轮只在最初两轮出现门行，这是作者记录，不是本轮独立复验；说明需要约束持续性，但不能证明当前拒绝机制有净收益。每轮只拒一次也说明它是纪律措施，不是理解或权限保证。
 

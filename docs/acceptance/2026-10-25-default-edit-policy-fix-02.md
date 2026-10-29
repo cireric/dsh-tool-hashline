@@ -1,6 +1,8 @@
 # 默认编辑策略 F-03 修复与复验
 
-2026-10-25：**F-03 已修复；本轮扩展后的完整宿主 32 PASS / 0 FAIL，定向回归 27 PASS / 0 FAIL，九项交付门禁均 exit 0。** 交付验收 ID 为 21 PASS / 9 BLOCKED，未执行项没有记为通过。机器清单见[摘要](2026-10-25-default-edit-policy-fix-02-summary.json)。此前[完整宿主报告](2026-10-25-default-edit-policy-full-host.md)的 21 PASS / 1 FAIL 是修复前历史结果。
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
+2026-10-25：**F-03 已修复；本轮扩展后的完整宿主 32 PASS / 0 FAIL，定向回归 27 PASS / 0 FAIL，九项交付门禁均 exit 0。** 交付验收 ID 为 21 PASS / 9 BLOCKED，未执行项没有记为通过。机器清单见[摘要](README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-fix-02-summary.json")。此前[完整宿主报告](README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-full-host.md")的 21 PASS / 1 FAIL 是修复前历史结果。
 
 本轮仅证明 Windows、pnpm 11.28.5、官方 DSH 0.2.1-rc.2 下新打包的一次性安装中的已执行路径。macOS/Linux 实跑、剩余 E2 子项与真实模型 E3/E4 尚未完成；没有切换日常 profile、热改原安装依赖、重启或发布。
 
@@ -55,6 +57,6 @@
 
 F-03 的原失败已闭环，E2 核心矩阵继续推进但整体尚未完成。已真实宿主覆盖受限+普通目标整笔拒绝、跨目标 preset 与交错目标会话、cwd 变化后旧证据拒绝、catch 后内层拒绝仍可见、单 BOM 空文件填充及 MV 目标冲突不覆盖。剩余项包括无 session/SDK 与多种窗口上限组合、同会话 remount 后旧引用失效、真实后端 retry 竞争/取消/unknown、MV+内容混合和更多字节/载荷组合；E1 注入证据不能替代这些 E2 路径。
 
-下一阶段需要真实 DSH 用户会话和实际模型。已准备本地[DSH 真实模型运行卡](../../.scratch/default-edit-effectiveness/dsh-real-model-run-card.md)：包含隔离夹具、不给出 Hashline 提示的普通任务、明确用户覆盖、真实子代理样本及逐项留证字段。它是本地草稿，不随 clone 交付；执行前还需记录目标 profile 与模型环境。
+下一阶段需要真实 DSH 用户会话和实际模型。已准备本地[DSH 真实模型运行卡](../evidence/README.md#本地原始证据 "本地归档原件：.scratch/default-edit-effectiveness/dsh-real-model-run-card.md")：包含隔离夹具、不给出 Hashline 提示的普通任务、明确用户覆盖、真实子代理样本及逐项留证字段。它是本地草稿，不随 clone 交付；执行前还需记录目标 profile 与模型环境。
 
 macOS/Linux 真实执行为 GAP，已有 CI 配置但本轮未触发。E3/E4 真实模型行为与收益为 BLOCKED；日常 profile 未切换。当前无需用户在 DSH 重复已自动修复并验证的 F-03，后续真实模型阶段仍需单独的环境与执行安排。

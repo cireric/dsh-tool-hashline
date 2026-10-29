@@ -1,5 +1,8 @@
 # 冻结条件判定与覆盖统计
 
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-verdict.md")。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
 承接[代码分析](../background/2026-10-26-real-model-evaluation-code-analysis.md)及[apply_patch 增量](2026-10-26-evaluation-apply-patch-plan.md)。保留已有未提交代码和分析文档；不启动付费模型、不切换 profile、不升级或修改官方框架、不自动提交。
 
 本轮优先解决冻结条件无消费者和汇总丢失已测信息。收益因果、计时拆分、提示差异、完整 S2 及其它边缘功能不在本轮实现范围。
@@ -12,4 +15,4 @@
 
 新增模块为纯离线计算，不增加模型请求或工具文件 I/O；judge 沿用 checker 的只读工件读取。新语义必须重新 prepare/freeze，不修改旧工件。
 
-本轮有界实现与[验收](../acceptance/2026-10-26-evaluation-verdict.md)已完成：94 项回归、最终普通宿主 18 PASS、预先冻结的判读三场景实际给出 PASS/FAIL/GAP 与 0/2/2；生命周期与完整交付按原边界通过。judge 额外要求任务/取证 PASS，条件 PASS 不能覆盖最终文件错误；未执行假 trace 被拒绝。真实模型、计时、公平性与相对收益仍未关闭。
+本轮有界实现与[验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-verdict.md")已完成：94 项回归、最终普通宿主 18 PASS、预先冻结的判读三场景实际给出 PASS/FAIL/GAP 与 0/2/2；生命周期与完整交付按原边界通过。judge 额外要求任务/取证 PASS，条件 PASS 不能覆盖最终文件错误；未执行假 trace 被拒绝。真实模型、计时、公平性与相对收益仍未关闭。

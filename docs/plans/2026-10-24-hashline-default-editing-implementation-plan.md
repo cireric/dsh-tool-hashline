@@ -1,10 +1,13 @@
 # PTC Hashline 默认编辑策略实施计划
 
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-24-default-edit-policy-engineering.md")。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
 > 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
 
 - 日期：2026-10-24；版本：r1。
 - 权威需求：[默认编辑策略 SRS 1.1](../specs/2026-10-24-hashline-default-editing.md)。本文解释实施方案，不另立需求正文。
-- 状态说明（2026-10-25）：票据 01～08 的[工程切片已交付](../acceptance/2026-10-24-default-edit-policy-engineering.md)，后续 [fix-01](../acceptance/2026-10-25-default-edit-policy-fix-01.md) 与 [fix-02](../acceptance/2026-10-25-default-edit-policy-fix-02.md)已复验；完整 E2、E3 与 E4 尚未完成。正文设计事实按实施前时点阅读，当前缺口见[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。
+- 状态说明（2026-10-25）：票据 01～08 的[工程切片已交付](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-24-default-edit-policy-engineering.md")，后续 [fix-01](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-fix-01.md") 与 [fix-02](../acceptance/2026-10-25-default-edit-policy-fix-02.md)已复验；完整 E2、E3 与 E4 尚未完成。正文设计事实按实施前时点阅读，当前缺口见[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。
 - 授权边界：计划与票据状态不自动授权安装、目标切换、宿主重启或发布。历史工程实现不代表真实模型或推广验收已通过。
 
 ## Problem Statement

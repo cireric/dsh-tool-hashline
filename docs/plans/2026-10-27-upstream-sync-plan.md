@@ -1,5 +1,8 @@
 # PTC 与上游能力同步方案（待实施）
 
+> 文档状态（2026-10-28）：历史实施参考；已执行范围与原 FAIL/GAP/BLOCKED 见[对应验收](../acceptance/2026-10-27-upstream-sync-check-06.md)。未覆盖项不自动变成当前任务；后续是否重开统一见[当前状态](../acceptance/2026-10-23-current-status-and-evidence-index.md)。以下正文按制订时点阅读。
+
+
 > 状态更新（2026-10-27）：本文保留需求对齐前的技术提案与调查，需求权威已转为[同步需求规格](../specs/2026-10-27-upstream-sync-requirements.md)。下文每周 CI、月度复核、全量范围及工作包仅为历史建议，不是获准实施的安排；冲突处以规格为准。
 
 日期：2026-10-27。目标是持续发现 PTC preset、DSH read 契约及 hashline/tool-edit 引擎变化，在明确本项目差异的前提下维护兼容性。此文是设计提案：没有自动检查、定时任务、新版本安装或目标切换；任何升级目标切换仍需用户当次明确同意。现行默认推广和真实模型实验的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)不因本方案改变。

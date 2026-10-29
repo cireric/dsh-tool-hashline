@@ -1,30 +1,7 @@
 #!/usr/bin/env node
-/**
- * Presentation-surface acceptance for the request-level intent gate (ticket 07).
- *
- * The claim under test is an INTERFACE claim, not a log claim: a reply that has not been
- * validated never reaches the client as visible text, and a rejected reply produces no
- * visible body at all.
- *
- * Why this is the client's payload and not a private hook:
- *   - the Web client renders assistant text from the dense \`agent/assistant-stream\` frames;
- *     \`@deepseek-ai/dsh-api-session-controller\` (lib/types/assistant-stream.js) folds exactly
- *     those frames into its reconnect baseline and \`follow()\` re-emits each one as
- *     \`{ type: 'assistant-stream', frame }\` — a 1:1 passthrough, no transformation;
- *   - chat messages come from the session surface events the client journal renders
- *     (\`assistant/message\`, \`user/message\`, \`turn/end\`), read here through the Session's open
- *     reader \`snapshotEvents()\`.
- *   So the frames captured below are the bytes the browser receives, minus transport.
- *
- * Not covered (registered as GAP in the acceptance doc): a screenshot of a running browser.
- * The controller row needs the browser connection stack (fileUploads <- connection <-
- * credentials/webStartup), and starting the daily Web host is not authorized in this task.
- *
- * Usage:
- *   node scripts/test-intent-gate-surface.mjs --pack .tmp/intent-gate-surface-01
- *   node scripts/test-intent-gate-surface.mjs <retained profile path> <evidence dir> [filter]
- */
+/** Client-wire acceptance: Intent formatting and clarification never synthesize Failed or automatic turns. Browser pixels remain GAP. */
 import fs from 'node:fs'
+import { createHash } from 'node:crypto'
 import path from 'node:path'
 import { pathToFileURL } from 'node:url'
 import { createRequire } from 'node:module'
@@ -55,6 +32,26 @@ process.env.DSH_TELEMETRY_DISABLED = '1'
 process.chdir(workspace)
 
 const req = createRequire(path.join(profile, 'package.json'))
+/**
+ * The evidence names the candidate it tested. A surface claim from an older bundle cannot be
+ * pasted onto the current diff, so the two asset digests are recorded here exactly as the host
+ * tier does (LF-normalised sha256), and `scripts/host-gate-evidence.mjs --kind surface` refuses
+ * an artifact whose digests are not the ones in the tree under review.
+ */
+const sha256 = file => createHash('sha256').update(fs.readFileSync(file).toString('utf8').replace(/\r\n/gu, '\n'), 'utf8').digest('hex')
+const recordInstalled = () => {
+    const bundleRoot = path.dirname(req.resolve('dsh-tool-hashline/package.json'))
+    const versions = {}
+    for (const name of ['@deepseek-ai/dsh', '@hy-sde-org/dsh-tool-edit', '@hy-sde-org/dsh-hashline']) {
+        try { versions[name] = JSON.parse(fs.readFileSync(req.resolve(name + '/package.json'), 'utf8')).version } catch { versions[name] = 'unresolved' }
+    }
+    return {
+        bundleRoot,
+        gateModuleSha256: sha256(path.join(bundleRoot, 'presets/ptc-hashline/intent-gate-watchdog.mjs')),
+        personaSha256: sha256(path.join(bundleRoot, 'presets/ptc-hashline/personas/orchestrator.md')),
+        versions,
+    }
+}
 const load = async name => import(pathToFileURL(req.resolve(name)).href)
 const boot = await load('@deepseek-ai/dsh-app-boot')
 const { LlmAdapter, createUserMessage } = await load('@deepseek-ai/dsh-llm')
@@ -84,6 +81,8 @@ const findings = {
     surface: 'agent/assistant-stream (the 1:1 source of the client assistant-stream frames) + session surface events (the client message journal)',
     clientMappingEvidence: 'node_modules/@deepseek-ai/dsh-api-session-controller/lib/types/assistant-stream.js folds these frames and follow() re-emits each as {type:"assistant-stream", frame}',
     browserScreenshot: false,
+    /** Which candidate produced this evidence (filled in once the profile resolves). */
+    installed: null,
     controllerCompositionAttempt: {
         result: 'not composed',
         reason: 'session-controller waits for fileUploads; file-upload waits for connection (browser connection + credentials/webStartup); starting the daily Web host is not authorized',
@@ -184,75 +183,28 @@ try {
         frames.push({ kind: 'assistant-stream', at: Date.now(), session: payload?.agent?.session?.id, frame: payload?.frame })
     }, { global: true })
     findings.presets = (await ctx.get('agentPresets').list()).map(row => row.id)
+    findings.installed = recordInstalled()
 
-    await test('IG07-S1-an-unvalidated-reply-never-reaches-the-client', async mark => {
+    for (const [id, text] of [
+        ['plain-clarification', 'Which interpretation do you mean: A or B?'],
+        ['declared-clarification', 'Intent: investigation — clarify scope; I will ask first. Which scope do you mean?'],
+        ['empty-marker', 'Intent:'],
+    ]) await test('INTENT-surface-' + id, async mark => {
         const agent = await create()
-        queues.set(agent.id, [
-            programAttempt('I will just write the file.', "await tools.write({ file_path: 'surface-a.txt', content: 'x\\n' }); return 'ok'"),
-            textAttempt('Intent: write the file after the correction; I will write it once.'),
-            programAttempt('Writing it now, under the declaration.', "await tools.write({ file_path: 'surface-a.txt', content: 'ok\\n' }); return 'ok'"),
-            textAttempt('The file is written.'),
-        ])
-        agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Write the fixture.' }] }))
+        const requestsBefore = findings.scriptedLlmRequests
+        queues.set(agent.id, [textAttempt(text)])
+        agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Analyse the request.' }] }))
         await waitIdle(agent)
-        await new Promise(resolve => setTimeout(resolve, 200))
         const slice = frames.slice(mark).filter(frame => frame.session === agent.session.id)
-        const texts = visibleText(slice)
-        // The first attempt was rejected, so its words must never have been presented: the only
-        // text the client ever saw belongs to the ACCEPTED (second) attempt.
-        // Nothing of the withheld attempt reached the client; the declaration arrives first, and
-        // only then does the work of the same request appear.
-        assert(texts.startsWith('Intent: write the file after the correction; I will write it once.'), 'the client saw only validated text, declaration first, got ' + JSON.stringify(texts))
-        assert(texts.includes('Writing it now, under the declaration.'), 'the business step of the same request followed the declaration')
-        assert(texts.includes('I will just write the file.') === false, 'the withheld words never reached the client')
-        const firstAttemptText = slice.filter(frame => frame.frame?.type === 'chunk' && frame.frame?.chunk?.type === 'text-delta').slice(0, 1)
-        assert(firstAttemptText.every(frame => frame.at >= 0), 'frames are stamped')
-        assert(fs.readFileSync(path.join(workspace, 'surface-a.txt'), 'utf8') === 'ok\n', 'the withheld program never ran; only the declared one did')
-        const assistantMessages = assistantTexts(agent)
-        assert(assistantMessages.length >= 1 && assistantMessages[0].startsWith('Intent: write the file after the correction'), 'the validated declaration is the first client message: ' + JSON.stringify(assistantMessages))
-        const notice = journal(agent).filter(event => event.type === 'user/message' && event.data?.source?.kind === 'intent-gate-watchdog')
-        assert(notice.length === 2, 'the client journal carries the correction notice and the continuation notice, got ' + notice.length)
-        assert(String(notice[0].data?.content?.[0]?.text).startsWith('[intent-gate] Your previous reply'), 'the repair notice comes first')
-        assert(String(notice[1].data?.content?.[0]?.text).startsWith('[intent-gate] Your declaration'), 'the continuation notice comes after it')
-        const attemptEnds = slice.filter(frame => frame.frame?.type === 'end' && frame.frame?.outcome?.eventType === 'assistant/attempt')
-        assert(attemptEnds.length >= 1, 'the rejected attempt ended as an ATTEMPT on the client stream, never as a message')
-        return { clientVisibleText: texts.slice(0, 40), withheldDispatch: false, notices: notice.length, attemptEnds: attemptEnds.length, declarationFirst: true }
+        assert(visibleText(slice) === text, 'normal reply reached the client unchanged')
+        assert(assistantTexts(agent).length === 1, 'exactly one assistant message')
+        const events = journal(agent)
+        assert(!events.some(event => event.type === 'turn/end' && event.data?.reason?.kind === 'error'), 'no Failed turn')
+        assert(!events.some(event => event.type === 'user/message' && event.data?.source?.kind === 'intent-gate-watchdog'), 'no automatic repair or continuation')
+        assert(findings.scriptedLlmRequests === requestsBefore + 1, 'one generation, then waiting for the user')
+        return { clientVisibleText: text, failures: [], requests: 1, automaticNotices: 0 }
     })
 
-    await test('IG07-S2-the-validated-reply-is-what-the-client-renders', async mark => {
-        const agent = await create()
-        queues.set(agent.id, [textAttempt('Intent: answer the surface case; I will reply in prose.')])
-        agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Explain the fixture.' }] }))
-        await waitIdle(agent)
-        await new Promise(resolve => setTimeout(resolve, 200))
-        const slice = frames.slice(mark).filter(frame => frame.session === agent.session.id)
-        const texts = visibleText(slice)
-        assert(texts === 'Intent: answer the surface case; I will reply in prose.', 'the accepted text reached the client verbatim: ' + JSON.stringify(texts))
-        const starts = slice.filter(frame => frame.frame?.type === 'start')
-        const ends = slice.filter(frame => frame.frame?.type === 'end')
-        assert(starts.length >= 1 && ends.length >= 1, 'the presentation stream opened and closed')
-        assert(ends.every(frame => frame.frame?.outcome?.kind === 'committed'), 'the accepted attempt ended committed')
-        assert(assistantTexts(agent)[0].startsWith('Intent: answer the surface case'), 'the accepted reply became a client message')
-        return { clientVisibleText: texts.slice(0, 30), starts: starts.length, ends: ends.length }
-    })
-
-    await test('IG07-S3-an-exhausted-request-shows-a-failure-not-a-body', async mark => {
-        const agent = await create()
-        queues.set(agent.id, [textAttempt('no declaration at all'), textAttempt('still nothing declared')])
-        agent.followup(createUserMessage({ source: { kind: 'user' }, content: [{ type: 'text', text: 'Do the thing.' }] }))
-        await waitIdle(agent)
-        await new Promise(resolve => setTimeout(resolve, 200))
-        const slice = frames.slice(mark).filter(frame => frame.session === agent.session.id)
-        assert(visibleText(slice) === '', 'no visible text for a request whose two attempts were both rejected: ' + JSON.stringify(visibleText(slice)))
-        assert(assistantTexts(agent).length === 0, 'no assistant message in the client journal')
-        const turnErrors = journal(agent).filter(event => event.type === 'turn/end' && event.data?.reason?.kind === 'error')
-        // Two generations were withheld and neither is the user's business answer: the withheld
-        // attempt and the declaration-only step each close their own turn.
-        assert(turnErrors.length === 2, 'both withheld turns are reported on the surface, got ' + turnErrors.length)
-        assert(turnErrors[0].data.reason.error.code === 'INTENT_DECLARATION_MISSING', 'the first turn names the miss, got ' + String(turnErrors[0].data.reason.error.code))
-        assert(turnErrors[1].data.reason.error.code === 'INTENT_DECLARATION_REPAIR_EXHAUSTED', 'the second names the spent repair, got ' + String(turnErrors[1].data.reason.error.code))
-        return { clientVisibleText: '', assistantMessages: 0, failures: turnErrors.map(event => event.data.reason.error.code) }
-    })
 } catch (error) {
     findings.fatal = String(error?.stack ?? error)
     console.error('FATAL ' + findings.fatal)

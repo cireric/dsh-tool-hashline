@@ -1,5 +1,7 @@
 # BOM 保持、快照异常文案与工具说明修复 —— 验收记录
 
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
 - 日期：2026-10-23
 - 计划：本地 `.scratch/ptc-hashline/2026-10-23-mv-rem-bom-and-snapshot-repair-plan.md`（r2）
 - 输入红测原文：本地 `.scratch/ptc-hashline/evidence/20261023-1453/RUN-REPORT.md`（历史报告未改写，不随 clone 交付）

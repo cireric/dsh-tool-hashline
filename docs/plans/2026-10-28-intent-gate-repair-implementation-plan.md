@@ -1,10 +1,36 @@
-# 意图门修复实施计划：歧义澄清、等待保真与内部恢复
+# 意图门与工具路径：联合工作入口
 
-日期：2026-10-28。
+更新：2026-10-28。公共依赖、工作顺序和验证入口集中在本文；最新执行状态只维护在[当前状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)。工具独有的 T0～T4 与 TOOL 判据见[工具路径计划](2026-10-28-ptc-hashline-tool-routing-repair-plan.md)。
 
-状态：**计划已整理，产品实现未开始**。本次授权范围是全面分析与制定计划；本文不是安装、重启、发布、目标切换或真实模型调用授权。后续收到实施指令时按工作包推进，不重新访谈已经确认的需求。
+## 现行范围
 
-需求权威：[请求级意图门规格](../specs/2026-10-27-intent-gate-b-requirements.md)。本计划承接用户本轮补充：支付示例用于测试歧义，合理输入应得到解读差异与真实意图询问，不能被粗暴显示为 error。新增体验要求须在 P0 写入正式规格后实施；计划不自行取代规格。
+以[意图门规格顶部最新决定](../specs/2026-10-27-intent-gate-b-requirements.md)与[ADR-0006 顶部修订](../adr/0006-declaration-only-repair-and-business-continuation.md)为准：保留六桶对话规范，关键歧义正常提问并等待；保留独立工具权限、问题等待、同程序后续行动与 steering 检查。取消格式硬门、声明自动修复及自动续轮。
+
+旧 P3 路线 1 曾获选，现已停止；旧 P4 格式缓存/修复成本、FIX-08/09/10 等不再直接作为当前完成条件。旧报告不改写，旧编号保留供追溯。工具采用仍沿用 read/edit、PTC、有效 cwd、同物理引擎和默认编辑策略，不扩大为全面运行时隔离。
+
+## 公共工作清单与顺序
+
+| 顺序 | 一处维护的工作 | 输入与完成条件 |
+|---|---|---|
+| 1 | 复核判读器的独立核验反例（T2） | 对照[独立核验 S1～S3](../acceptance/2026-10-28-joint-goals-independent-verification.md)，逐目标核对成功、次序、路径身份、metadata 与日志 seq；已有修复须能指到测试和证据，未关闭者不记 PASS |
+| 2 | 对齐工程验收输入（原 P5/T3） | 共同使用一份隔离安装；按现行规格审阅 host/surface 用例和 TOOL-06，移除格式门前提，保留等待与纠正约束；不把旧 FAIL 全部解释成环境问题 |
+| 3 | 真实模型语义与工具采用（原 P6/T4，按需重开） | 先修订旧案例中格式拒绝、修复次数与成本的预期，再重新冻结模型/预算；未获得本次执行授权不调用模型。语义、工具采用、文件结果与成本分别验收 |
+
+P1/T1 的 persona 改动只协调一次；以当前 assemble 后的提示和 SDK 为准。每次用户新输入都重新声明，同轮内部工具步骤不重复；旧 persona、旧展示规则的计数不能覆盖新 persona。
+
+## 公共验证与材料职责
+
+- 工程命令在[根 README](../../README.md)；[旧联合运行手册](2026-10-28-joint-host-acceptance-runbook.md)保留装配和取证命令，执行前须对齐上面的现行验收输入。
+- [模型清单](2026-10-28-joint-real-model-evaluation-manifest.md)负责判据与预算，[采集操作单](2026-10-28-joint-evaluation-collection.md)负责采集与对账；两者的旧案例都需契约复核，不是现行执行授权。
+- 工程变更按 README 跑受影响测试；依赖、preset、运行契约与交付变更跑完整门禁及 test:delivery。同一未变化候选可复用一轮证据，意图与工具目标分别映射，不重复累计覆盖。
+- 构建和安装只在隔离验证副本，不热改日常宿主。升级目标切换须当次明确同意；本次文档整理不启动产品修复、模型评测、重启或发布。
+
+## 旧工作包设计（历史参考）
+
+<details>
+<summary>展开原 P0～P6、FIX 判据与设计依据；格式门和 P3 路线已被取代</summary>
+
+以下保留原计划内容与编号，只描述当时方案；与本页现行范围冲突时不得恢复旧行为。历史执行结果见[联合工程报告](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-28-joint-repair-engineering.md")与[独立核验](../acceptance/2026-10-28-joint-goals-independent-verification.md)。
 
 ## 1. 本次修复要交付什么
 
@@ -35,7 +61,9 @@
 
 源码行号只用于定位本轮基线，实施时以实际文件、摘要和相邻代码核验。两份本轮探针均只验证插件 seam，没有实际工具执行，不冒充完整宿主或真实模型复现。
 
-稳定依据：[原需求](../specs/2026-10-27-intent-gate-b-requirements.md)、[ADR-0002](../adr/0002-own-ptc-gate-assets.md)、[ADR-0006](../adr/0006-declaration-only-repair-and-business-continuation.md)、[10-27 工程汇总](../acceptance/2026-10-27-intent-gate-b-07-full-contract-evidence.md)、[10-28 声明修复验收](../acceptance/2026-10-28-declaration-repair-engineering.md)。历史 PASS 仍按原范围保留。
+稳定依据：[原需求](../specs/2026-10-27-intent-gate-b-requirements.md)、[ADR-0002](../adr/0002-own-ptc-gate-assets.md)、[ADR-0006](../adr/0006-declaration-only-repair-and-business-continuation.md)、[10-27 工程汇总](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-intent-gate-b-07-full-contract-evidence.md")、[10-28 声明修复验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-28-declaration-repair-engineering.md")。历史 PASS 仍按原范围保留。
+
+> 2026-10-28 用户要求：该示例**只作评测案例**，不得粘进每次生成的 persona 提示词（已清理，见[验收 §3](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-28-joint-repair-engineering.md")）。
 
 ## 3. 支付示例的验收预期
 
@@ -233,3 +261,5 @@ IGB-AC-12 在本次作为产品完成条件，不能再以工程完成后无限�
 本轮实际执行：目录清单及结构检查 exit 0；既有声明修复 seam 探针 exit 0；新增未解决澄清 seam 探针命中反例 exit 2。文档交付前检查新链接、需求/验收映射、最终 Diff 与原材料摘要。
 
 未执行：产品修复、宿主改造、完整门禁、真实 CLI/Web 新验证、真实模型或付费试验。本文定义后续完成条件，不将计划中的命令和预期结果写成已经通过。
+
+</details>

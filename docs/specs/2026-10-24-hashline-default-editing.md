@@ -2,7 +2,7 @@
 
 - 日期：2026-10-24。
 - 版本：1.1（复核确认窗口受限与空文件边界）。
-- 当前状态（2026-10-26）：工程切片及有界复验已交付；完整 E2/E3/E4 和收益结论未完成。用户收口后授权[有界恢复四个核心评测包](../plans/2026-10-26-evaluation-finalization-plan.md)；[本轮请求取证与设计](../acceptance/2026-10-26-evaluation-request-evidence.md)已完成无费用验证，后续[完整真实 S0](../acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)已执行但 FAIL，S1/S2 未执行。默认推广继续暂停。下文保留原设计语境；现有 preset 内部契约不变。
+- 当前状态（2026-10-26）：工程切片及有界复验已交付；完整 E2/E3/E4 和收益结论未完成。用户收口后授权[有界恢复四个核心评测包](../plans/2026-10-26-evaluation-finalization-plan.md)；[本轮请求取证与设计](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-request-evidence.md")已完成无费用验证，后续[完整真实 S0](../acceptance/2026-10-26-evaluation-real-s0-modelscope-02.md)已执行但 FAIL，S1/S2 未执行。默认推广继续暂停。下文保留原设计语境；现有 preset 内部契约不变。
 - 适用对象：PTC Hashline Mode，preset id 为 `ptc-hashline`。
 - 授权边界：本文定稿不授权开发、安装、真实升级、目标 profile 切换、宿主重启或发布。
 

@@ -84,6 +84,52 @@ start, a seq gap with no bounds given, inverted/negative/non-integer bounds
 and a source whose header names another session. Each of those must produce
 INCOMPLETE or a refusal — never a pass.
 
+## The request-level intent gate and the 2026-10-28 joint repair
+
+These six suites are the seam tier for the request-level intent gate (spec
+`docs/specs/2026-10-27-intent-gate-b-requirements.md`) and the joint repair plans of
+2026-10-28. They mount the shipped preset assets on a bare `Context` and drive the
+OFFICIAL seams the gate uses (`agent/pre-step`, `llm/stream`, `agent/request-error`,
+`agent/turn-stopping`, `session/event`, `tools/pre-execute`) — never a private field.
+Every one of them runs **in-process** (no child processes), which is why they are the
+part of this tier a plain-node runner can execute in a sandbox that denies `spawn`.
+
+- `intent-gate-request-scope.spec.ts` — who is gated and what a pass-through looks
+  like; the single declaration-only repair and the same-request continuation; the
+  conversational input exceptions; clarification waiting (per-question identity and
+  per-request scope: a bare `继续` never settles a question, a stale or foreign
+  settle unlocks nothing, an independent request proceeds while the older question
+  stays on the record); steering before dispatch; state rebuilt from the formal log;
+  and the P4 group — the buffering cap biting while the attempt is still open (with
+  the source released), cancellation at four breakpoints including a real restart
+  simulation, the per-request cost ledger, and one-repair-only accounting.
+- `persona-intent-gate-contract.spec.ts` — the preset's OWN prompt contract on a real
+  assembly: the three-way decision (proceed / clarify with work differences / ask the
+  missing fact), the payment case with its two non-ambiguous counterexamples, the
+  question-only program, and the per-task tool path with arguments taken from the SDK.
+  It cannot prove the model follows it.
+- `tool-usage-judgement-session.spec.ts` — `scripts/tool-usage-judgement.mjs` on a real
+  session artifact: the judgement block, the "an artifact with holes cannot yield a
+  clean verdict" rule, `tasksOf` reading both manifest shapes (including the frozen
+  joint case document), and the summary leaking no arguments or program source.
+- `extract-runtime-evidence-tool-path.spec.ts` — the extractor's additive blocks:
+  `toolPath: null` when no tasks are named (old report shape preserved), the judgment
+  reduced to ids and counts, the cost ledger with unknown kept unknown, and the
+  incomplete-session downgrade.
+- `joint-rehearsal.spec.ts` — the acceptance pipeline dry run: fixed fixtures (not a
+  model transcript) through artifact → extractor report → `runs.json` →
+  reconciliation, including the 38 conversations that did not run being listed as
+  gaps rather than skipped.
+- `extract-runtime-evidence.spec.ts` (documented above) is the one suite in this group
+  that also exercises a child process; the in-process half of its contract is covered
+  by `extract-runtime-evidence-tool-path.spec.ts`.
+
+The helper modules these suites import (`scripts/tool-usage-judgement.mjs`,
+`scripts/host-gate-evidence.mjs`, `scripts/candidate-evidence.mjs`,
+`scripts/suite-triage.mjs`, `scripts/evaluation/joint-plan.mjs`,
+`scripts/evaluation/joint-rehearsal.mjs`) carry **no shebang** for the reason stated
+at the end of this file.
+
 ## The operations skills (invocation, baseline, incidents, upgrade assessment)
 
 The suites below cover the two user-invoked operations skills. Their claim boundary is

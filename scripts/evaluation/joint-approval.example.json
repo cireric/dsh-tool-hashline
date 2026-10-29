@@ -1,0 +1,14 @@
+{
+  "_note": "EXAMPLE ONLY. Fill every field, then pass it with --approval. Nothing here authorises a run; the joint manifest (§2) is the authority.",
+  "provider": "",
+  "model": "",
+  "reasoningEffort": "",
+  "temperature": "",
+  "maxTokens": "",
+  "inputTokenPrice": "",
+  "outputTokenPrice": "",
+  "currency": "",
+  "globalGenerationCap": "",
+  "walletCap": "",
+  "wallClockCap": ""
+}

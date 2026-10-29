@@ -15,13 +15,10 @@ const fail = (message) => failures.push(message)
 
 const PRESET_ID = 'ptc-hashline'
 const CAPS = { limit: 2000, maxLineLength: 2000, maxBytes: 51200 }
-// The gate module ships in the bundle and is loaded from the install root, so it must stay on
-// the builtin-only surface; importing it here also pins the buffering caps it declares.
-const { DEFAULT_LIMITS: GATE_LIMITS } = await import('../presets/ptc-hashline/intent-gate-watchdog.mjs')
-
+// Asset digests pin the persona and the independent execution guard.
 const EXPECTED_DIGESTS = {
-  'personas/orchestrator.md': '29c0d73d064caf6312f8793348ff9e0237dac36ade7aabbbc5b92a3aad4a0ca5',
-  'intent-gate-watchdog.mjs': '685f8eda04e8e436aaba06cdaf350e49174841903d8acad7f93900d712caf3e0',
+  'personas/orchestrator.md': '18b878a63cf30a6750909d523260770a0f97a9c7ae757d9872815f24855bd2f3',
+  'intent-gate-watchdog.mjs': 'b3e7c1aa9bce76eaf6cf116ad9ed43e2cb5ef60ffbe43bea6dd0c725a2a95c14',
 }
 
 const read = relative => readFileSync(join(repo, relative), 'utf8')
@@ -101,15 +98,10 @@ require_('tool-edit', entry => {
 require_('tool-presentation', entry => {
   if (entry.config?.mode !== 'ptc') fail('tool-presentation.mode must be ptc')
 })
-// The request-level intent gate (spec 2026-10-27, ticket 01) replaced the per-turn tool-name
-// gate, so the row no longer carries a gate mode: it is the delivered behaviour. What the row
-// must keep declaring is the ASSET path and the bounded buffering caps, and those caps must
-// equal what the module itself defaults to (drift here silently changes what "limit" means).
+// Keep the execution guard asset, with no generation buffer or repair configuration.
 require_('intent-gate-watchdog', entry => {
   if (entry.name !== 'dsh-tool-hashline/presets/ptc-hashline/intent-gate-watchdog.mjs') fail('intent gate must load from this bundle')
-  for (const [key, value] of Object.entries(GATE_LIMITS)) {
-    if (entry.config?.[key] !== value) fail('intent-gate-watchdog.' + key + ' must be ' + value)
-  }
+  if (Object.keys(entry.config ?? {}).length !== 0) fail('intent-gate-watchdog has no live format/repair configuration')
   if ('gate' in (entry.config ?? {})) fail('intent-gate-watchdog must not carry a gate mode any more (no observe/enforce switch)')
 })
 // The clarification pause (spec 2026-10-27 IG-B-16, ticket 04) is delivered by the host's
@@ -230,4 +222,4 @@ if (failures.length > 0) {
   for (const message of failures) console.error('  - ' + message)
   process.exit(1)
 }
-console.log('check:preset OK: ptc-hashline invariants hold, caps equal, gates enforced, resource digests verified')
+console.log('check:preset OK: ptc-hashline invariants hold, caps equal, execution guards configured, resource digests verified')

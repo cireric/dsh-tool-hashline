@@ -1,5 +1,7 @@
 # 运行修复验收记录：MV 目标写入意图 / 快照提交次序
 
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
 日期：2026-10-23
 计划：本地 `.scratch/ptc-hashline/2026-10-23-mv-observation-fix-plan.md`
 输入报告：本地 `.scratch/ptc-hashline/2026-10-23-relative-path-mv-rem-report.md`（保留原文，不随 clone 交付）

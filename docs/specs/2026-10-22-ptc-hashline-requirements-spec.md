@@ -363,7 +363,7 @@ export interface Config {
 
 ### 8.1 验收追溯与命令契约
 
-以下是实施期必须提供的脚本接口，这些接口现已提供，执行方式见[根 README](../../README.md)，历史追溯见[验收记录](../acceptance/2026-10-23-acceptance-traceability.md)。根 `pnpm -r check`、`pnpm -r test` 继续保留；新增根 build 必须真正产出插件 JS 和声明。实现后用例 ID/文件名补入本表，不以人工演示代替脚本判定。
+以下是实施期必须提供的脚本接口，这些接口现已提供，执行方式见[根 README](../../README.md)，历史追溯见[验收记录](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-23-acceptance-traceability.md")。根 `pnpm -r check`、`pnpm -r test` 继续保留；新增根 build 必须真正产出插件 JS 和声明。实现后用例 ID/文件名补入本表，不以人工演示代替脚本判定。
 
 | 检查组 / 命令 | 覆盖需求 | 必须包含的判定 |
 |---|---|---|

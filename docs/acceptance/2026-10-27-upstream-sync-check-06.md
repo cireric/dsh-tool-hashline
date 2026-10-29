@@ -1,5 +1,7 @@
 # 上游同步检查 — 票据 06 真实来源验收与交接
 
+> 归档说明（2026-10-29）：本文保留原轮次结果；文中历史 `.scratch/...` 路径现位于[本地原始证据归档](../evidence/README.md#本地原始证据)。一次性探针和候选环境已清理，当前重跑入口见项目 README。
+
 日期：2026-10-27
 状态：**Windows 真实来源范围 PASS**；全范围仍保留明确 GAP（macOS/Linux 未实跑、候选包内容未取得、目标切换未授权）
 运行平台：Windows（唯一实跑平台）
@@ -150,7 +152,7 @@
 
 ### 交付门禁的读法
 
-- `pnpm test:delivery` 打包四个交付包、装进一次性 `DSH_HOME`、用真实 launcher 装配 profile 并跑既有门禁，写出 [2026-10-27 交付验收报告](2026-10-27-delivery-acceptance-report.md) 与同名 summary。
+- `pnpm test:delivery` 打包四个交付包、装进一次性 `DSH_HOME`、用真实 launcher 装配 profile 并跑既有门禁，写出 [2026-10-27 交付验收报告](README.md#历史原件 "归档原件：docs/acceptance/2026-10-27-delivery-acceptance-report.md") 与同名 summary。
 - 它的 9 个 `BLOCKED` 是「没有用例执行」的既有验收 ID（INC-02/03/04、UPG-02/05/08/09/10/11），与 2026-10-26 那轮**逐 ID 相同**，不是本次改动引入；FAIL 0、GAP 0。
 - 该门禁的 ID 集属运维 skills 规格（SCOPE/PACK/INC/UPG），**不含**本票的 SYNC-01～11；同步检查的验收证据是第 2～6 节的真实四轮，不是这个门禁。
 - 打包内容已核验：`npm pack --dry-run` 的 tarball 含 `presets/ptc-hashline/operations/sync-{hash,yaml,ptc,read,engines,run,history}.mjs`、对应 `.d.mts` 与 `decisions.template.json`。`scripts/sync-check.mjs` **不在** tarball 内（`files` 只含 `presets`、`package.json`、`README.md`）：`pnpm sync:check` 是**维护仓库**命令，不是安装后命令——这是设计边界，不是缺口。

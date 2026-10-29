@@ -1,6 +1,6 @@
 # 真实模型评测代码分析：实现、口径与证据边界
 
-2026-10-26 建档。分析对象：`scripts/evaluation/*`（18 个 mjs 与一个配置模板）、`tests/unit/evaluation-*.spec.ts`、`tests/fixtures/evaluation-provider/`，对照 [SRS §7](<../specs/2026-10-24-hashline-default-editing.md>)、[协议补充](<../specs/2026-10-25-real-model-evaluation-protocol.md>) 与三轮验收（[10-25 基础](<../acceptance/2026-10-25-real-model-evaluation.md>)、[10-26 阶段](<../acceptance/2026-10-26-evaluation-next-stage.md>)、[10-26 生命周期](<../acceptance/2026-10-26-evaluation-lifecycle.md>)）。
+2026-10-26 建档。分析对象：`scripts/evaluation/*`（18 个 mjs 与一个配置模板）、`tests/unit/evaluation-*.spec.ts`、`tests/fixtures/evaluation-provider/`，对照 [SRS §7](<../specs/2026-10-24-hashline-default-editing.md>)、[协议补充](<../specs/2026-10-25-real-model-evaluation-protocol.md>) 与三轮验收（[10-25 基础](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-real-model-evaluation.md")、[10-26 阶段](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-next-stage.md")、[10-26 生命周期](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-lifecycle.md")）。
 
 方法：逐行读源码 + 需求条款逐条对照 + 链接核对。**本轮没有执行任何测试、评测或宿主命令**（原因见 §8），因此下文所有"通过/失败"都指文档记录的结论，不指本轮复核。
 
@@ -59,7 +59,7 @@
 3. **失败当刻的 checkpoint。** `tools/result` 里内层 edit 失败立即落盘快照并重置该 root 计数（[host.mjs:79-86](../../scripts/evaluation/host.mjs)），使"同一程序内 catch 后修复"不能并入首次正确。这是 §7.2 "不得事后把修复并入首批"唯一可执行的落地方式。
 4. **完成边界用宿主公开 join。** `collector.idle()` 在子代理 `whenIdle` 之后调 `subagents.waitForChildren`，再等父代理重新空闲（[session-tree.mjs:40-52](../../scripts/evaluation/session-tree.mjs)）。这一条正是 33/33 对账修复的落点，也是"尾请求漏计"类错误的通用防线。
 5. **捕获外请求在派发前拒绝。** `llm/stream` 中间件按 Session 归属准入（[run.mjs:56-58](../../scripts/evaluation/run.mjs)），并独立用 `requestAccounting` 逐 Session 对账。
-6. **未知有区分。** 结构性缺口（缺 settle、缺 turn/end、seq 不稠密）与数据缺口（某请求缺 usage）分开，前者污染整条 trace，后者只污染对应字段。这使"`modelRequests` 有数而 `inputTokens` unknown"成为合法状态（[10-25 summary](../acceptance/2026-10-25-real-model-evaluation-summary.json) 第 58-69 行即此形态）。
+6. **未知有区分。** 结构性缺口（缺 settle、缺 turn/end、seq 不稠密）与数据缺口（某请求缺 usage）分开，前者污染整条 trace，后者只污染对应字段。这使"`modelRequests` 有数而 `inputTokens` unknown"成为合法状态（[10-25 summary](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-real-model-evaluation-summary.json") 第 58-69 行即此形态）。
 
 ## 5. 问题清单
 

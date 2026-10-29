@@ -1,0 +1,167 @@
+{
+  "note": "Historical rounds copied separately; not a new execution or merged acceptance.",
+  "rounds": [
+    {
+      "source": ".scratch/intent-advisory-fix/verification.json",
+      "sourceSha256": "36826a6202292af8df59af9ed04ebcae90189ea2a9dec44ec02d5765644cb8cd",
+      "record": {
+        "checkedAt": "2026-10-28T09:30:08.310Z",
+        "gates": [
+          {
+            "command": "pnpm build",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm -r check",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm check:tests",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:unit",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:integration",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:ptc",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:compat",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm check:preset",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:profile",
+            "exitCode": 0,
+            "note": "exit 0"
+          }
+        ],
+        "delivery": {
+          "PASS": 21,
+          "BLOCKED": 9
+        },
+        "host": [
+          {
+            "id": "INTENT-normal-clear",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-normal-clarification",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-normal-missing-marker",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-normal-empty-marker",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-user-answer-opens-work-not-an-automatic-turn",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-structured-question-waits-for-an-actual-answer",
+            "status": "PASS"
+          }
+        ],
+        "surface": [
+          {
+            "id": "INTENT-surface-plain-clarification",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-surface-declared-clarification",
+            "status": "PASS"
+          },
+          {
+            "id": "INTENT-surface-empty-marker",
+            "status": "PASS"
+          }
+        ],
+        "assetIdentity": "matches current source, isolated candidate and packed installation",
+        "realModelRequests": 0,
+        "dailyProfileChanged": false
+      }
+    },
+    {
+      "source": ".scratch/intent-followup-fix/verification.json",
+      "sourceSha256": "fc9871723a83a40f4824dbf90b6fc4d6876e6283309a50fef526f6bce511505b",
+      "record": {
+        "gates": [
+          {
+            "command": "pnpm build",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm -r check",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm check:tests",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:unit",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:integration",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:ptc",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:compat",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm check:preset",
+            "exitCode": 0,
+            "note": "exit 0"
+          },
+          {
+            "command": "pnpm test:profile",
+            "exitCode": 0,
+            "note": "exit 0"
+          }
+        ],
+        "delivery": {
+          "PASS": 21,
+          "FAIL": 0,
+          "BLOCKED": 9
+        },
+        "targetedTests": 21,
+        "realModelEvaluation": "not run",
+        "dailyProfileChanged": false
+      }
+    }
+  ]
+}

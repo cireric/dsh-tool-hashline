@@ -2,7 +2,7 @@
 
 日期：2026-10-27。状态：核心链路离线验证通过，产品交付与效果未验收。本文承接[机制研究与方案比较](2026-10-27-intent-gate-effectiveness-and-options.md)，不替代现行规格。
 
-后续文档状态：用户已完成需求访谈、确认共同理解及系统级测试 seam，权威需求已迁入[正式规格](../specs/2026-10-27-intent-gate-b-requirements.md)；[原评审稿入口](../../.scratch/intent-gate/2026-10-27-b-requirements-draft.md)保留迁移和历史快照位置，具体技术参数留工程评审。本报告保留可行性调查时的证据范围，不将规格发布视为实现或效果通过。
+后续文档状态：用户已完成需求访谈、确认共同理解及系统级测试 seam，权威需求已迁入[正式规格](../specs/2026-10-27-intent-gate-b-requirements.md)；[原评审稿入口](../evidence/README.md#本地原始证据 "本地归档原件：.scratch/intent-gate/2026-10-27-b-requirements-draft.md")保留迁移和历史快照位置，具体技术参数留工程评审。本报告保留可行性调查时的证据范围，不将规格发布视为实现或效果通过。
 
 ## 结论
 
@@ -12,13 +12,13 @@
 
 结论分级：核心机制可行 **PASS**；真实 launcher/完整 preset 组合、跨生命周期、流式体验与 provider 兼容 **GAP**；最终理解正确率与任务收益 **GAP**。方案 B 是已选择的研究方向，具体行为尚未定稿，未获得产品实施或目标切换授权。
 
-需求草稿保存在 [本地草稿](../../.scratch/intent-gate/2026-10-27-b-requirements-draft.md)，被 Git 忽略、不随 clone 交付。草稿用于下一轮对齐，尚不迁入 `docs/specs/`。
+需求草稿保存在 [本地草稿](../evidence/README.md#本地原始证据 "本地归档原件：.scratch/intent-gate/2026-10-27-b-requirements-draft.md")，被 Git 忽略、不随 clone 交付。草稿用于下一轮对齐，尚不迁入 `docs/specs/`。
 
 ## 调查范围与身份
 
 本轮新增的是当前安装产物的接口/时序核验和真实 AgentLoop 离线探针。上一轮只证明 watchdog 识别规则，本轮不重复声明历史会话复验，不把上轮 PTC 编辑失败改写为通过。
 
-实际解析的 `dsh-agent-loop`、`dsh-agent`、`dsh-llm`、`dsh-tools`、`dsh-agent-loop-testkit` 均为 `0.2.1-rc.2`，realpath 位于本仓库 `node_modules`。版本、入口摘要、命令、退出码及逐场景结果见[证据摘要 JSON](../evidence/2026-10-27-intent-gate-b-feasibility.json)。没有使用上游最新版本代替锁定组合，也没有构建宿主、联网或调用真实模型。
+实际解析的 `dsh-agent-loop`、`dsh-agent`、`dsh-llm`、`dsh-tools`、`dsh-agent-loop-testkit` 均为 `0.2.1-rc.2`，realpath 位于本仓库 `node_modules`。版本、入口摘要、命令、退出码及逐场景结果见[证据摘要 JSON](../acceptance/README.md#历史原件 "归档原件：docs/evidence/2026-10-27-intent-gate-b-feasibility.json")。没有使用上游最新版本代替锁定组合，也没有构建宿主、联网或调用真实模型。
 
 ## 扩展点是否够用
 

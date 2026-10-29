@@ -304,24 +304,17 @@ async function run(text) {
   await ctx.fiber.dispose()
   return seen
 }
-const rejected = await run('I will edit the file now.')
-const stop = rejected.at(-1)
-if (stop?.type !== 'finish' || stop.reason?.kind !== 'error' || stop.reason.failure?.code !== 'INTENT_DECLARATION_MISSING') {
-  throw new Error('gate did not stop a reply without a declaration: ' + JSON.stringify(rejected))
+const plain = await run('Which interpretation do you mean: A or B?')
+const accepted = await run('Intent: investigation — clarify the scope; I will ask first.')
+for (const chunks of [plain, accepted]) {
+  if (chunks.length !== 4 || chunks.at(-1)?.reason?.kind !== 'stop') throw new Error('Intent formatting changed the provider reply: ' + JSON.stringify(chunks))
 }
-if (rejected.some(chunk => chunk.type === 'text-delta')) {
-  throw new Error('the rejected reply body was released to the loop: ' + JSON.stringify(rejected))
-}
-const accepted = await run('Intent: fix the file; I will patch it, then re-read it.')
-if (accepted.length !== 4 || accepted.at(-1)?.reason?.kind !== 'stop') {
-  throw new Error('gate did not pass a declared reply through untouched: ' + JSON.stringify(accepted))
-}
-console.log(JSON.stringify({ rejected: stop.reason.failure.code, acceptedChunks: accepted.length }))
+console.log(JSON.stringify({ plainChunks: plain.length, acceptedChunks: accepted.length }))
 `)
   try {
     const out = run(process.execPath, [gateDriver], { cwd: profileDir, timeout: 120_000 })
     const result = JSON.parse(out.trim().split('\n').at(-1))
-    ok('gate stopped a reply without a declaration and passed a declared one through: ' + JSON.stringify(result))
+    ok('Intent convention passed plain and declared replies without generating failures: ' + JSON.stringify(result))
   } catch (error) {
     fail('profile gate check failed: ' + String(error.stdout ?? '') + String(error.stderr ?? error.message).slice(-800))
   }

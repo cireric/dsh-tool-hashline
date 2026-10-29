@@ -1,8 +1,11 @@
 # 默认编辑策略：推广评测方案
 
+> 文档状态（2026-10-28）：本轮已收尾，S1/S2 延期未执行；按[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)停止扩样。仅在有具体问题、新冻结条件与费用授权时重开；当前缺口只在[状态索引](../acceptance/2026-10-23-current-status-and-evidence-index.md)汇总，正文保留历史设计与结果。
+
+
 > 2026-10-26 当前安排：按用户确认的[阶段决策](../acceptance/2026-10-26-evaluation-stage-decision.md)，接受完整 S0 FAIL、停止扩样并按需维护；S1/S2 延期未执行，默认推广暂停。以下设计与原 FAIL/GAP/BLOCKED 保留，不代表正式实验通过。
 
-2026-10-26，r5（保留原建档路径）。依据[默认策略 SRS §7](../specs/2026-10-24-hashline-default-editing.md)与[协议补充](../specs/2026-10-25-real-model-evaluation-protocol.md)。基础实现见[实施计划](2026-10-25-real-model-evaluation-implementation-plan.md)、[前轮报告](../acceptance/2026-10-25-real-model-evaluation.md)；逐目标/会话树/刺激的本轮边界见[阶段验收](../acceptance/2026-10-26-evaluation-next-stage.md)。尚无正式冻结的真实模型对照，不授权付费执行、目标切换、重启或发布。
+2026-10-26，r5（保留原建档路径）。依据[默认策略 SRS §7](../specs/2026-10-24-hashline-default-editing.md)与[协议补充](../specs/2026-10-25-real-model-evaluation-protocol.md)。基础实现见[实施计划](2026-10-25-real-model-evaluation-implementation-plan.md)、[前轮报告](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-real-model-evaluation.md")；逐目标/会话树/刺激的本轮边界见[阶段验收](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-next-stage.md")。尚无正式冻结的真实模型对照，不授权付费执行、目标切换、重启或发布。
 
 ## 1. S0 → S1 → S2
 
@@ -12,7 +15,7 @@
 | S1 formal | 按 SRS §7.3 执行完整冻结对照 | 必须先补齐下列正式执行 GAP；失败和取消不移出分母 |
 | S2 判定 | 按预先冻结条件建议推广、收窄范围或证据不足 | 正确性、返工和总成本均须有证据；高采用率本身不构成收益 |
 
-S0 与 S1 使用不同协议，不能根据正式结果事后修改模型、预算、分母或阈值。独立 [E3 冒烟](../acceptance/2026-10-25-default-edit-policy-effectiveness-e3-01.md)不并入 S1，本轮多帧复核也不是新增实验。
+S0 与 S1 使用不同协议，不能根据正式结果事后修改模型、预算、分母或阈值。独立 [E3 冒烟](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-25-default-edit-policy-effectiveness-e3-01.md")不并入 S1，本轮多帧复核也不是新增实验。
 
 ## 2. 已有冻结和执行机制
 
@@ -57,11 +60,11 @@ SRS §7.2 原计数规则继续有效：四类适用性互斥，已知适用分�
 |---|---|
 | 真实 provider / 凭据 / 明确预算 | 本轮隔离安装可解析官方 provider 包，但未配置真实凭据和执行路由；固定适配器零真实请求。以后只在独立安装提供固定 provider 和凭据引用，另获执行批准 |
 | 真实模型进程内验证 | 三臂固定适配器已验证装配；provider 实际请求、usage 及取消收费边界尚无本轮真实证据 |
-| 逐目标采用与恢复分类 | 已支持每文件一个冻结目标及完整分母；[apply_patch 取证](../acceptance/2026-10-26-evaluation-apply-patch.md)支持无移动、完整受管解析回执的路径。缺计划、移动/专用工具和同文件多目标仍 unknown / GAP；语义返工不能仅凭读取顺序推断 |
+| 逐目标采用与恢复分类 | 已支持每文件一个冻结目标及完整分母；[apply_patch 取证](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-apply-patch.md")支持无移动、完整受管解析回执的路径。缺计划、移动/专用工具和同文件多目标仍 unknown / GAP；语义返工不能仅凭读取顺序推断 |
 | 漂移/专用工具等控制端注入 | 已支持冻结的成功 read 次数→字节前态条件→外部写入，并验证真实宿主三臂失败/恢复；其它时点、权限拒绝、专用工具等控制器仍需补齐 |
-| 子会话归并 | 已归并同进程后代并核对目录来源；[生命周期验证](../acceptance/2026-10-26-evaluation-lifecycle.md)补齐实际非空 fork 前缀去重、子流取消及取消后无新适配器请求。外部进程代理、更多取消时点及真实 provider 取消计费仍无证明 |
-| 平台与纯策略消融 | 本轮 Windows；macOS/Linux 未执行。[离线设计审查](../acceptance/2026-10-26-evaluation-design-review.md)已列实际逐臂配置变化；[请求取证增量](../acceptance/2026-10-26-evaluation-request-evidence.md)已在固定 Provider 上核对组装请求与 SDK，真实模型请求及 HTTP wire 仍未验证。三臂不等同原 auto vs policy 的单变量实验，若要纯策略因果结论须另冻配置 |
-| 推广判定 | [v1 绝对条件](../acceptance/2026-10-26-evaluation-verdict.md)已有消费者，逐臂首次正确最小数量和逐样本总 Token 上限可查；旧语义保留 GAP。[v2 范围](../acceptance/2026-10-26-evaluation-cohort.md)已支持执行前逐任务 include/exclude，仅缩小首次条件分母；Token、最终文件、调度及全局覆盖仍包含全部任务。[13 族候选配置](../acceptance/2026-10-26-evaluation-task-suite.md)已可复用生成与冻结，默认 probe；[固定 Provider 完整宿主集](../acceptance/2026-10-26-evaluation-suite-host.md)已实际执行，保留失败和未知；正式真实模型实验尚未执行，不能事后排除 unknown。仍无自动 S2、相对收益或统计推广判定，即使条件 PASS 也不能替代完整证据与可比性 |
+| 子会话归并 | 已归并同进程后代并核对目录来源；[生命周期验证](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-lifecycle.md")补齐实际非空 fork 前缀去重、子流取消及取消后无新适配器请求。外部进程代理、更多取消时点及真实 provider 取消计费仍无证明 |
+| 平台与纯策略消融 | 本轮 Windows；macOS/Linux 未执行。[离线设计审查](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-design-review.md")已列实际逐臂配置变化；[请求取证增量](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-request-evidence.md")已在固定 Provider 上核对组装请求与 SDK，真实模型请求及 HTTP wire 仍未验证。三臂不等同原 auto vs policy 的单变量实验，若要纯策略因果结论须另冻配置 |
+| 推广判定 | [v1 绝对条件](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-verdict.md")已有消费者，逐臂首次正确最小数量和逐样本总 Token 上限可查；旧语义保留 GAP。[v2 范围](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-cohort.md")已支持执行前逐任务 include/exclude，仅缩小首次条件分母；Token、最终文件、调度及全局覆盖仍包含全部任务。[13 族候选配置](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-task-suite.md")已可复用生成与冻结，默认 probe；[固定 Provider 完整宿主集](../acceptance/README.md#历史原件 "归档原件：docs/acceptance/2026-10-26-evaluation-suite-host.md")已实际执行，保留失败和未知；正式真实模型实验尚未执行，不能事后排除 unknown。仍无自动 S2、相对收益或统计推广判定，即使条件 PASS 也不能替代完整证据与可比性 |
 
 ## 5. 驱动选择结论
 
